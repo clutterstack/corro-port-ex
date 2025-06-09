@@ -1,0 +1,17 @@
+# It appears if I'm running this with Port the `.` dir is the Elixir project root?
+# So 
+
+[db]
+path = "corrosion/corrosion.db"
+schema_paths = ["corrosion/schemas"]
+
+[gossip]
+addr = "127.0.0.1:8787"
+bootstrap = []
+plaintext = true
+
+[api]
+addr = "127.0.0.1:8081"
+
+[admin]
+path = "/tmp/corrosion/admin.sock"
