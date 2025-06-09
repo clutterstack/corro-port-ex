@@ -36,7 +36,7 @@ npm-debug.log
 /assets/node_modules/
 
 
-corrosion/*
+corrosion/**
 !./corrosion/config-local.toml
 !./corrosion/corrosion.toml
 !./corrosion/schemas
