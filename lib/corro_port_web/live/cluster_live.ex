@@ -1,0 +1,213 @@
+defmodule CorroPortWeb.ClusterLive do
+  use CorroPortWeb, :live_view
+  require Logger
+
+  alias CorroPort.CorrosionAPI
+
+  @refresh_interval 3000
+
+  def mount(_params, _session, socket) do
+    if connected?(socket) do
+      schedule_refresh()
+    end
+
+    # Detect the correct API port
+    detected_port = CorrosionAPI.detect_api_port()
+    phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
+
+    socket =
+      socket
+      |> assign(:page_title, "Cluster Status")
+      |> assign(:cluster_info, nil)
+      |> assign(:local_info, nil)
+      |> assign(:error, nil)
+      |> assign(:last_updated, nil)
+      |> assign(:api_port, detected_port)
+      |> assign(:phoenix_port, phoenix_port)
+
+    {:ok, fetch_cluster_data(socket)}
+  end
+
+  def handle_info(:refresh, socket) do
+    schedule_refresh()
+    {:noreply, fetch_cluster_data(socket)}
+  end
+
+  def handle_event("refresh", _params, socket) do
+    {:noreply, fetch_cluster_data(socket)}
+  end
+
+  defp fetch_cluster_data(socket) do
+    api_port = socket.assigns.api_port
+
+    case CorrosionAPI.get_cluster_info(api_port) do
+      {:ok, cluster_info} ->
+        case CorrosionAPI.get_info(api_port) do
+          {:ok, local_info} ->
+            socket
+            |> assign(:cluster_info, cluster_info)
+            |> assign(:local_info, local_info)
+            |> assign(:error, nil)
+            |> assign(:last_updated, DateTime.utc_now())
+
+          {:error, error} ->
+            Logger.warning("Failed to fetch local info: #{error}")
+            socket
+            |> assign(:cluster_info, cluster_info)
+            |> assign(:local_info, nil)
+            |> assign(:error, "Failed to fetch local info: #{error}")
+            |> assign(:last_updated, DateTime.utc_now())
+        end
+
+      {:error, error} ->
+        Logger.warning("Failed to fetch cluster info: #{error}")
+        socket
+        |> assign(:cluster_info, nil)
+        |> assign(:local_info, nil)
+        |> assign(:error, "Failed to connect to Corrosion API: #{error}")
+        |> assign(:last_updated, DateTime.utc_now())
+    end
+  end
+
+  defp schedule_refresh do
+    Process.send_after(self(), :refresh, @refresh_interval)
+  end
+
+  defp format_timestamp(nil), do: "Unknown"
+  defp format_timestamp(timestamp) when is_binary(timestamp) do
+    case DateTime.from_iso8601(timestamp) do
+      {:ok, dt, _} -> Calendar.strftime(dt, "%H:%M:%S")
+      _ -> timestamp
+    end
+  end
+  defp format_timestamp(%DateTime{} = dt) do
+    Calendar.strftime(dt, "%H:%M:%S")
+  end
+  defp format_timestamp(_), do: "Unknown"
+
+  defp connection_status(true), do: {"Connected", "badge-success"}
+  defp connection_status(false), do: {"Disconnected", "badge-error"}
+  defp connection_status(_), do: {"Unknown", "badge-warning"}
+
+  def render(assigns) do
+    ~H"""
+    <div class="space-y-6">
+      <.header>
+        Corrosion Cluster Status
+        <:subtitle>
+          Monitoring cluster health and node connectivity
+        </:subtitle>
+        <:actions>
+          <.button phx-click="refresh" variant="primary">
+            <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" />
+            Refresh
+          </.button>
+        </:actions>
+      </.header>
+
+      <div class="alert alert-info" :if={@error}>
+        <.icon name="hero-exclamation-circle" class="w-5 h-5" />
+        <span><%= @error %></span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Local Node Info -->
+        <div class="card bg-base-200">
+          <div class="card-body">
+            <h3 class="card-title text-sm">Local Node</h3>
+            <div :if={@local_info} class="space-y-2 text-sm">
+              <div><strong>Node ID:</strong> <%= Map.get(@local_info, "node_id", "Unknown") %></div>
+              <div><strong>Phoenix Port:</strong> <%= @phoenix_port %></div>
+              <div><strong>API Port:</strong> <%= @api_port %></div>
+              <div><strong>Status:</strong>
+                <span class="badge badge-success badge-sm">Active</span>
+              </div>
+            </div>
+            <div :if={!@local_info && !@error} class="loading loading-spinner loading-sm"></div>
+          </div>
+        </div>
+
+        <!-- Cluster Summary -->
+        <div class="card bg-base-200">
+          <div class="card-body">
+            <h3 class="card-title text-sm">Cluster Summary</h3>
+            <div :if={@cluster_info} class="space-y-2 text-sm">
+              <div><strong>Total Nodes:</strong> <%= length(Map.get(@cluster_info, "members", [])) %></div>
+              <div><strong>Connected:</strong>
+                <%= Enum.count(Map.get(@cluster_info, "members", []), & &1["connected"]) %>
+              </div>
+              <div><strong>Last Updated:</strong> <%= format_timestamp(@last_updated) %></div>
+            </div>
+            <div :if={!@cluster_info && !@error} class="loading loading-spinner loading-sm"></div>
+          </div>
+        </div>
+
+        <!-- Auto Refresh Info -->
+        <div class="card bg-base-200">
+          <div class="card-body">
+            <h3 class="card-title text-sm">Monitoring</h3>
+            <div class="space-y-2 text-sm">
+              <div><strong>Auto Refresh:</strong> Every <%= div(@refresh_interval, 1000) %>s</div>
+              <div><strong>Last Check:</strong>
+                <span :if={@last_updated}>
+                  <%= format_timestamp(@last_updated) %>
+                </span>
+                <span :if={!@last_updated}>Never</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cluster Members Table -->
+      <div :if={@cluster_info && Map.get(@cluster_info, "members")} class="card bg-base-100">
+        <div class="card-body">
+          <h3 class="card-title">Cluster Members</h3>
+
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Node ID</th>
+                  <th>Address</th>
+                  <th>Status</th>
+                  <th>Last Seen</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={member <- Map.get(@cluster_info, "members", [])}>
+                  <td class="font-mono text-sm">
+                    <%= String.slice(Map.get(member, "id", "unknown"), 0, 16) %>...
+                  </td>
+                  <td><%= Map.get(member, "addr", "Unknown") %></td>
+                  <td>
+                    <span class={["badge badge-sm", elem(connection_status(Map.get(member, "connected")), 1)]}>
+                      <%= elem(connection_status(Map.get(member, "connected")), 0) %>
+                    </span>
+                  </td>
+                  <td><%= format_timestamp(Map.get(member, "last_seen")) %></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Raw Data (for debugging) -->
+      <details class="collapse collapse-arrow bg-base-200" :if={@cluster_info || @local_info}>
+        <summary class="collapse-title text-sm font-medium">Raw API Response (Debug)</summary>
+        <div class="collapse-content">
+          <div :if={@cluster_info} class="mb-4">
+            <h4 class="font-semibold mb-2">Cluster Info:</h4>
+            <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@cluster_info, pretty: true) %></pre>
+          </div>
+          <div :if={@local_info}>
+            <h4 class="font-semibold mb-2">Local Info:</h4>
+            <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@local_info, pretty: true) %></pre>
+          </div>
+        </div>
+      </details>
+    </div>
+    """
+  end
+end

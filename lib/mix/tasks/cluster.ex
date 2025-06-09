@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Cluster.Start do
 
       mix cluster.start
 
-  Starts a 3-node cluster with interactive IEx on node 1.
+  Starts a 3-node cluster with interactive IEx on node 1. (NOT QUITE WORKING RIGHT -- start nodes manually with    NODE_ID=1 iex --sname corro1 -S mix phx.server instead)
 
   ## Start a specific number of nodes
 

@@ -18,6 +18,7 @@ defmodule CorroPortWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    live "/cluster", ClusterLive
   end
 
   # Other scopes may use custom stacks.
