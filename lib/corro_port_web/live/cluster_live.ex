@@ -18,6 +18,7 @@ defmodule CorroPortWeb.ClusterLive do
     socket =
       socket
       |> assign(:page_title, "Cluster Status")
+      |> assign(:refresh_interval, @refresh_interval)
       |> assign(:cluster_info, nil)
       |> assign(:local_info, nil)
       |> assign(:error, nil)
@@ -119,6 +120,12 @@ defmodule CorroPortWeb.ClusterLive do
               <div><strong>Node ID:</strong> <%= Map.get(@local_info, "node_id", "Unknown") %></div>
               <div><strong>Phoenix Port:</strong> <%= @phoenix_port %></div>
               <div><strong>API Port:</strong> <%= @api_port %></div>
+              <div><strong>DB Version:</strong>
+                <%= case Map.get(@local_info, "db_version") do
+                  [%{"crsql_dbversion()" => version}] -> version
+                  _ -> "Unknown"
+                end %>
+              </div>
               <div><strong>Status:</strong>
                 <span class="badge badge-success badge-sm">Active</span>
               </div>
@@ -132,10 +139,8 @@ defmodule CorroPortWeb.ClusterLive do
           <div class="card-body">
             <h3 class="card-title text-sm">Cluster Summary</h3>
             <div :if={@cluster_info} class="space-y-2 text-sm">
-              <div><strong>Total Nodes:</strong> <%= length(Map.get(@cluster_info, "members", [])) %></div>
-              <div><strong>Connected:</strong>
-                <%= Enum.count(Map.get(@cluster_info, "members", []), & &1["connected"]) %>
-              </div>
+              <div><strong>Members:</strong> <%= Map.get(@cluster_info, "member_count", 0) %></div>
+              <div><strong>Tracked Peers:</strong> <%= Map.get(@cluster_info, "peer_count", 0) %></div>
               <div><strong>Last Updated:</strong> <%= format_timestamp(@last_updated) %></div>
             </div>
             <div :if={!@cluster_info && !@error} class="loading loading-spinner loading-sm"></div>
@@ -160,35 +165,53 @@ defmodule CorroPortWeb.ClusterLive do
       </div>
 
       <!-- Cluster Members Table -->
-      <div :if={@cluster_info && Map.get(@cluster_info, "members")} class="card bg-base-100">
+      <div :if={@cluster_info} class="card bg-base-100">
         <div class="card-body">
           <h3 class="card-title">Cluster Members</h3>
 
-          <div class="overflow-x-auto">
+          <div :if={Map.get(@cluster_info, "members", []) != []} class="overflow-x-auto">
             <table class="table table-zebra">
               <thead>
                 <tr>
-                  <th>Node ID</th>
-                  <th>Address</th>
-                  <th>Status</th>
-                  <th>Last Seen</th>
+                  <th>Member Info</th>
+                  <th>Details</th>
                 </tr>
               </thead>
               <tbody>
                 <tr :for={member <- Map.get(@cluster_info, "members", [])}>
                   <td class="font-mono text-sm">
-                    <%= String.slice(Map.get(member, "id", "unknown"), 0, 16) %>...
+                    <%= inspect(member) |> String.slice(0, 50) %>...
                   </td>
-                  <td><%= Map.get(member, "addr", "Unknown") %></td>
-                  <td>
-                    <span class={["badge badge-sm", elem(connection_status(Map.get(member, "connected")), 1)]}>
-                      <%= elem(connection_status(Map.get(member, "connected")), 0) %>
-                    </span>
-                  </td>
-                  <td><%= format_timestamp(Map.get(member, "last_seen")) %></td>
+                  <td><%= inspect(member) %></td>
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <div :if={Map.get(@cluster_info, "tracked_peers", []) != []} class="mt-6">
+            <h4 class="font-semibold mb-2">Tracked Peers</h4>
+            <div class="overflow-x-auto">
+              <table class="table table-zebra">
+                <thead>
+                  <tr>
+                    <th>Peer Info</th>
+                    <th>Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr :for={peer <- Map.get(@cluster_info, "tracked_peers", [])}>
+                    <td class="font-mono text-sm">
+                      <%= inspect(peer) |> String.slice(0, 50) %>...
+                    </td>
+                    <td><%= inspect(peer) %></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div :if={Map.get(@cluster_info, "members", []) == [] && Map.get(@cluster_info, "tracked_peers", []) == []}>
+            <p class="text-base-content/70">No cluster members or peers found. This might be a single-node setup or the cluster is still forming.</p>
           </div>
         </div>
       </div>
