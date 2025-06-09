@@ -39,6 +39,6 @@ npm-debug.log
 corrosion/*
 !corrosion/config-local.toml
 !corrosion/corrosion.toml
-!corrosion/schemas/**
+!corrosion/schemas/*
 !corrosion/wrapper.sh
 
