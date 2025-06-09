@@ -18,13 +18,13 @@ defmodule CorroPortWeb.ClusterLive do
     socket =
       socket
       |> assign(:page_title, "Cluster Status")
-      |> assign(:refresh_interval, @refresh_interval)
       |> assign(:cluster_info, nil)
       |> assign(:local_info, nil)
       |> assign(:error, nil)
       |> assign(:last_updated, nil)
       |> assign(:api_port, detected_port)
       |> assign(:phoenix_port, phoenix_port)
+      |> assign(:refresh_interval, @refresh_interval)
 
     {:ok, fetch_cluster_data(socket)}
   end
@@ -120,10 +120,10 @@ defmodule CorroPortWeb.ClusterLive do
               <div><strong>Node ID:</strong> <%= Map.get(@local_info, "node_id", "Unknown") %></div>
               <div><strong>Phoenix Port:</strong> <%= @phoenix_port %></div>
               <div><strong>API Port:</strong> <%= @api_port %></div>
-              <div><strong>DB Version:</strong>
-                <%= case Map.get(@local_info, "db_version") do
-                  [%{"crsql_dbversion()" => version}] -> version
-                  _ -> "Unknown"
+              <div><strong>User Tables:</strong>
+                <%= case Map.get(@local_info, "tables") do
+                  tables when is_list(tables) -> length(tables)
+                  _ -> 0
                 end %>
               </div>
               <div><strong>Status:</strong>

@@ -27,20 +27,54 @@ defmodule CorroPort.CorrosionAPI do
   def get_cluster_info(port \\ nil) do
     port = port || get_api_port()
 
-    # Try to get cluster information from multiple sources
-    with {:ok, members} <- get_cluster_members(port),
-         {:ok, peers} <- get_tracked_peers(port) do
+    # Get all available corrosion tables first
+    tables_query = "SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE '__corro_%' OR name LIKE 'crsql_%')"
 
-      cluster_info = %{
-        "members" => members,
-        "tracked_peers" => peers,
-        "member_count" => length(members),
-        "peer_count" => length(peers)
-      }
+    case execute_query(tables_query, port) do
+      {:ok, response} ->
+        available_tables = parse_query_response(response)
+        table_names = Enum.map(available_tables, & &1["name"])
 
-      {:ok, cluster_info}
-    else
-      error -> error
+        Logger.debug("Available Corrosion tables: #{inspect(table_names)}")
+
+        # Try to get data from available tables
+        cluster_data = %{
+          "available_tables" => table_names,
+          "members" => [],
+          "tracked_peers" => [],
+          "member_count" => 0,
+          "peer_count" => 0
+        }
+
+        # Try to get members if table exists
+        cluster_data = if "__corro_members" in table_names do
+          case get_cluster_members(port) do
+            {:ok, members} ->
+              Map.merge(cluster_data, %{"members" => members, "member_count" => length(members)})
+            _ ->
+              cluster_data
+          end
+        else
+          cluster_data
+        end
+
+        # Try to get tracked peers if table exists
+        cluster_data = if "crsql_tracked_peers" in table_names do
+          case get_tracked_peers(port) do
+            {:ok, peers} ->
+              Map.merge(cluster_data, %{"tracked_peers" => peers, "peer_count" => length(peers)})
+            _ ->
+              cluster_data
+          end
+        else
+          cluster_data
+        end
+
+        {:ok, cluster_data}
+
+      error ->
+        Logger.warning("Failed to get table list: #{inspect(error)}")
+        error
     end
   end
 
@@ -67,27 +101,36 @@ defmodule CorroPort.CorrosionAPI do
 
     # Try to get some basic info about this node
     queries = [
-      {"site_id", "SELECT crsql_siteid()"},
-      {"db_version", "SELECT crsql_dbversion()"},
-      {"tables", "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '__corro_%' AND name NOT LIKE 'crsql_%'"}
+      {"site_id", "SELECT * FROM crsql_site_id"},
+      {"tables", "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '__corro_%' AND name NOT LIKE 'crsql_%'"},
+      {"corro_state", "SELECT * FROM __corro_state LIMIT 5"}
     ]
-
-    info = %{}
 
     results = Enum.reduce(queries, %{}, fn {key, query}, acc ->
       case execute_query(query, port) do
         {:ok, response} ->
           parsed = parse_query_response(response)
           Map.put(acc, key, parsed)
-        {:error, _} ->
-          Map.put(acc, key, "Error")
+        {:error, error} ->
+          Logger.debug("Query failed for #{key}: #{error}")
+          Map.put(acc, key, "Error: #{error}")
       end
     end)
 
-    # Extract site_id as node_id if available
+    # Try to extract node ID from various sources
     node_id = case Map.get(results, "site_id") do
-      [%{"crsql_siteid()" => site_id}] -> site_id
-      _ -> "unknown"
+      [site_info | _] when is_map(site_info) ->
+        # crsql_site_id table might have different column names
+        site_info |> Map.values() |> List.first() || "unknown"
+      _ ->
+        # Try getting from __corro_state table
+        case Map.get(results, "corro_state") do
+          [first_row | _] when is_map(first_row) ->
+            # Look for common node ID field names
+            first_row
+            |> Map.get("node_id", Map.get(first_row, "id", Map.get(first_row, "site_id", "unknown")))
+          _ -> "unknown"
+        end
     end
 
     {:ok, Map.put(results, "node_id", node_id)}
