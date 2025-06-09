@@ -2,72 +2,126 @@ defmodule CorroPort.CorroGenserver do
   use GenServer
   require Logger
 
+  alias CorroPort.NodeConfig
+
   @moduledoc """
+  Manages a Corrosion database instance via Elixir Ports.
+
   Started from Tony Collen's example at
   https://tonyc.github.io/posts/managing-external-commands-in-elixir-with-ports/.
-
-
   """
 
   @command "corrosion/corrosion-mac"
-  # "agent -c corrosion/config-local.toml"
   @wrapper "corrosion/wrapper.sh"
-
 
   # GenServer API
   def start_link(args \\ [], opts \\ []) do
-    GenServer.start_link(__MODULE__, args, opts)
+    GenServer.start_link(__MODULE__, args, Keyword.put_new(opts, :name, __MODULE__))
   end
 
   def init(args \\ []) do
     Process.flag(:trap_exit, true)
 
-    # port = Port.open({:spawn, @command}, [:binary, :exit_status])
-    port = Port.open({:spawn_executable, @wrapper}, args: [@command, "agent", "-c", "corrosion/config-local.toml"])
-    Port.monitor(port)
+    # Generate and write the node-specific Corrosion config
+    case NodeConfig.write_corrosion_config() do
+      {:ok, config_path} ->
+        Logger.info("Generated Corrosion config: #{config_path}")
+        start_corrosion_process(config_path)
 
-    {:ok, %{port: port, latest_output: nil, exit_status: nil} }
+      {:error, reason} ->
+        Logger.error("Failed to generate Corrosion config: #{reason}")
+        {:stop, reason}
+    end
   end
 
-  def terminate(reason, %{port: port} = state) do
-    Logger.info "** TERMINATE: #{inspect reason}. This is the last chance to clean up after this process."
-    Logger.info "Final state: #{inspect state}"
+  defp start_corrosion_process(config_path) do
+    node_id = NodeConfig.get_corrosion_node_id()
 
-    port_info = Port.info(port)
-    os_pid = port_info[:os_pid]
+    # Ensure admin socket directory exists
+    File.mkdir_p!("/tmp/corrosion")
 
-    Logger.warn "Orphaned OS process: #{os_pid}"
+    Logger.info("Starting Corrosion for #{node_id} with config: #{config_path}")
+
+    # Start Corrosion with the generated config
+    port_args = [@command, "agent", "-c", config_path]
+    port = Port.open({:spawn_executable, @wrapper}, args: port_args)
+    Port.monitor(port)
+
+    {:ok, %{
+      port: port,
+      latest_output: nil,
+      exit_status: nil,
+      node_id: node_id,
+      config_path: config_path
+    }}
+  end
+
+  def terminate(reason, %{port: port, node_id: node_id} = state) do
+    Logger.info("** TERMINATE #{node_id}: #{inspect(reason)}. Cleaning up Corrosion process.")
+    Logger.info("Final state: #{inspect(state)}")
+
+    # Try to get port info before it's closed
+    case Port.info(port) do
+      nil ->
+        Logger.info("Port already closed for #{node_id}")
+      port_info ->
+        os_pid = port_info[:os_pid]
+        Logger.warning("Cleaning up orphaned OS process for #{node_id}: #{os_pid}")
+
+        # Send TERM signal first, then KILL if needed
+        try do
+          System.cmd("kill", ["-TERM", "#{os_pid}"])
+          Process.sleep(1000)  # Give it a moment to terminate gracefully
+          System.cmd("kill", ["-KILL", "#{os_pid}"])
+        catch
+          _ -> Logger.info("Process #{os_pid} already terminated")
+        end
+    end
 
     :normal
   end
 
-  # This callback handles data incoming from the command's STDOUT
-  def handle_info({port, {:data, text_line}}, %{port: port} = state) do
-    Logger.info "[corrosion] #{inspect text_line}"
+  # This callback handles data incoming from Corrosion's STDOUT
+  def handle_info({port, {:data, text_line}}, %{port: port, node_id: node_id} = state) do
+    Logger.info("[#{node_id}] #{inspect(text_line)}")
     {:noreply, %{state | latest_output: text_line}}
   end
 
-  # This callback tells us when the process exits
-  def handle_info({port, {:exit_status, status}}, %{port: port} = state) do
-    Logger.info "Port exit: :exit_status: #{status}"
-
+  # This callback tells us when the Corrosion process exits
+  def handle_info({port, {:exit_status, status}}, %{port: port, node_id: node_id} = state) do
+    Logger.info("#{node_id} port exit: :exit_status: #{status}")
     new_state = %{state | exit_status: status}
-
     {:noreply, new_state}
   end
 
-  def handle_info({:DOWN, _ref, :port, port, :normal}, state) do
-    Logger.info "Handled :DOWN message from port: #{inspect port}"
+  def handle_info({:DOWN, _ref, :port, port, :normal}, %{node_id: node_id} = state) do
+    Logger.info("Handled :DOWN message from #{node_id} port: #{inspect(port)}")
     {:noreply, state}
   end
 
-  def handle_info({:EXIT, port, :normal}, state) do
-    Logger.info "handle_info: EXIT"
+  def handle_info({:EXIT, port, :normal}, %{node_id: node_id} = state) do
+    Logger.info("#{node_id} handle_info: EXIT")
     {:noreply, state}
   end
 
-  def handle_info(msg, state) do
-    Logger.info "Unhandled message: #{inspect msg}"
+  def handle_info(msg, %{node_id: node_id} = state) do
+    Logger.info("#{node_id} unhandled message: #{inspect(msg)}")
     {:noreply, state}
+  end
+
+  # Public API for getting node status
+  def get_status do
+    GenServer.call(__MODULE__, :get_status)
+  end
+
+  def handle_call(:get_status, _from, state) do
+    status = %{
+      node_id: state.node_id,
+      config_path: state.config_path,
+      latest_output: state.latest_output,
+      exit_status: state.exit_status,
+      port_info: (if state.port, do: Port.info(state.port), else: nil)
+    }
+    {:reply, status, state}
   end
 end
