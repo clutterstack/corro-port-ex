@@ -90,6 +90,14 @@ defmodule CorroPortWeb.ClusterLive do
   defp connection_status(false), do: {"Disconnected", "badge-error"}
   defp connection_status(_), do: {"Unknown", "badge-warning"}
 
+  defp get_gossip_address do
+    config = Application.get_env(:corro_port, :node_config, %{
+      corrosion_gossip_port: 8787
+    })
+    gossip_port = config[:corrosion_gossip_port] || 8787
+    "127.0.0.1:#{gossip_port}"
+  end
+
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
@@ -120,6 +128,7 @@ defmodule CorroPortWeb.ClusterLive do
               <div><strong>Node ID:</strong> <%= Map.get(@local_info, "node_id", "Unknown") %></div>
               <div><strong>Phoenix Port:</strong> <%= @phoenix_port %></div>
               <div><strong>API Port:</strong> <%= @api_port %></div>
+              <div><strong>Gossip Address:</strong> <%= get_gossip_address() %></div>
               <div><strong>User Tables:</strong>
                 <%= case Map.get(@local_info, "tables") do
                   tables when is_list(tables) -> length(tables)
@@ -139,7 +148,8 @@ defmodule CorroPortWeb.ClusterLive do
           <div class="card-body">
             <h3 class="card-title text-sm">Cluster Summary</h3>
             <div :if={@cluster_info} class="space-y-2 text-sm">
-              <div><strong>Members:</strong> <%= Map.get(@cluster_info, "member_count", 0) %></div>
+              <div><strong>Total Nodes:</strong> <%= Map.get(@cluster_info, "member_count", 0) + 1 %></div>
+              <div><strong>Remote Members:</strong> <%= Map.get(@cluster_info, "member_count", 0) %></div>
               <div><strong>Tracked Peers:</strong> <%= Map.get(@cluster_info, "peer_count", 0) %></div>
               <div><strong>Last Updated:</strong> <%= format_timestamp(@last_updated) %></div>
             </div>
