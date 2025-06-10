@@ -43,13 +43,12 @@ defmodule CorroPortWeb.ClusterLive do
   def handle_event("send_message", _params, socket) do
     api_port = socket.assigns.api_port
 
-    # Get the local node's identifier
-    local_node_id = get_local_node_id(socket.assigns.local_info)
-    message = "Hello from #{local_node_id} at #{DateTime.utc_now() |> DateTime.to_iso8601()}"
+    # Create a message with timestamp
+    message = "Hello from #{CorroPort.NodeConfig.get_corrosion_node_id()} at #{DateTime.utc_now() |> DateTime.to_iso8601()}"
 
     socket = assign(socket, :sending_message, true)
 
-    case CorrosionAPI.insert_message(local_node_id, message, api_port) do
+    case CorroPort.CorrosionAPI.insert_message(message, api_port) do
       {:ok, result} ->
         Logger.info("Successfully sent message: #{inspect(result)}")
         socket

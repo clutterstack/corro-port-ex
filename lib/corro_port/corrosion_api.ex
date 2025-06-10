@@ -160,7 +160,7 @@ defmodule CorroPort.CorrosionAPI do
   end
 
 
-  @doc """
+ @doc """
   Gets local node information.
   """
   def get_info(port \\ nil) do
@@ -184,21 +184,8 @@ defmodule CorroPort.CorrosionAPI do
       end
     end)
 
-    # Try to extract node ID from various sources
-    node_id = case Map.get(results, "site_id") do
-      [site_info | _] when is_map(site_info) ->
-        # crsql_site_id table might have different column names
-        site_info |> Map.values() |> List.first() || "unknown"
-      _ ->
-        # Try getting from __corro_state table
-        case Map.get(results, "corro_state") do
-          [first_row | _] when is_map(first_row) ->
-            # Look for common node ID field names
-            first_row
-            |> Map.get("node_id", Map.get(first_row, "id", Map.get(first_row, "site_id", "unknown")))
-          _ -> "unknown"
-        end
-    end
+    # Use the Phoenix node configuration instead of trying to extract from Corrosion
+    node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
     {:ok, Map.put(results, "node_id", node_id)}
   end
