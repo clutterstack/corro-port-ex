@@ -96,6 +96,71 @@ defmodule CorroPort.CorrosionAPI do
   end
 
   @doc """
+  Gets messages from the node_messages table, ordered by timestamp.
+  """
+  def get_node_messages(port \\ nil) do
+    port = port || get_api_port()
+    query = "SELECT * FROM node_messages ORDER BY timestamp DESC"
+
+    case execute_query(query, port) do
+      {:ok, response} ->
+        {:ok, parse_query_response(response)}
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Gets the latest message for each node from the node_messages table.
+  """
+  def get_latest_node_messages(port \\ nil) do
+    port = port || get_api_port()
+
+    # Get the latest message per node_id
+    query = """
+    SELECT node_id, message, timestamp, sequence
+    FROM node_messages
+    WHERE (node_id, timestamp) IN (
+      SELECT node_id, MAX(timestamp)
+      FROM node_messages
+      GROUP BY node_id
+    )
+    ORDER BY timestamp DESC
+    """
+
+    case execute_query(query, port) do
+      {:ok, response} ->
+        {:ok, parse_query_response(response)}
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Inserts a new message into the node_messages table.
+  """
+  def insert_message(node_id, message, port \\ nil) do
+    port = port || get_api_port()
+
+    # Generate a sequence number based on current time (simple approach)
+    sequence = System.system_time(:millisecond)
+    timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
+
+    # Create the transaction as an array of SQL statements (as expected by Corrosion)
+    transactions = [
+      "INSERT INTO node_messages (pk, node_id, message, sequence, timestamp) VALUES (\"#{node_id}_#{sequence}\", \"#{node_id}\", \"#{message}\", #{sequence}, \"#{timestamp}\")"
+    ]
+
+    case execute_transaction(transactions, port) do
+      {:ok, _response} ->
+        {:ok, %{node_id: node_id, message: message, sequence: sequence, timestamp: timestamp}}
+      error ->
+        error
+    end
+  end
+
+
+  @doc """
   Gets local node information.
   """
   def get_info(port \\ nil) do
@@ -155,6 +220,30 @@ defmodule CorroPort.CorrosionAPI do
         {:ok, body}
       {:ok, %{status: status, body: body}} ->
         Logger.warning("Query failed with status #{status}: #{inspect(body)}")
+        {:error, "HTTP #{status}: #{inspect(body)}"}
+      {:error, exception} ->
+        Logger.warning("Failed to connect to Corrosion API on port #{port}: #{inspect(exception)}")
+        {:error, "Connection failed: #{inspect(exception)}"}
+    end
+  end
+
+  @doc """
+  Execute a SQL transaction against Corrosion's API.
+  """
+  def execute_transaction(transactions, port \\ nil) do
+    port = port || get_api_port()
+    base_url = "http://127.0.0.1:#{port}"
+
+    Logger.debug("Executing transaction on port #{port}: #{inspect(transactions)}")
+
+    case Req.post("#{base_url}/v1/transactions",
+                  json: transactions,
+                  headers: [{"content-type", "application/json"}],
+                  receive_timeout: 5000) do
+      {:ok, %{status: 200, body: body}} ->
+        {:ok, body}
+      {:ok, %{status: status, body: body}} ->
+        Logger.warning("Transaction failed with status #{status}: #{inspect(body)}")
         {:error, "HTTP #{status}: #{inspect(body)}"}
       {:error, exception} ->
         Logger.warning("Failed to connect to Corrosion API on port #{port}: #{inspect(exception)}")

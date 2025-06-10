@@ -20,11 +20,13 @@ defmodule CorroPortWeb.ClusterLive do
       |> assign(:page_title, "Cluster Status")
       |> assign(:cluster_info, nil)
       |> assign(:local_info, nil)
+      |> assign(:node_messages, [])
       |> assign(:error, nil)
       |> assign(:last_updated, nil)
       |> assign(:api_port, detected_port)
       |> assign(:phoenix_port, phoenix_port)
       |> assign(:refresh_interval, @refresh_interval)
+      |> assign(:sending_message, false)
 
     {:ok, fetch_cluster_data(socket)}
   end
@@ -38,36 +40,63 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, fetch_cluster_data(socket)}
   end
 
+  def handle_event("send_message", _params, socket) do
+    api_port = socket.assigns.api_port
+
+    # Get the local node's identifier
+    local_node_id = get_local_node_id(socket.assigns.local_info)
+    message = "Hello from #{local_node_id} at #{DateTime.utc_now() |> DateTime.to_iso8601()}"
+
+    socket = assign(socket, :sending_message, true)
+
+    case CorrosionAPI.insert_message(local_node_id, message, api_port) do
+      {:ok, result} ->
+        Logger.info("Successfully sent message: #{inspect(result)}")
+        socket
+        |> assign(:sending_message, false)
+        |> put_flash(:info, "Message sent successfully!")
+        |> fetch_cluster_data()
+
+      {:error, error} ->
+        Logger.warning("Failed to send message: #{error}")
+        socket
+        |> assign(:sending_message, false)
+        |> put_flash(:error, "Failed to send message: #{error}")
+    end
+    |> then(&{:noreply, &1})
+  end
+
   defp fetch_cluster_data(socket) do
     api_port = socket.assigns.api_port
 
-    case CorrosionAPI.get_cluster_info(api_port) do
+    # Fetch cluster info
+    socket = case CorrosionAPI.get_cluster_info(api_port) do
       {:ok, cluster_info} ->
-        case CorrosionAPI.get_info(api_port) do
-          {:ok, local_info} ->
-            socket
-            |> assign(:cluster_info, cluster_info)
-            |> assign(:local_info, local_info)
-            |> assign(:error, nil)
-            |> assign(:last_updated, DateTime.utc_now())
-
-          {:error, error} ->
-            Logger.warning("Failed to fetch local info: #{error}")
-            socket
-            |> assign(:cluster_info, cluster_info)
-            |> assign(:local_info, nil)
-            |> assign(:error, "Failed to fetch local info: #{error}")
-            |> assign(:last_updated, DateTime.utc_now())
-        end
-
+        assign(socket, :cluster_info, cluster_info)
       {:error, error} ->
         Logger.warning("Failed to fetch cluster info: #{error}")
-        socket
-        |> assign(:cluster_info, nil)
-        |> assign(:local_info, nil)
-        |> assign(:error, "Failed to connect to Corrosion API: #{error}")
-        |> assign(:last_updated, DateTime.utc_now())
+        assign(socket, :error, "Failed to connect to Corrosion API: #{error}")
     end
+
+    # Fetch local info
+    socket = case CorrosionAPI.get_info(api_port) do
+      {:ok, local_info} ->
+        assign(socket, :local_info, local_info)
+      {:error, error} ->
+        Logger.warning("Failed to fetch local info: #{error}")
+        socket
+    end
+
+    # Fetch node messages
+    socket = case CorrosionAPI.get_latest_node_messages(api_port) do
+      {:ok, messages} ->
+        assign(socket, :node_messages, messages)
+      {:error, error} ->
+        Logger.debug("Failed to fetch node messages (table might not exist yet): #{error}")
+        assign(socket, :node_messages, [])
+    end
+
+    assign(socket, :last_updated, DateTime.utc_now())
   end
 
   defp schedule_refresh do
@@ -86,10 +115,6 @@ defmodule CorroPortWeb.ClusterLive do
   end
   defp format_timestamp(_), do: "Unknown"
 
-  defp connection_status(true), do: {"Connected", "badge-success"}
-  defp connection_status(false), do: {"Disconnected", "badge-error"}
-  defp connection_status(_), do: {"Unknown", "badge-warning"}
-
   defp get_gossip_address do
     config = Application.get_env(:corro_port, :node_config, %{
       corrosion_gossip_port: 8787
@@ -97,6 +122,11 @@ defmodule CorroPortWeb.ClusterLive do
     gossip_port = config[:corrosion_gossip_port] || 8787
     "127.0.0.1:#{gossip_port}"
   end
+
+  defp get_local_node_id(local_info) when is_map(local_info) do
+    Map.get(local_info, "node_id", "unknown")
+  end
+  defp get_local_node_id(_), do: "unknown"
 
   def render(assigns) do
     ~H"""
@@ -110,6 +140,15 @@ defmodule CorroPortWeb.ClusterLive do
           <.button phx-click="refresh" variant="primary">
             <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" />
             Refresh
+          </.button>
+          <.button
+            phx-click="send_message"
+            disabled={@sending_message}
+            class="btn btn-secondary"
+          >
+            <span :if={@sending_message} class="loading loading-spinner loading-sm mr-2"></span>
+            <.icon :if={!@sending_message} name="hero-paper-airplane" class="w-4 h-4 mr-2" />
+            Send Message
           </.button>
         </:actions>
       </.header>
@@ -151,6 +190,7 @@ defmodule CorroPortWeb.ClusterLive do
               <div><strong>Total Nodes:</strong> <%= Map.get(@cluster_info, "member_count", 0) + 1 %></div>
               <div><strong>Remote Members:</strong> <%= Map.get(@cluster_info, "member_count", 0) %></div>
               <div><strong>Tracked Peers:</strong> <%= Map.get(@cluster_info, "peer_count", 0) %></div>
+              <div><strong>Messages Sent:</strong> <%= length(@node_messages) %> nodes</div>
               <div><strong>Last Updated:</strong> <%= format_timestamp(@last_updated) %></div>
             </div>
             <div :if={!@cluster_info && !@error} class="loading loading-spinner loading-sm"></div>
@@ -170,6 +210,41 @@ defmodule CorroPortWeb.ClusterLive do
                 <span :if={!@last_updated}>Never</span>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Node Messages -->
+      <div :if={@node_messages != []} class="card bg-base-100">
+        <div class="card-body">
+          <h3 class="card-title">Latest Messages from Each Node</h3>
+          <div class="overflow-x-auto">
+            <table class="table table-zebra">
+              <thead>
+                <tr>
+                  <th>Node ID</th>
+                  <th>Message</th>
+                  <th>Timestamp</th>
+                  <th>Sequence</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={message <- @node_messages}>
+                  <td class="font-mono text-sm">
+                    <%= Map.get(message, "node_id", "Unknown") %>
+                  </td>
+                  <td class="max-w-md truncate">
+                    <%= Map.get(message, "message", "") %>
+                  </td>
+                  <td class="text-xs">
+                    <%= format_timestamp(Map.get(message, "timestamp")) %>
+                  </td>
+                  <td class="font-mono text-xs">
+                    <%= Map.get(message, "sequence", "") %>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -266,9 +341,13 @@ defmodule CorroPortWeb.ClusterLive do
             <h4 class="font-semibold mb-2">Cluster Info:</h4>
             <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@cluster_info, pretty: true) %></pre>
           </div>
-          <div :if={@local_info}>
+          <div :if={@local_info} class="mb-4">
             <h4 class="font-semibold mb-2">Local Info:</h4>
             <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@local_info, pretty: true) %></pre>
+          </div>
+          <div :if={@node_messages != []} class="mb-4">
+            <h4 class="font-semibold mb-2">Node Messages:</h4>
+            <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@node_messages, pretty: true) %></pre>
           </div>
         </div>
       </details>
