@@ -2,7 +2,7 @@ defmodule CorroPortWeb.ClusterLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPort.CorrosionAPI
+  alias CorroPort.{CorrosionAPI, CorrosionClient}
   alias CorroPort.MessageWatcher
   alias CorroPortWeb.ClusterLive.Components
 
@@ -14,7 +14,7 @@ defmodule CorroPortWeb.ClusterLive do
       schedule_refresh()
     end
 
-    detected_port = CorrosionAPI.detect_api_port()
+    detected_port = CorrosionClient.detect_api_port()
     phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
 
     socket =

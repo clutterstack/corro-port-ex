@@ -157,7 +157,7 @@ defmodule CorroPort.MessageWatcher do
 
   defp start_message_subscription do
     # Get the API port from our configuration
-    api_port = CorroPort.CorrosionAPI.get_api_port()
+    api_port = CorroPort.CorrosionClient.get_api_port()
     base_url = "http://127.0.0.1:#{api_port}/v1"
     url = "#{base_url}/subscriptions"
 
