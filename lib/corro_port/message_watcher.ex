@@ -9,7 +9,7 @@ defmodule CorroPort.MessageWatcher do
   use GenServer
   require Logger
 
-  @subscription_topic "node_messages_updates"
+  @subscription_topic "SELECT * FROM node_messages ORDER BY timestamp DESC"
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
