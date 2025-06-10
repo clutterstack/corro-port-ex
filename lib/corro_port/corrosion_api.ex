@@ -113,53 +113,136 @@ defmodule CorroPort.CorrosionAPI do
   @doc """
   Gets the latest message for each node from the node_messages table.
   """
-  def get_latest_node_messages(port \\ nil) do
-    port = port || get_api_port()
+def get_latest_node_messages(port \\ nil) do
+  port = port || get_api_port()
 
-    # Get the latest message per node_id
-    query = """
-    SELECT node_id, message, timestamp, sequence
+  # Try selecting columns in a different order to see if that fixes the alignment
+  query = """
+  SELECT message, node_id, timestamp, sequence
+  FROM node_messages
+  WHERE (node_id, timestamp) IN (
+    SELECT node_id, MAX(timestamp)
     FROM node_messages
-    WHERE (node_id, timestamp) IN (
-      SELECT node_id, MAX(timestamp)
-      FROM node_messages
-      GROUP BY node_id
-    )
-    ORDER BY timestamp DESC
-    """
+    GROUP BY node_id
+  )
+  ORDER BY timestamp DESC
+  """
 
-    case execute_query(query, port) do
-      {:ok, response} ->
-        {:ok, parse_query_response(response)}
-      error ->
-        error
-    end
+case execute_query(query, port) do
+  {:ok, response} ->
+    parsed = parse_query_response(response)
+
+    # Map the columns back to the expected structure
+    mapped = Enum.map(parsed, fn row ->
+      # If the columns are coming back as positional, we need to map them correctly
+      case row do
+        # If it's a map with string keys (which it should be)
+        %{"message" => msg, "node_id" => nid, "timestamp" => ts, "sequence" => seq} ->
+          %{"node_id" => nid, "message" => msg, "timestamp" => ts, "sequence" => seq}
+
+        # If for some reason the keys are wrong, try to fix based on the pattern you showed
+        %{"node_id" => actual_message, "message" => actual_node_port, "timestamp" => ts, "sequence" => seq}
+        when is_binary(actual_message) ->
+          if String.contains?(actual_message, "Hello from") do
+            # Extract the real node_id from the message
+            node_id = case Regex.run(~r/Hello from (node\d+)/, actual_message) do
+              [_, node_id] -> node_id
+              _ -> "unknown"
+            end
+
+            %{
+              "node_id" => node_id,
+              "message" => actual_message,
+              "timestamp" => ts,
+              "sequence" => seq
+            }
+          else
+            # If it doesn't contain "Hello from", return as-is
+            row
+          end
+
+        # Fallback - return as-is
+        other -> other
+      end
+    end)
+
+    {:ok, mapped}
+  error ->
+    error
+end
+end
+def get_all_node_messages_debug(port \\ nil) do
+  port = port || get_api_port()
+
+  # Simple query to see raw data
+  query = "SELECT * FROM node_messages ORDER BY timestamp DESC LIMIT 5"
+
+  case execute_query(query, port) do
+    {:ok, response} ->
+      Logger.debug("=== RAW NODE_MESSAGES DEBUG ===")
+      Logger.debug("Raw response: #{inspect(response)}")
+      parsed = parse_query_response(response)
+      Logger.debug("Parsed response: #{inspect(parsed)}")
+      Logger.debug("=== END DEBUG ===")
+      {:ok, parsed}
+    error ->
+      error
   end
-
+end
   @doc """
   Inserts a new message into the node_messages table.
   Updated to match the call signature expected by ClusterLive.
   """
-  def insert_message(node_id, message, port \\ nil) do
-    port = port || get_api_port()
+def insert_message(node_id, message, port \\ nil) do
+  port = port || get_api_port()
 
-    # Generate a sequence number based on current time (simple approach)
-    sequence = System.system_time(:millisecond)
-    timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
+  # Generate a sequence number based on current time
+  sequence = System.system_time(:millisecond)
+  timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
 
-    # Create the transaction as an array of SQL statements (as expected by Corrosion)
-    transactions = [
-      "INSERT INTO node_messages (pk, node_id, message, sequence, timestamp) VALUES (\"#{node_id}_#{sequence}\", \"#{node_id}\", \"#{message}\", #{sequence}, \"#{timestamp}\")"
-    ]
+  # Use single quotes to avoid issues with double quotes in messages
+  sql = """
+  INSERT INTO node_messages (pk, node_id, message, sequence, timestamp)
+  VALUES ('#{node_id}_#{sequence}', '#{node_id}', '#{message}', #{sequence}, '#{timestamp}')
+  """
 
-    case execute_transaction(transactions, port) do
-      {:ok, _response} ->
-        {:ok, %{node_id: node_id, message: message, sequence: sequence, timestamp: timestamp}}
-      error ->
-        error
-    end
+  Logger.debug("Inserting: node_id=#{node_id}, message=#{message}, port=#{port}")
+
+  case execute_transaction([sql], port) do
+    {:ok, _response} ->
+      {:ok, %{node_id: node_id, message: message, sequence: sequence, timestamp: timestamp}}
+    error ->
+      error
   end
+end
 
+# Add a cleanup function to remove bad data
+def cleanup_bad_messages(port \\ nil) do
+  port = port || get_api_port()
+
+  # Delete messages where the message field contains port numbers
+  cleanup_sql = """
+  DELETE FROM node_messages
+  WHERE message IN ('8081', '8082', '8083', '8084', '8085')
+  """
+
+  case execute_transaction([cleanup_sql], port) do
+    {:ok, _} ->
+      Logger.info("Cleaned up malformed messages")
+      {:ok, :cleaned}
+    error ->
+      Logger.warning("Failed to cleanup messages: #{inspect(error)}")
+      error
+  end
+end
+
+# Add a function to test the insert with known good data
+def test_insert(port \\ nil) do
+  node_id = CorroPort.NodeConfig.get_corrosion_node_id()
+  test_message = "Test message from #{node_id} at #{DateTime.utc_now() |> DateTime.to_iso8601()}"
+
+  insert_message(node_id, test_message, port)
+end
   @doc """
   Gets local node information.
   """

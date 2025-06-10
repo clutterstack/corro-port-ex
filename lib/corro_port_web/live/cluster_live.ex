@@ -95,6 +95,61 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, socket}
   end
 
+  def handle_event("debug_messages", _params, socket) do
+  api_port = socket.assigns.api_port
+
+  # Get raw debug data
+  case CorroPort.CorrosionAPI.get_all_node_messages_debug(api_port) do
+    {:ok, debug_data} ->
+      socket = put_flash(socket, :info, "Debug data logged - check the console!")
+
+      # Also try the regular query
+      case CorroPort.CorrosionAPI.get_latest_node_messages(api_port) do
+        {:ok, messages} ->
+          Logger.warning("=== COMPARISON ===")
+          Logger.warning("Debug query result: #{inspect(debug_data)}")
+          Logger.warning("Latest messages result: #{inspect(messages)}")
+          Logger.warning("=== END COMPARISON ===")
+          {:noreply, socket}
+        error ->
+          {:noreply, put_flash(socket, :error, "Latest messages query failed: #{inspect(error)}")}
+      end
+
+    {:error, error} ->
+      {:noreply, put_flash(socket, :error, "Debug query failed: #{inspect(error)}")}
+  end
+end
+
+def handle_event("cleanup_messages", _params, socket) do
+  case CorroPort.CorrosionAPI.cleanup_bad_messages(socket.assigns.api_port) do
+    {:ok, :cleaned} ->
+      socket =
+        socket
+        |> put_flash(:info, "Cleaned up malformed messages")
+        |> fetch_node_messages()  # Refresh the display
+      {:noreply, socket}
+
+    {:error, error} ->
+      socket = put_flash(socket, :error, "Cleanup failed: #{inspect(error)}")
+      {:noreply, socket}
+  end
+end
+
+def handle_event("test_insert", _params, socket) do
+  case CorroPort.CorrosionAPI.test_insert(socket.assigns.api_port) do
+    {:ok, result} ->
+      socket =
+        socket
+        |> put_flash(:info, "Test message inserted successfully!")
+        |> fetch_node_messages()  # Refresh the display
+      {:noreply, socket}
+
+    {:error, error} ->
+      socket = put_flash(socket, :error, "Test insert failed: #{inspect(error)}")
+      {:noreply, socket}
+  end
+end
+
   defp fetch_cluster_data(socket) do
     api_port = socket.assigns.api_port
 
@@ -238,6 +293,17 @@ defmodule CorroPortWeb.ClusterLive do
             <span :if={@sending_message} class="loading loading-spinner loading-sm mr-2"></span>
             <.icon :if={!@sending_message} name="hero-paper-airplane" class="w-4 h-4 mr-2" />
             Send Message
+          </.button>
+          <.button phx-click="debug_messages" class="btn btn-outline btn-sm">
+            Debug Messages
+          </.button>
+          <.button phx-click="cleanup_messages" class="btn btn-warning btn-sm">
+            <.icon name="hero-trash" class="w-4 h-4 mr-2" />
+            Cleanup Bad Data
+          </.button>
+          <.button phx-click="test_insert" class="btn btn-success btn-sm">
+            <.icon name="hero-beaker" class="w-4 h-4 mr-2" />
+            Test Insert
           </.button>
         </:actions>
       </.header>
