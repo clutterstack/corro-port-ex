@@ -138,6 +138,7 @@ defmodule CorroPort.CorrosionAPI do
 
   @doc """
   Inserts a new message into the node_messages table.
+  Updated to match the call signature expected by ClusterLive.
   """
   def insert_message(node_id, message, port \\ nil) do
     port = port || get_api_port()
@@ -158,7 +159,6 @@ defmodule CorroPort.CorrosionAPI do
         error
     end
   end
-
 
   @doc """
   Gets local node information.

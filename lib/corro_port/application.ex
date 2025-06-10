@@ -12,6 +12,8 @@ defmodule CorroPort.Application do
       {DNSCluster, query: Application.get_env(:corro_port, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: CorroPort.PubSub},
       CorroPort.CorroGenserver,
+      # Add the MessageWatcher to subscribe to Corrosion changes
+      CorroPort.MessageWatcher,
       # Start a worker by calling: CorroPort.Worker.start_link(arg)
       # {CorroPort.Worker, arg},
       # Start to serve requests, typically the last entry

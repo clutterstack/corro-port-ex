@@ -3,11 +3,14 @@ defmodule CorroPortWeb.ClusterLive do
   require Logger
 
   alias CorroPort.CorrosionAPI
+  alias CorroPort.MessageWatcher
 
-  @refresh_interval 3000
+  @refresh_interval 5000  # Reduced since we have real-time updates
 
   def mount(_params, _session, socket) do
     if connected?(socket) do
+      # Subscribe to real-time message updates
+      Phoenix.PubSub.subscribe(CorroPort.PubSub, MessageWatcher.subscription_topic())
       schedule_refresh()
     end
 
@@ -27,8 +30,28 @@ defmodule CorroPortWeb.ClusterLive do
       |> assign(:phoenix_port, phoenix_port)
       |> assign(:refresh_interval, @refresh_interval)
       |> assign(:sending_message, false)
+      |> assign(:subscription_status, nil)
 
     {:ok, fetch_cluster_data(socket)}
+  end
+
+  # Handle real-time message updates from Corrosion subscription
+  def handle_info({:new_message, values}, socket) do
+    Logger.debug("Received new message via subscription: #{inspect(values)}")
+
+    # Refresh the node messages to show the latest data
+    socket = fetch_node_messages(socket)
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:message_change, change_type, values}, socket) do
+    Logger.debug("Received message #{change_type} via subscription: #{inspect(values)}")
+
+    # Refresh the node messages to show the latest data
+    socket = fetch_node_messages(socket)
+
+    {:noreply, socket}
   end
 
   def handle_info(:refresh, socket) do
@@ -41,20 +64,20 @@ defmodule CorroPortWeb.ClusterLive do
   end
 
   def handle_event("send_message", _params, socket) do
-    api_port = socket.assigns.api_port
+    node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
     # Create a message with timestamp
-    message = "Hello from #{CorroPort.NodeConfig.get_corrosion_node_id()} at #{DateTime.utc_now() |> DateTime.to_iso8601()}"
+    message = "Hello from #{node_id} at #{DateTime.utc_now() |> DateTime.to_iso8601()}"
 
     socket = assign(socket, :sending_message, true)
 
-    case CorroPort.CorrosionAPI.insert_message(message, api_port) do
+    case CorroPort.CorrosionAPI.insert_message(node_id, message, socket.assigns.api_port) do
       {:ok, result} ->
         Logger.info("Successfully sent message: #{inspect(result)}")
         socket
         |> assign(:sending_message, false)
         |> put_flash(:info, "Message sent successfully!")
-        |> fetch_cluster_data()
+        # Don't fetch_cluster_data here - the subscription will handle the update
 
       {:error, error} ->
         Logger.warning("Failed to send message: #{error}")
@@ -63,6 +86,12 @@ defmodule CorroPortWeb.ClusterLive do
         |> put_flash(:error, "Failed to send message: #{error}")
     end
     |> then(&{:noreply, &1})
+  end
+
+  def handle_event("check_subscription", _params, socket) do
+    status = MessageWatcher.get_status()
+    socket = assign(socket, :subscription_status, status)
+    {:noreply, socket}
   end
 
   defp fetch_cluster_data(socket) do
@@ -87,15 +116,26 @@ defmodule CorroPortWeb.ClusterLive do
     end
 
     # Fetch node messages
-    socket = case CorrosionAPI.get_latest_node_messages(api_port) do
+    socket = fetch_node_messages(socket)
+
+    # Get subscription status
+    subscription_status = MessageWatcher.get_status()
+
+    socket
+    |> assign(:last_updated, DateTime.utc_now())
+    |> assign(:subscription_status, subscription_status)
+  end
+
+  defp fetch_node_messages(socket) do
+    api_port = socket.assigns.api_port
+
+    case CorrosionAPI.get_latest_node_messages(api_port) do
       {:ok, messages} ->
         assign(socket, :node_messages, messages)
       {:error, error} ->
         Logger.debug("Failed to fetch node messages (table might not exist yet): #{error}")
         assign(socket, :node_messages, [])
     end
-
-    assign(socket, :last_updated, DateTime.utc_now())
   end
 
   defp schedule_refresh do
@@ -134,11 +174,21 @@ defmodule CorroPortWeb.ClusterLive do
         Corrosion Cluster Status
         <:subtitle>
           Monitoring cluster health and node connectivity
+          <span :if={@subscription_status && @subscription_status.subscription_active} class="badge badge-success badge-sm ml-2">
+            Live Updates
+          </span>
+          <span :if={@subscription_status && !@subscription_status.subscription_active} class="badge badge-warning badge-sm ml-2">
+            Subscription Inactive
+          </span>
         </:subtitle>
         <:actions>
           <.button phx-click="refresh" variant="primary">
             <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" />
             Refresh
+          </.button>
+          <.button phx-click="check_subscription" class="btn btn-outline">
+            <.icon name="hero-signal" class="w-4 h-4 mr-2" />
+            Check Sub
           </.button>
           <.button
             phx-click="send_message"
@@ -196,12 +246,30 @@ defmodule CorroPortWeb.ClusterLive do
           </div>
         </div>
 
-        <!-- Auto Refresh Info -->
+        <!-- Subscription Status -->
         <div class="card bg-base-200">
           <div class="card-body">
-            <h3 class="card-title text-sm">Monitoring</h3>
+            <h3 class="card-title text-sm">Real-time Updates</h3>
             <div class="space-y-2 text-sm">
               <div><strong>Auto Refresh:</strong> Every <%= div(@refresh_interval, 1000) %>s</div>
+              <div><strong>Subscription:</strong>
+                <span :if={@subscription_status && @subscription_status.subscription_active} class="badge badge-success badge-sm">
+                  Active
+                </span>
+                <span :if={@subscription_status && !@subscription_status.subscription_active} class="badge badge-warning badge-sm">
+                  Inactive
+                </span>
+                <span :if={!@subscription_status} class="badge badge-neutral badge-sm">
+                  Unknown
+                </span>
+              </div>
+              <div :if={@subscription_status && @subscription_status.watch_id}>
+                <strong>Watch ID:</strong>
+                <span class="font-mono text-xs"><%= String.slice(@subscription_status.watch_id, 0, 8) %>...</span>
+              </div>
+              <div :if={@subscription_status && @subscription_status.reconnect_attempts > 0}>
+                <strong>Reconnects:</strong> <%= @subscription_status.reconnect_attempts %>
+              </div>
               <div><strong>Last Check:</strong>
                 <span :if={@last_updated}>
                   <%= format_timestamp(@last_updated) %>
@@ -216,7 +284,12 @@ defmodule CorroPortWeb.ClusterLive do
       <!-- Node Messages -->
       <div :if={@node_messages != []} class="card bg-base-100">
         <div class="card-body">
-          <h3 class="card-title">Latest Messages from Each Node</h3>
+          <h3 class="card-title">
+            Latest Messages from Each Node
+            <span :if={@subscription_status && @subscription_status.subscription_active} class="badge badge-success badge-sm">
+              Live
+            </span>
+          </h3>
           <div class="overflow-x-auto">
             <table class="table table-zebra">
               <thead>
@@ -347,6 +420,10 @@ defmodule CorroPortWeb.ClusterLive do
           <div :if={@node_messages != []} class="mb-4">
             <h4 class="font-semibold mb-2">Node Messages:</h4>
             <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@node_messages, pretty: true) %></pre>
+          </div>
+          <div :if={@subscription_status} class="mb-4">
+            <h4 class="font-semibold mb-2">Subscription Status:</h4>
+            <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@subscription_status, pretty: true) %></pre>
           </div>
         </div>
       </details>
