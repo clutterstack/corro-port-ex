@@ -37,49 +37,52 @@ defmodule CorroPort.ClusterAPI do
   end
 
   @doc """
-  Gets comprehensive cluster information from various internal tables.
+  Gets comprehensive cluster information from Corrosion system tables.
 
-  Queries multiple Corrosion system tables to build a complete picture
-  of cluster state including members, tracked peers, and available tables.
+  Queries the essential Corrosion system tables to build cluster state:
+  - `__corro_members`: Cluster members and their status
+  - `crsql_tracked_peers`: Tracked peers for replication
 
   ## Returns
   Map containing:
-  - `available_tables`: List of Corrosion system table names
   - `members`: List of cluster members (if available)
   - `tracked_peers`: List of tracked peers (if available)
   - `member_count`: Number of cluster members
   - `peer_count`: Number of tracked peers
   """
   def get_cluster_info(port \\ nil) do
-    # Discover available Corrosion tables
-    tables_query = """
-    SELECT name FROM sqlite_master
-    WHERE type='table' AND (name LIKE '__corro_%' OR name LIKE 'crsql_%')
-    """
+    # Start with basic structure
+    cluster_data = %{
+      "members" => [],
+      "tracked_peers" => [],
+      "member_count" => 0,
+      "peer_count" => 0
+    }
 
-    case CorrosionClient.execute_query(tables_query, port) do
-      {:ok, response} ->
-        available_tables = CorrosionClient.parse_query_response(response)
-        table_names = Enum.map(available_tables, & &1["name"])
+    # Get members and peers directly
+    cluster_data
+    |> fetch_members(port)
+    |> fetch_tracked_peers(port)
+    |> then(&{:ok, &1})
+  end
 
-        Logger.debug("Available Corrosion tables: #{inspect(table_names)}")
-
-        cluster_data = %{
-          "available_tables" => table_names,
-          "members" => [],
-          "tracked_peers" => [],
-          "member_count" => 0,
-          "peer_count" => 0
-        }
-
+  defp fetch_members(cluster_data, port) do
+    case get_cluster_members(port) do
+      {:ok, members} ->
+        Map.merge(cluster_data, %{"members" => members, "member_count" => length(members)})
+      {:error, _} ->
+        Logger.debug("Could not fetch cluster members (table may not exist)")
         cluster_data
-        |> maybe_add_members(table_names, port)
-        |> maybe_add_tracked_peers(table_names, port)
-        |> then(&{:ok, &1})
+    end
+  end
 
-      error ->
-        Logger.warning("Failed to get table list: #{inspect(error)}")
-        error
+  defp fetch_tracked_peers(cluster_data, port) do
+    case get_tracked_peers(port) do
+      {:ok, peers} ->
+        Map.merge(cluster_data, %{"tracked_peers" => peers, "peer_count" => length(peers)})
+      {:error, _} ->
+        Logger.debug("Could not fetch tracked peers (table may not exist)")
+        cluster_data
     end
   end
 
@@ -99,76 +102,29 @@ defmodule CorroPort.ClusterAPI do
 
   ## System Introspection
 
-  @doc """
-  Gets local node information including site ID and available tables.
+@doc """
+  Gets local node information using the configured Elixir node ID.
 
-  Attempts to gather various pieces of information about the current node
-  by querying system tables and extracting node identification.
+  Returns the node identification from the application configuration
+  instead of querying Corrosion database tables.
   """
-  def get_info(port \\ nil) do
-    queries = [
-      {"site_id", "SELECT * FROM crsql_site_id"},
-      {"tables", "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '__corro_%' AND name NOT LIKE 'crsql_%'"},
-      {"corro_state", "SELECT * FROM __corro_state LIMIT 5"}
-    ]
+  def get_info(_port \\ nil) do
+    node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
-    results = Enum.reduce(queries, %{}, fn {key, query}, acc ->
-      case CorrosionClient.execute_query(query, port) do
-        {:ok, response} ->
-          parsed = CorrosionClient.parse_query_response(response)
-          Map.put(acc, key, parsed)
-        {:error, error} ->
-          Logger.debug("Query failed for #{key}: #{error}")
-          Map.put(acc, key, "Error: #{error}")
-      end
-    end)
-
-    node_id = extract_node_id(results)
-    {:ok, Map.put(results, "node_id", node_id)}
+    {:ok, %{
+      "node_id" => node_id
+    }}
   end
 
-  ## Private Helper Functions
-
-  defp maybe_add_members(cluster_data, table_names, port) do
-    if "__corro_members" in table_names do
-      case get_cluster_members(port) do
-        {:ok, members} ->
-          Map.merge(cluster_data, %{"members" => members, "member_count" => length(members)})
-        _ ->
-          cluster_data
-      end
-    else
-      cluster_data
-    end
-  end
-
-  defp maybe_add_tracked_peers(cluster_data, table_names, port) do
-    if "crsql_tracked_peers" in table_names do
-      case get_tracked_peers(port) do
-        {:ok, peers} ->
-          Map.merge(cluster_data, %{"tracked_peers" => peers, "peer_count" => length(peers)})
-        _ ->
-          cluster_data
-      end
-    else
-      cluster_data
-    end
-  end
-
-  defp extract_node_id(results) do
-    case Map.get(results, "site_id") do
+  defp extract_node_id_from_site(site_id_result) do
+    case site_id_result do
       [site_info | _] when is_map(site_info) ->
+        # Get the actual site_id value (should be a UUID)
         site_info |> Map.values() |> List.first() || "unknown"
       _ ->
-        case Map.get(results, "corro_state") do
-          [first_row | _] when is_map(first_row) ->
-            first_row
-            |> Map.get("node_id", Map.get(first_row, "id", Map.get(first_row, "site_id", "unknown")))
-          _ -> "unknown"
-        end
+        "unknown"
     end
   end
-
   ## Data Parsing and Formatting
 
   @doc """

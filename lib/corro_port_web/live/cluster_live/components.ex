@@ -86,31 +86,81 @@ defmodule CorroPortWeb.ClusterLive.Components do
     """
   end
 
-  def local_node_card(assigns) do
+def local_node_card(assigns) do
+    # Provide default empty cluster_info if not present
+    assigns = assign_new(assigns, :cluster_info, fn -> %{"members" => []} end)
+
     ~H"""
     <div class="card bg-base-200">
       <div class="card-body">
         <h3 class="card-title text-sm">Local Node</h3>
         <div :if={@local_info} class="space-y-2 text-sm">
-          <div><strong>Node ID:</strong> <%= Map.get(@local_info, "node_id", "Unknown") %></div>
+          <div><strong>Node ID:</strong>
+            <span class="font-mono text-sm">
+              <%= Map.get(@local_info, "node_id", "Unknown") %>
+            </span>
+          </div>
           <div><strong>Phoenix Port:</strong> <%= @phoenix_port %></div>
           <div><strong>API Port:</strong> <%= @api_port %></div>
           <div><strong>Gossip Address:</strong> <%= get_gossip_address() %></div>
-          <div><strong>User Tables:</strong>
-            <%= case Map.get(@local_info, "tables") do
-              tables when is_list(tables) -> length(tables)
-              _ -> 0
-            end %>
-          </div>
           <div><strong>Status:</strong>
             <span class="badge badge-success badge-sm">Active</span>
           </div>
+          <%= if cluster_member = find_matching_member(@cluster_info, @local_info) do %>
+            <div><strong>Member ID:</strong>
+              <span class="font-mono text-xs">
+                <%= format_member_id(cluster_member["member_id"]) %>
+              </span>
+            </div>
+            <div><strong>Member State:</strong>
+              <span class={member_state_badge_class(cluster_member["member_state"])}>
+                <%= cluster_member["member_state"] %>
+              </span>
+            </div>
+          <% end %>
         </div>
         <div :if={!@local_info && !@error} class="loading loading-spinner loading-sm"></div>
       </div>
     </div>
     """
   end
+
+  # Helper function to find the cluster member that matches this local node
+  defp find_matching_member(cluster_info, local_info) when is_map(cluster_info) and is_map(local_info) do
+    members = Map.get(cluster_info, "members", [])
+    local_gossip_port = get_local_gossip_port()
+
+    # Find member whose gossip address matches our local gossip port
+    Enum.find(members, fn member ->
+      case Map.get(member, "member_addr") do
+        addr when is_binary(addr) ->
+          # Extract port from address like "127.0.0.1:8787"
+          case String.split(addr, ":") do
+            [_ip, port_str] ->
+              case Integer.parse(port_str) do
+                {port, _} -> port == local_gossip_port
+                _ -> false
+              end
+            _ -> false
+          end
+        _ -> false
+      end
+    end)
+  end
+  defp find_matching_member(_, _), do: nil
+
+  defp get_local_gossip_port do
+    config = Application.get_env(:corro_port, :node_config, %{
+      corrosion_gossip_port: 8787
+    })
+    config[:corrosion_gossip_port] || 8787
+  end
+
+  defp format_member_id(nil), do: "Unknown"
+  defp format_member_id(member_id) when byte_size(member_id) > 12 do
+    String.slice(member_id, 0, 8) <> "..."
+  end
+  defp format_member_id(member_id), do: member_id
 
   def cluster_summary_card(assigns) do
     ~H"""

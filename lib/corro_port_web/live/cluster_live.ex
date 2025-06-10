@@ -2,7 +2,7 @@ defmodule CorroPortWeb.ClusterLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPort.{ClusterAPI, MessagesAPI, CorrosionClient}
+  alias CorroPort.{MessagesAPI, CorrosionClient}
   alias CorroPort.MessageWatcher
   alias CorroPortWeb.ClusterLive.Components
 
