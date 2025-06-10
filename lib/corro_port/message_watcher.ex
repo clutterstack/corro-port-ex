@@ -22,31 +22,68 @@ defmodule CorroPort.MessageWatcher do
     {:ok, %{
       watch_id: nil,
       reconnect_attempts: 0,
-      max_reconnect_attempts: 10
+      max_reconnect_attempts: 10,
+      subscription_task: nil,
+      status: :initializing
     }}
   end
 
   def handle_info(:start_subscription, state) do
-    case start_message_subscription() do
-      {:ok, watch_id, _pid} ->
-        Logger.info("Started node_messages subscription with ID: #{watch_id}")
-        {:noreply, %{state | watch_id: watch_id, reconnect_attempts: 0}}
-
-      {:error, reason} ->
-        Logger.warning("Failed to start node_messages subscription: #{inspect(reason)}")
-        schedule_reconnect(state)
+    # Cancel any existing subscription task
+    if state.subscription_task do
+      Task.shutdown(state.subscription_task, :brutal_kill)
     end
+
+    # Start subscription in a separate task to avoid blocking the GenServer
+    task = Task.async(fn -> start_message_subscription() end)
+
+    new_state = %{state |
+      subscription_task: task,
+      status: :connecting,
+      reconnect_attempts: state.reconnect_attempts + 1
+    }
+
+    {:noreply, new_state}
   end
 
   def handle_info(:reconnect, state) do
     if state.reconnect_attempts < state.max_reconnect_attempts do
       Logger.info("Attempting to reconnect to Corrosion subscription (attempt #{state.reconnect_attempts + 1})")
       send(self(), :start_subscription)
-      {:noreply, %{state | reconnect_attempts: state.reconnect_attempts + 1}}
+      {:noreply, state}
     else
       Logger.error("Max reconnection attempts reached for Corrosion subscription")
-      {:noreply, state}
+      {:noreply, %{state | status: :failed}}
     end
+  end
+
+  # Handle task completion
+  def handle_info({ref, result}, %{subscription_task: %Task{ref: ref}} = state) do
+    # Demonitor the task to prevent DOWN message
+    Process.demonitor(ref, [:flush])
+
+    case result do
+      {:ok, watch_id} ->
+        Logger.info("Started node_messages subscription with ID: #{watch_id}")
+        {:noreply, %{state |
+          watch_id: watch_id,
+          reconnect_attempts: 0,
+          subscription_task: nil,
+          status: :connected
+        }}
+
+      {:error, reason} ->
+        Logger.warning("Failed to start node_messages subscription: #{inspect(reason)}")
+        new_state = %{state | subscription_task: nil, status: :error}
+        schedule_reconnect(new_state)
+    end
+  end
+
+  # Handle task failure
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{subscription_task: %Task{ref: ref}} = state) do
+    Logger.warning("Subscription task crashed: #{inspect(reason)}")
+    new_state = %{state | subscription_task: nil, status: :error}
+    schedule_reconnect(new_state)
   end
 
   # Handle streaming data from Corrosion
@@ -75,24 +112,43 @@ defmodule CorroPort.MessageWatcher do
   # Handle stream errors or completion
   def handle_info({:stream_error, error}, state) do
     Logger.warning("Stream error in node_messages subscription: #{inspect(error)}")
-    schedule_reconnect(state)
+    new_state = %{state | status: :error}
+    schedule_reconnect(new_state)
   end
 
   def handle_info({:stream_done, _reason}, state) do
     Logger.info("Node_messages subscription stream completed")
-    schedule_reconnect(state)
+    new_state = %{state | status: :disconnected}
+    schedule_reconnect(new_state)
+  end
+
+  def handle_info(msg, state) do
+    Logger.debug("Unhandled message in MessageWatcher: #{inspect(msg)}")
+    {:noreply, state}
   end
 
   # Public API to get the current subscription status
   def get_status do
-    GenServer.call(__MODULE__, :get_status, 5000)
+    try do
+      GenServer.call(__MODULE__, :get_status, 1000)  # Reduced timeout
+    catch
+      :exit, {:timeout, _} ->
+        %{
+          watch_id: nil,
+          subscription_active: false,
+          reconnect_attempts: 0,
+          status: :timeout,
+          error: "GenServer call timed out"
+        }
+    end
   end
 
   def handle_call(:get_status, _from, state) do
     status = %{
       watch_id: state.watch_id,
-      subscription_active: !is_nil(state.watch_id),
-      reconnect_attempts: state.reconnect_attempts
+      subscription_active: !is_nil(state.watch_id) && state.status == :connected,
+      reconnect_attempts: state.reconnect_attempts,
+      status: state.status
     }
     {:reply, status, state}
   end
@@ -106,7 +162,6 @@ defmodule CorroPort.MessageWatcher do
     url = "#{base_url}/subscriptions"
 
     # SQL query to watch for changes in node_messages table
-    # This should be sent as a JSON string, just like other Corrosion API calls
     query = "SELECT * FROM node_messages ORDER BY timestamp DESC"
 
     parent_pid = self()
@@ -140,31 +195,38 @@ defmodule CorroPort.MessageWatcher do
 
     Logger.debug("Starting subscription to: #{url} with query: #{query}")
 
-    # Start the subscription request - send the SQL as JSON just like /v1/queries
-    case Req.post(url,
-           json: query,
-           headers: [{"content-type", "application/json"}],
-           into: stream_fun,
-           receive_timeout: :infinity,
-           connect_options: [timeout: 5000]
-         ) do
-      {:ok, %Req.Response{status: 200, headers: headers}} ->
-        case List.keyfind(headers, "corro-query-id", 0) do
-          {"corro-query-id", watch_id} ->
-            Logger.info("Successfully started subscription with watch ID: #{watch_id}")
-            {:ok, watch_id, nil}
-          nil ->
-            Logger.error("No corro-query-id header in subscription response")
-            {:error, :no_watch_id}
-        end
+    try do
+      # Start the subscription request with shorter timeouts
+      case Req.post(url,
+             json: query,
+             headers: [{"content-type", "application/json"}],
+             into: stream_fun,
+             receive_timeout: :infinity,
+             connect_options: [timeout: 2000],  # Shorter connection timeout
+             pool_timeout: 1000  # Pool timeout
+           ) do
+        {:ok, %Req.Response{status: 200, headers: headers}} ->
+          case List.keyfind(headers, "corro-query-id", 0) do
+            {"corro-query-id", watch_id} ->
+              Logger.info("Successfully started subscription with watch ID: #{watch_id}")
+              {:ok, watch_id}
+            nil ->
+              Logger.error("No corro-query-id header in subscription response")
+              {:error, :no_watch_id}
+          end
 
-      {:ok, %Req.Response{status: status, body: body}} ->
-        Logger.error("Subscription failed with HTTP #{status}: #{inspect(body)}")
-        {:error, {:http_error, status, body}}
+        {:ok, %Req.Response{status: status, body: body}} ->
+          Logger.error("Subscription failed with HTTP #{status}: #{inspect(body)}")
+          {:error, {:http_error, status, body}}
 
-      {:error, reason} ->
-        Logger.error("Failed to start subscription: #{inspect(reason)}")
-        {:error, reason}
+        {:error, reason} ->
+          Logger.error("Failed to start subscription: #{inspect(reason)}")
+          {:error, reason}
+      end
+    rescue
+      e ->
+        Logger.error("Exception in subscription request: #{inspect(e)}")
+        {:error, {:exception, e}}
     end
   end
 
@@ -213,13 +275,13 @@ defmodule CorroPort.MessageWatcher do
   end
 
   defp schedule_reconnect(state) do
-    # Exponential backoff with jitter
-    base_delay = min(1000 * :math.pow(2, state.reconnect_attempts), 30_000)
+    # Exponential backoff with jitter, but cap the delay
+    base_delay = min(1000 * :math.pow(2, state.reconnect_attempts), 10_000)  # Cap at 10s
     jitter = :rand.uniform(1000)
     delay = round(base_delay + jitter)
 
     Process.send_after(self(), :reconnect, delay)
-    {:noreply, %{state | watch_id: nil}}
+    {:noreply, %{state | watch_id: nil, status: :reconnecting}}
   end
 
   # Public function to get the subscription topic for LiveViews

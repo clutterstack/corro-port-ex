@@ -30,7 +30,7 @@ defmodule CorroPortWeb.ClusterLive do
       |> assign(:phoenix_port, phoenix_port)
       |> assign(:refresh_interval, @refresh_interval)
       |> assign(:sending_message, false)
-      |> assign(:subscription_status, nil)
+      |> assign(:subscription_status, %{subscription_active: false, status: :unknown})
 
     {:ok, fetch_cluster_data(socket)}
   end
@@ -89,7 +89,8 @@ defmodule CorroPortWeb.ClusterLive do
   end
 
   def handle_event("check_subscription", _params, socket) do
-    status = MessageWatcher.get_status()
+    # Get subscription status with safer call
+    status = get_subscription_status_safe()
     socket = assign(socket, :subscription_status, status)
     {:noreply, socket}
   end
@@ -118,8 +119,8 @@ defmodule CorroPortWeb.ClusterLive do
     # Fetch node messages
     socket = fetch_node_messages(socket)
 
-    # Get subscription status
-    subscription_status = MessageWatcher.get_status()
+    # Get subscription status safely
+    subscription_status = get_subscription_status_safe()
 
     socket
     |> assign(:last_updated, DateTime.utc_now())
@@ -135,6 +136,38 @@ defmodule CorroPortWeb.ClusterLive do
       {:error, error} ->
         Logger.debug("Failed to fetch node messages (table might not exist yet): #{error}")
         assign(socket, :node_messages, [])
+    end
+  end
+
+  defp get_subscription_status_safe do
+    try do
+      MessageWatcher.get_status()
+    catch
+      :exit, {:timeout, _} ->
+        %{
+          subscription_active: false,
+          status: :timeout,
+          watch_id: nil,
+          reconnect_attempts: 0,
+          error: "Status check timed out"
+        }
+      :exit, {:noproc, _} ->
+        %{
+          subscription_active: false,
+          status: :not_started,
+          watch_id: nil,
+          reconnect_attempts: 0,
+          error: "MessageWatcher not running"
+        }
+      type, reason ->
+        Logger.warning("Error getting subscription status: #{type} - #{inspect(reason)}")
+        %{
+          subscription_active: false,
+          status: :error,
+          watch_id: nil,
+          reconnect_attempts: 0,
+          error: "Error: #{type} - #{inspect(reason)}"
+        }
     end
   end
 
@@ -178,7 +211,14 @@ defmodule CorroPortWeb.ClusterLive do
             Live Updates
           </span>
           <span :if={@subscription_status && !@subscription_status.subscription_active} class="badge badge-warning badge-sm ml-2">
-            Subscription Inactive
+            <%= case @subscription_status.status do
+              :timeout -> "Timeout"
+              :not_started -> "Not Started"
+              :error -> "Error"
+              :connecting -> "Connecting"
+              :reconnecting -> "Reconnecting"
+              _ -> "Inactive"
+            end %>
           </span>
         </:subtitle>
         <:actions>
@@ -202,10 +242,20 @@ defmodule CorroPortWeb.ClusterLive do
         </:actions>
       </.header>
 
-      <div class="alert alert-info" :if={@error}>
+      <%= if @error do %>
+      <div class="alert alert-info" >
         <.icon name="hero-exclamation-circle" class="w-5 h-5" />
         <span><%= @error %></span>
       </div>
+      <% end %>
+
+      <!-- Subscription Status Alert -->
+      <%= if @subscription_status.status == :error do %>
+      <div class="alert alert-warning">
+        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+        <span>Subscription Issue: <%= inspect @subscription_status.status %></span>
+      </div>
+      <% end %>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <!-- Local Node Info -->
@@ -257,7 +307,15 @@ defmodule CorroPortWeb.ClusterLive do
                   Active
                 </span>
                 <span :if={@subscription_status && !@subscription_status.subscription_active} class="badge badge-warning badge-sm">
-                  Inactive
+                  <%= case @subscription_status.status do
+                    :timeout -> "Timeout"
+                    :not_started -> "Not Started"
+                    :error -> "Error"
+                    :connecting -> "Connecting"
+                    :reconnecting -> "Reconnecting"
+                    :failed -> "Failed"
+                    _ -> "Inactive"
+                  end %>
                 </span>
                 <span :if={!@subscription_status} class="badge badge-neutral badge-sm">
                   Unknown
