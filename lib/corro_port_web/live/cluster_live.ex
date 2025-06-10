@@ -17,22 +17,21 @@ defmodule CorroPortWeb.ClusterLive do
     detected_port = CorrosionClient.detect_api_port()
     phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
 
-    socket =
-      socket
-      |> assign(:page_title, "Cluster Status")
-      |> assign(:cluster_info, nil)
-      |> assign(:local_info, nil)
-      |> assign(:node_messages, [])
-      |> assign(:error, nil)
-      |> assign(:last_updated, nil)
-      |> assign(:api_port, detected_port)
-      |> assign(:phoenix_port, phoenix_port)
-      |> assign(:refresh_interval, @refresh_interval)
-      |> assign(:sending_message, false)
-      |> assign(:subscription_status, %{subscription_active: false, status: :unknown})
+    socket = assign(socket, %{
+    page_title: "Cluster Status",
+    cluster_info: nil,
+    local_info: nil,
+    node_messages: [],
+    error: nil,
+    last_updated: nil,
+    api_port: detected_port,
+    phoenix_port: phoenix_port,
+    refresh_interval: @refresh_interval,
+    subscription_status: %{subscription_active: false, status: :unknown}
+  })
 
-    {:ok, fetch_cluster_data(socket)}
-  end
+  {:ok, fetch_cluster_data(socket)}
+end
 
   # Handle real-time message updates
   def handle_info({:new_message, values}, socket) do
@@ -67,23 +66,15 @@ defmodule CorroPortWeb.ClusterLive do
   end
 
   def handle_event("send_message", _params, socket) do
-    socket = assign(socket, :sending_message, true)
-
-    case CorroPortWeb.ClusterLive.MessageHandler.send_message(socket.assigns.api_port) do
-      {:ok, message} ->
-        socket =
-          socket
-          |> assign(:sending_message, false)
-          |> put_flash(:info, message)
-      {:error, error} ->
-        socket =
-          socket
-          |> assign(:sending_message, false)
-          |> put_flash(:error, error)
-    end
-
-    {:noreply, socket}
+  case CorroPortWeb.ClusterLive.MessageHandler.send_message(socket.assigns.api_port) do
+    {:ok, message} ->
+      socket = put_flash(socket, :info, message)
+      {:noreply, socket}
+    {:error, error} ->
+      socket = put_flash(socket, :error, "Failed to send message: #{error}")
+      {:noreply, socket}
   end
+end
 
   def handle_event("check_subscription", _params, socket) do
     status = CorroPortWeb.ClusterLive.DataFetcher.get_subscription_status_safe()
@@ -139,7 +130,6 @@ defmodule CorroPortWeb.ClusterLive do
     <div class="space-y-6">
       <Components.cluster_header
         subscription_status={@subscription_status}
-        sending_message={@sending_message}
       />
 
       <Components.error_alerts

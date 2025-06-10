@@ -26,11 +26,9 @@ defmodule CorroPortWeb.ClusterLive.Components do
         </.button>
         <.button
           phx-click="send_message"
-          disabled={@sending_message}
           class="btn btn-secondary"
         >
-          <span :if={@sending_message} class="loading loading-spinner loading-sm mr-2"></span>
-          <.icon :if={!@sending_message} name="hero-paper-airplane" class="w-4 h-4 mr-2" />
+          <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" />
           Send Message
         </.button>
         <.button phx-click="cleanup_messages" class="btn btn-warning btn-sm">
