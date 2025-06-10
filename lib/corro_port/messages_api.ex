@@ -105,15 +105,4 @@ defmodule CorroPort.MessagesAPI do
     end
   end
 
-  @doc """
-  Test function to insert a known good message.
-
-  Useful for verifying that the message insertion mechanism is working correctly.
-  """
-  def test_insert(port \\ nil) do
-    node_id = CorroPort.NodeConfig.get_corrosion_node_id()
-    test_message = "Test message from #{node_id} at #{DateTime.utc_now() |> DateTime.to_iso8601()}"
-
-    insert_message(node_id, test_message, port)
-  end
 end

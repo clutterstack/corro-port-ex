@@ -24,13 +24,4 @@ defmodule CorroPortWeb.ClusterLive.MessageHandler do
         {:error, "Cleanup failed: #{inspect(error)}"}
     end
   end
-
-  def test_insert(api_port) do
-    case MessagesAPI.test_insert(api_port) do
-      {:ok, _result} ->
-        {:ok, "Test message inserted successfully!"}
-      {:error, error} ->
-        {:error, "Test insert failed: #{inspect(error)}"}
-    end
-  end
 end

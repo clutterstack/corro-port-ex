@@ -37,10 +37,6 @@ defmodule CorroPortWeb.ClusterLive.Components do
           <.icon name="hero-trash" class="w-4 h-4 mr-2" />
           Cleanup Bad Data
         </.button>
-        <.button phx-click="test_insert" class="btn btn-success btn-sm">
-          <.icon name="hero-beaker" class="w-4 h-4 mr-2" />
-          Test Insert
-        </.button>
       </:actions>
     </.header>
     """

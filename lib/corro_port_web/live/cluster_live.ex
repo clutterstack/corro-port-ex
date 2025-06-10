@@ -106,32 +106,19 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, socket}
   end
 
-  def handle_event("test_insert", _params, socket) do
-    case CorroPortWeb.ClusterLive.MessageHandler.test_insert(socket.assigns.api_port) do
-      {:ok, message} ->
-        # Refresh node messages after test insert
-        new_messages = CorroPortWeb.ClusterLive.DataFetcher.fetch_node_messages_data(socket.assigns.api_port)
-        socket =
-          socket
-          |> put_flash(:info, message)
-          |> assign(:node_messages, new_messages)
-      {:error, error} ->
-        socket = put_flash(socket, :error, error)
-    end
-    {:noreply, socket}
-  end
-
   # Private functions
   defp fetch_cluster_data(socket) do
     updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data(socket)
 
     socket
-    |> assign(:cluster_info, updates.cluster_info)
-    |> assign(:local_info, updates.local_info)
-    |> assign(:node_messages, updates.node_messages)
-    |> assign(:error, updates.error)
-    |> assign(:subscription_status, updates.subscription_status)
-    |> assign(:last_updated, updates.last_updated)
+    |> assign(%{
+    cluster_info: updates.cluster_info,
+    local_info: updates.local_info,
+    node_messages: updates.node_messages,
+    error: updates.error,
+    subscription_status: updates.subscription_status,
+    last_updated: updates.last_updated,
+    })
   end
 
   defp fetch_node_messages(socket) do
