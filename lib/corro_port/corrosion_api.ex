@@ -160,7 +160,7 @@ defmodule CorroPort.CorrosionAPI do
   end
 
 
- @doc """
+  @doc """
   Gets local node information.
   """
   def get_info(port \\ nil) do
@@ -184,8 +184,21 @@ defmodule CorroPort.CorrosionAPI do
       end
     end)
 
-    # Use the Phoenix node configuration instead of trying to extract from Corrosion
-    node_id = CorroPort.NodeConfig.get_corrosion_node_id()
+    # Try to extract node ID from various sources
+    node_id = case Map.get(results, "site_id") do
+      [site_info | _] when is_map(site_info) ->
+        # crsql_site_id table might have different column names
+        site_info |> Map.values() |> List.first() || "unknown"
+      _ ->
+        # Try getting from __corro_state table
+        case Map.get(results, "corro_state") do
+          [first_row | _] when is_map(first_row) ->
+            # Look for common node ID field names
+            first_row
+            |> Map.get("node_id", Map.get(first_row, "id", Map.get(first_row, "site_id", "unknown")))
+          _ -> "unknown"
+        end
+    end
 
     {:ok, Map.put(results, "node_id", node_id)}
   end
@@ -320,38 +333,41 @@ defmodule CorroPort.CorrosionAPI do
   def format_corrosion_timestamp(_), do: "Invalid timestamp"
 
   @doc """
-  Determines the Corrosion API port based on the Phoenix port.
-  For development, defaults to 8081 as per config-local.toml.
+  Gets the Corrosion API port for the current node from configuration.
   """
   def get_api_port() do
-    # For now, let's use the port from config-local.toml
-    # TODO: Make this configurable per node for multi-node setups
-    8081
+    config = Application.get_env(:corro_port, :node_config, [])
+    Keyword.get(config, :corrosion_api_port, 8081)
   end
 
   @doc """
   Try to detect the correct API port by testing common ports.
+  This is used as a fallback when the main API port isn't working.
   """
   def detect_api_port() do
-    phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
+    # First try the configured port
+    configured_port = get_api_port()
 
-    # Common port patterns to try
-    candidate_ports = [
-      8081,  # Default from config
-      8082,  # Second node
-      8083,  # Third node
-    ]
+    case execute_query("SELECT 1", configured_port) do
+      {:ok, _} ->
+        Logger.debug("Using configured Corrosion API port #{configured_port}")
+        configured_port
 
-    Logger.debug("Phoenix running on port #{phoenix_port}, trying Corrosion API ports: #{inspect(candidate_ports)}")
+      _ ->
+        Logger.debug("Configured port #{configured_port} not working, trying alternatives...")
 
-    Enum.find(candidate_ports, fn port ->
-      case execute_query("SELECT 1", port) do
-        {:ok, _} ->
-          Logger.info("Found working Corrosion API on port #{port}")
-          true
-        _ ->
-          false
-      end
-    end) || 8081  # Fallback to default
+        # Fallback to common ports
+        candidate_ports = [8081, 8082, 8083, 8084, 8085]
+
+        Enum.find(candidate_ports, fn port ->
+          case execute_query("SELECT 1", port) do
+            {:ok, _} ->
+              Logger.info("Found working Corrosion API on port #{port}")
+              true
+            _ ->
+              false
+          end
+        end) || configured_port  # Fallback to configured port
+    end
   end
 end
