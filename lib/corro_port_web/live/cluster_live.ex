@@ -4,17 +4,16 @@ defmodule CorroPortWeb.ClusterLive do
 
   alias CorroPort.CorrosionAPI
   alias CorroPort.MessageWatcher
+  alias CorroPortWeb.ClusterLive.Components
 
-  @refresh_interval 5000  # Reduced since we have real-time updates
+  @refresh_interval 5000
 
   def mount(_params, _session, socket) do
     if connected?(socket) do
-      # Subscribe to real-time message updates
       Phoenix.PubSub.subscribe(CorroPort.PubSub, MessageWatcher.subscription_topic())
       schedule_refresh()
     end
 
-    # Detect the correct API port
     detected_port = CorrosionAPI.detect_api_port()
     phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
 
@@ -35,22 +34,16 @@ defmodule CorroPortWeb.ClusterLive do
     {:ok, fetch_cluster_data(socket)}
   end
 
-  # Handle real-time message updates from Corrosion subscription
+  # Handle real-time message updates
   def handle_info({:new_message, values}, socket) do
     Logger.debug("Received new message via subscription: #{inspect(values)}")
-
-    # Refresh the node messages to show the latest data
     socket = fetch_node_messages(socket)
-
     {:noreply, socket}
   end
 
   def handle_info({:message_change, change_type, values}, socket) do
     Logger.debug("Received message #{change_type} via subscription: #{inspect(values)}")
-
-    # Refresh the node messages to show the latest data
     socket = fetch_node_messages(socket)
-
     {:noreply, socket}
   end
 
@@ -59,498 +52,151 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, fetch_cluster_data(socket)}
   end
 
+  # Event handlers
   def handle_event("refresh", _params, socket) do
-    {:noreply, fetch_cluster_data(socket)}
+    updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data(socket)
+    socket =
+      socket
+      |> assign(:cluster_info, updates.cluster_info)
+      |> assign(:local_info, updates.local_info)
+      |> assign(:node_messages, updates.node_messages)
+      |> assign(:error, updates.error)
+      |> assign(:subscription_status, updates.subscription_status)
+      |> assign(:last_updated, updates.last_updated)
+    {:noreply, socket}
   end
 
   def handle_event("send_message", _params, socket) do
-    node_id = CorroPort.NodeConfig.get_corrosion_node_id()
-
-    # Create a message with timestamp
-    message = "Hello from #{node_id} at #{DateTime.utc_now() |> DateTime.to_iso8601()}"
-
     socket = assign(socket, :sending_message, true)
 
-    case CorroPort.CorrosionAPI.insert_message(node_id, message, socket.assigns.api_port) do
-      {:ok, result} ->
-        Logger.info("Successfully sent message: #{inspect(result)}")
-        socket
-        |> assign(:sending_message, false)
-        |> put_flash(:info, "Message sent successfully!")
-        # Don't fetch_cluster_data here - the subscription will handle the update
-
+    case CorroPortWeb.ClusterLive.MessageHandler.send_message(socket.assigns.api_port) do
+      {:ok, message} ->
+        socket =
+          socket
+          |> assign(:sending_message, false)
+          |> put_flash(:info, message)
       {:error, error} ->
-        Logger.warning("Failed to send message: #{error}")
-        socket
-        |> assign(:sending_message, false)
-        |> put_flash(:error, "Failed to send message: #{error}")
+        socket =
+          socket
+          |> assign(:sending_message, false)
+          |> put_flash(:error, error)
     end
-    |> then(&{:noreply, &1})
+
+    {:noreply, socket}
   end
 
   def handle_event("check_subscription", _params, socket) do
-    # Get subscription status with safer call
-    status = get_subscription_status_safe()
+    status = CorroPortWeb.ClusterLive.DataFetcher.get_subscription_status_safe()
     socket = assign(socket, :subscription_status, status)
     {:noreply, socket}
   end
 
   def handle_event("debug_messages", _params, socket) do
-  api_port = socket.assigns.api_port
-
-  # Get raw debug data
-  case CorroPort.CorrosionAPI.get_all_node_messages_debug(api_port) do
-    {:ok, debug_data} ->
-      socket = put_flash(socket, :info, "Debug data logged - check the console!")
-
-      # Also try the regular query
-      case CorroPort.CorrosionAPI.get_latest_node_messages(api_port) do
-        {:ok, messages} ->
-          Logger.warning("=== COMPARISON ===")
-          Logger.warning("Debug query result: #{inspect(debug_data)}")
-          Logger.warning("Latest messages result: #{inspect(messages)}")
-          Logger.warning("=== END COMPARISON ===")
-          {:noreply, socket}
-        error ->
-          {:noreply, put_flash(socket, :error, "Latest messages query failed: #{inspect(error)}")}
-      end
-
-    {:error, error} ->
-      {:noreply, put_flash(socket, :error, "Debug query failed: #{inspect(error)}")}
+    case CorroPortWeb.ClusterLive.MessageHandler.debug_messages(socket.assigns.api_port) do
+      {:ok, message} ->
+        socket = put_flash(socket, :info, message)
+      {:error, error} ->
+        socket = put_flash(socket, :error, error)
+    end
+    {:noreply, socket}
   end
-end
 
-def handle_event("cleanup_messages", _params, socket) do
-  case CorroPort.CorrosionAPI.cleanup_bad_messages(socket.assigns.api_port) do
-    {:ok, :cleaned} ->
-      socket =
-        socket
-        |> put_flash(:info, "Cleaned up malformed messages")
-        |> fetch_node_messages()  # Refresh the display
-      {:noreply, socket}
-
-    {:error, error} ->
-      socket = put_flash(socket, :error, "Cleanup failed: #{inspect(error)}")
-      {:noreply, socket}
+  def handle_event("cleanup_messages", _params, socket) do
+    case CorroPortWeb.ClusterLive.MessageHandler.cleanup_messages(socket.assigns.api_port) do
+      {:ok, message} ->
+        # Refresh node messages after cleanup
+        new_messages = CorroPortWeb.ClusterLive.DataFetcher.fetch_node_messages_data(socket.assigns.api_port)
+        socket =
+          socket
+          |> put_flash(:info, message)
+          |> assign(:node_messages, new_messages)
+      {:error, error} ->
+        socket = put_flash(socket, :error, error)
+    end
+    {:noreply, socket}
   end
-end
 
-def handle_event("test_insert", _params, socket) do
-  case CorroPort.CorrosionAPI.test_insert(socket.assigns.api_port) do
-    {:ok, result} ->
-      socket =
-        socket
-        |> put_flash(:info, "Test message inserted successfully!")
-        |> fetch_node_messages()  # Refresh the display
-      {:noreply, socket}
-
-    {:error, error} ->
-      socket = put_flash(socket, :error, "Test insert failed: #{inspect(error)}")
-      {:noreply, socket}
+  def handle_event("test_insert", _params, socket) do
+    case CorroPortWeb.ClusterLive.MessageHandler.test_insert(socket.assigns.api_port) do
+      {:ok, message} ->
+        # Refresh node messages after test insert
+        new_messages = CorroPortWeb.ClusterLive.DataFetcher.fetch_node_messages_data(socket.assigns.api_port)
+        socket =
+          socket
+          |> put_flash(:info, message)
+          |> assign(:node_messages, new_messages)
+      {:error, error} ->
+        socket = put_flash(socket, :error, error)
+    end
+    {:noreply, socket}
   end
-end
 
+  # Private functions
   defp fetch_cluster_data(socket) do
-    api_port = socket.assigns.api_port
-
-    # Fetch cluster info
-    socket = case CorrosionAPI.get_cluster_info(api_port) do
-      {:ok, cluster_info} ->
-        assign(socket, :cluster_info, cluster_info)
-      {:error, error} ->
-        Logger.warning("Failed to fetch cluster info: #{error}")
-        assign(socket, :error, "Failed to connect to Corrosion API: #{error}")
-    end
-
-    # Fetch local info
-    socket = case CorrosionAPI.get_info(api_port) do
-      {:ok, local_info} ->
-        assign(socket, :local_info, local_info)
-      {:error, error} ->
-        Logger.warning("Failed to fetch local info: #{error}")
-        socket
-    end
-
-    # Fetch node messages
-    socket = fetch_node_messages(socket)
-
-    # Get subscription status safely
-    subscription_status = get_subscription_status_safe()
+    updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data(socket)
 
     socket
-    |> assign(:last_updated, DateTime.utc_now())
-    |> assign(:subscription_status, subscription_status)
+    |> assign(:cluster_info, updates.cluster_info)
+    |> assign(:local_info, updates.local_info)
+    |> assign(:node_messages, updates.node_messages)
+    |> assign(:error, updates.error)
+    |> assign(:subscription_status, updates.subscription_status)
+    |> assign(:last_updated, updates.last_updated)
   end
 
   defp fetch_node_messages(socket) do
-    api_port = socket.assigns.api_port
-
-    case CorrosionAPI.get_latest_node_messages(api_port) do
-      {:ok, messages} ->
-        assign(socket, :node_messages, messages)
-      {:error, error} ->
-        Logger.debug("Failed to fetch node messages (table might not exist yet): #{error}")
-        assign(socket, :node_messages, [])
-    end
+    new_messages = CorroPortWeb.ClusterLive.DataFetcher.fetch_node_messages_data(socket.assigns.api_port)
+    assign(socket, :node_messages, new_messages)
   end
 
   defp get_subscription_status_safe do
-    try do
-      MessageWatcher.get_status()
-    catch
-      :exit, {:timeout, _} ->
-        %{
-          subscription_active: false,
-          status: :timeout,
-          watch_id: nil,
-          reconnect_attempts: 0,
-          error: "Status check timed out"
-        }
-      :exit, {:noproc, _} ->
-        %{
-          subscription_active: false,
-          status: :not_started,
-          watch_id: nil,
-          reconnect_attempts: 0,
-          error: "MessageWatcher not running"
-        }
-      type, reason ->
-        Logger.warning("Error getting subscription status: #{type} - #{inspect(reason)}")
-        %{
-          subscription_active: false,
-          status: :error,
-          watch_id: nil,
-          reconnect_attempts: 0,
-          error: "Error: #{type} - #{inspect(reason)}"
-        }
-    end
+    CorroPortWeb.ClusterLive.DataFetcher.get_subscription_status_safe()
   end
 
   defp schedule_refresh do
     Process.send_after(self(), :refresh, @refresh_interval)
   end
 
-  defp format_timestamp(nil), do: "Unknown"
-  defp format_timestamp(timestamp) when is_binary(timestamp) do
-    case DateTime.from_iso8601(timestamp) do
-      {:ok, dt, _} -> Calendar.strftime(dt, "%H:%M:%S")
-      _ -> timestamp
-    end
-  end
-  defp format_timestamp(%DateTime{} = dt) do
-    Calendar.strftime(dt, "%H:%M:%S")
-  end
-  defp format_timestamp(_), do: "Unknown"
-
-  defp get_gossip_address do
-    config = Application.get_env(:corro_port, :node_config, %{
-      corrosion_gossip_port: 8787
-    })
-    gossip_port = config[:corrosion_gossip_port] || 8787
-    "127.0.0.1:#{gossip_port}"
-  end
-
-  defp get_local_node_id(local_info) when is_map(local_info) do
-    Map.get(local_info, "node_id", "unknown")
-  end
-  defp get_local_node_id(_), do: "unknown"
-
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
-      <.header>
-        Corrosion Cluster Status
-        <:subtitle>
-          Monitoring cluster health and node connectivity
-          <span :if={@subscription_status && @subscription_status.subscription_active} class="badge badge-success badge-sm ml-2">
-            Live Updates
-          </span>
-          <span :if={@subscription_status && !@subscription_status.subscription_active} class="badge badge-warning badge-sm ml-2">
-            <%= case @subscription_status.status do
-              :timeout -> "Timeout"
-              :not_started -> "Not Started"
-              :error -> "Error"
-              :connecting -> "Connecting"
-              :reconnecting -> "Reconnecting"
-              _ -> "Inactive"
-            end %>
-          </span>
-        </:subtitle>
-        <:actions>
-          <.button phx-click="refresh" variant="primary">
-            <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" />
-            Refresh
-          </.button>
-          <.button phx-click="check_subscription" class="btn btn-outline">
-            <.icon name="hero-signal" class="w-4 h-4 mr-2" />
-            Check Sub
-          </.button>
-          <.button
-            phx-click="send_message"
-            disabled={@sending_message}
-            class="btn btn-secondary"
-          >
-            <span :if={@sending_message} class="loading loading-spinner loading-sm mr-2"></span>
-            <.icon :if={!@sending_message} name="hero-paper-airplane" class="w-4 h-4 mr-2" />
-            Send Message
-          </.button>
-          <.button phx-click="debug_messages" class="btn btn-outline btn-sm">
-            Debug Messages
-          </.button>
-          <.button phx-click="cleanup_messages" class="btn btn-warning btn-sm">
-            <.icon name="hero-trash" class="w-4 h-4 mr-2" />
-            Cleanup Bad Data
-          </.button>
-          <.button phx-click="test_insert" class="btn btn-success btn-sm">
-            <.icon name="hero-beaker" class="w-4 h-4 mr-2" />
-            Test Insert
-          </.button>
-        </:actions>
-      </.header>
+      <Components.cluster_header
+        subscription_status={@subscription_status}
+        sending_message={@sending_message}
+      />
 
-      <%= if @error do %>
-      <div class="alert alert-info" >
-        <.icon name="hero-exclamation-circle" class="w-5 h-5" />
-        <span><%= @error %></span>
-      </div>
-      <% end %>
+      <Components.error_alerts
+        error={@error}
+        subscription_status={@subscription_status}
+      />
 
-      <!-- Subscription Status Alert -->
-      <%= if @subscription_status.status == :error do %>
-      <div class="alert alert-warning">
-        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-        <span>Subscription Issue: <%= inspect @subscription_status.status %></span>
-      </div>
-      <% end %>
+      <Components.status_cards
+        local_info={@local_info}
+        cluster_info={@cluster_info}
+        node_messages={@node_messages}
+        last_updated={@last_updated}
+        phoenix_port={@phoenix_port}
+        api_port={@api_port}
+        refresh_interval={@refresh_interval}
+        subscription_status={@subscription_status}
+        error={@error}
+      />
 
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <!-- Local Node Info -->
-        <div class="card bg-base-200">
-          <div class="card-body">
-            <h3 class="card-title text-sm">Local Node</h3>
-            <div :if={@local_info} class="space-y-2 text-sm">
-              <div><strong>Node ID:</strong> <%= Map.get(@local_info, "node_id", "Unknown") %></div>
-              <div><strong>Phoenix Port:</strong> <%= @phoenix_port %></div>
-              <div><strong>API Port:</strong> <%= @api_port %></div>
-              <div><strong>Gossip Address:</strong> <%= get_gossip_address() %></div>
-              <div><strong>User Tables:</strong>
-                <%= case Map.get(@local_info, "tables") do
-                  tables when is_list(tables) -> length(tables)
-                  _ -> 0
-                end %>
-              </div>
-              <div><strong>Status:</strong>
-                <span class="badge badge-success badge-sm">Active</span>
-              </div>
-            </div>
-            <div :if={!@local_info && !@error} class="loading loading-spinner loading-sm"></div>
-          </div>
-        </div>
+      <Components.node_messages_table
+        node_messages={@node_messages}
+        subscription_status={@subscription_status}
+      />
 
-        <!-- Cluster Summary -->
-        <div class="card bg-base-200">
-          <div class="card-body">
-            <h3 class="card-title text-sm">Cluster Summary</h3>
-            <div :if={@cluster_info} class="space-y-2 text-sm">
-              <div><strong>Total Nodes:</strong> <%= Map.get(@cluster_info, "member_count", 0) + 1 %></div>
-              <div><strong>Remote Members:</strong> <%= Map.get(@cluster_info, "member_count", 0) %></div>
-              <div><strong>Tracked Peers:</strong> <%= Map.get(@cluster_info, "peer_count", 0) %></div>
-              <div><strong>Messages Sent:</strong> <%= length(@node_messages) %> nodes</div>
-              <div><strong>Last Updated:</strong> <%= format_timestamp(@last_updated) %></div>
-            </div>
-            <div :if={!@cluster_info && !@error} class="loading loading-spinner loading-sm"></div>
-          </div>
-        </div>
+      <Components.cluster_members_table
+        cluster_info={@cluster_info}
+      />
 
-        <!-- Subscription Status -->
-        <div class="card bg-base-200">
-          <div class="card-body">
-            <h3 class="card-title text-sm">Real-time Updates</h3>
-            <div class="space-y-2 text-sm">
-              <div><strong>Auto Refresh:</strong> Every <%= div(@refresh_interval, 1000) %>s</div>
-              <div><strong>Subscription:</strong>
-                <span :if={@subscription_status && @subscription_status.subscription_active} class="badge badge-success badge-sm">
-                  Active
-                </span>
-                <span :if={@subscription_status && !@subscription_status.subscription_active} class="badge badge-warning badge-sm">
-                  <%= case @subscription_status.status do
-                    :timeout -> "Timeout"
-                    :not_started -> "Not Started"
-                    :error -> "Error"
-                    :connecting -> "Connecting"
-                    :reconnecting -> "Reconnecting"
-                    :failed -> "Failed"
-                    _ -> "Inactive"
-                  end %>
-                </span>
-                <span :if={!@subscription_status} class="badge badge-neutral badge-sm">
-                  Unknown
-                </span>
-              </div>
-              <div :if={@subscription_status && @subscription_status.watch_id}>
-                <strong>Watch ID:</strong>
-                <span class="font-mono text-xs"><%= String.slice(@subscription_status.watch_id, 0, 8) %>...</span>
-              </div>
-              <div :if={@subscription_status && @subscription_status.reconnect_attempts > 0}>
-                <strong>Reconnects:</strong> <%= @subscription_status.reconnect_attempts %>
-              </div>
-              <div><strong>Last Check:</strong>
-                <span :if={@last_updated}>
-                  <%= format_timestamp(@last_updated) %>
-                </span>
-                <span :if={!@last_updated}>Never</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Node Messages -->
-      <div :if={@node_messages != []} class="card bg-base-100">
-        <div class="card-body">
-          <h3 class="card-title">
-            Latest Messages from Each Node
-            <span :if={@subscription_status && @subscription_status.subscription_active} class="badge badge-success badge-sm">
-              Live
-            </span>
-          </h3>
-          <div class="overflow-x-auto">
-            <table class="table table-zebra">
-              <thead>
-                <tr>
-                  <th>Node ID</th>
-                  <th>Message</th>
-                  <th>Timestamp</th>
-                  <th>Sequence</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr :for={message <- @node_messages}>
-                  <td class="font-mono text-sm">
-                    <%= Map.get(message, "node_id", "Unknown") %>
-                  </td>
-                  <td class="max-w-md truncate">
-                    <%= Map.get(message, "message", "") %>
-                  </td>
-                  <td class="text-xs">
-                    <%= format_timestamp(Map.get(message, "timestamp")) %>
-                  </td>
-                  <td class="font-mono text-xs">
-                    <%= Map.get(message, "sequence", "") %>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- Cluster Members Table -->
-      <div :if={@cluster_info} class="card bg-base-100">
-        <div class="card-body">
-          <h3 class="card-title">Cluster Members</h3>
-
-          <div :if={Map.get(@cluster_info, "members", []) != []} class="overflow-x-auto">
-            <table class="table table-zebra">
-              <thead>
-                <tr>
-                  <th>Node ID</th>
-                  <th>Address</th>
-                  <th>State</th>
-                  <th>Incarnation</th>
-                  <th>Timestamp</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr :for={member <- Map.get(@cluster_info, "members", [])}>
-                  <td :if={Map.has_key?(member, "parse_error")} colspan="5" class="text-error">
-                    Parse Error: <%= Map.get(member, "parse_error") %>
-                    <details class="mt-1">
-                      <summary class="text-xs cursor-pointer">Raw data</summary>
-                      <pre class="text-xs mt-1"><%= inspect(member, pretty: true) %></pre>
-                    </details>
-                  </td>
-                  <td :if={!Map.has_key?(member, "parse_error")} class="font-mono text-xs">
-                    <%= case Map.get(member, "member_id") do
-                      nil -> "Unknown"
-                      id -> String.slice(id, 0, 8) <> "..."
-                    end %>
-                  </td>
-                  <td :if={!Map.has_key?(member, "parse_error")} class="font-mono text-sm">
-                    <%= Map.get(member, "member_addr", "Unknown") %>
-                  </td>
-                  <td :if={!Map.has_key?(member, "parse_error")}>
-                    <span class={[
-                      "badge badge-sm",
-                      case Map.get(member, "member_state") do
-                        "Alive" -> "badge-success"
-                        "Suspect" -> "badge-warning"
-                        "Down" -> "badge-error"
-                        _ -> "badge-neutral"
-                      end
-                    ]}>
-                      <%= Map.get(member, "member_state", "Unknown") %>
-                    </span>
-                  </td>
-                  <td :if={!Map.has_key?(member, "parse_error")}><%= Map.get(member, "member_incarnation", "?") %></td>
-                  <td :if={!Map.has_key?(member, "parse_error")} class="text-xs">
-                    <%= CorroPort.CorrosionAPI.format_corrosion_timestamp(Map.get(member, "member_ts")) %>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div :if={Map.get(@cluster_info, "tracked_peers", []) != []} class="mt-6">
-            <h4 class="font-semibold mb-2">Tracked Peers</h4>
-            <div class="overflow-x-auto">
-              <table class="table table-zebra">
-                <thead>
-                  <tr>
-                    <th>Peer Info</th>
-                    <th>Details</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr :for={peer <- Map.get(@cluster_info, "tracked_peers", [])}>
-                    <td class="font-mono text-sm">
-                      <%= inspect(peer) |> String.slice(0, 50) %>...
-                    </td>
-                    <td><%= inspect(peer) %></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div :if={Map.get(@cluster_info, "members", []) == [] && Map.get(@cluster_info, "tracked_peers", []) == []}>
-            <p class="text-base-content/70">No cluster members or peers found. This might be a single-node setup or the cluster is still forming.</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Raw Data (for debugging) -->
-      <details class="collapse collapse-arrow bg-base-200" :if={@cluster_info || @local_info}>
-        <summary class="collapse-title text-sm font-medium">Raw API Response (Debug)</summary>
-        <div class="collapse-content">
-          <div :if={@cluster_info} class="mb-4">
-            <h4 class="font-semibold mb-2">Cluster Info:</h4>
-            <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@cluster_info, pretty: true) %></pre>
-          </div>
-          <div :if={@local_info} class="mb-4">
-            <h4 class="font-semibold mb-2">Local Info:</h4>
-            <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@local_info, pretty: true) %></pre>
-          </div>
-          <div :if={@node_messages != []} class="mb-4">
-            <h4 class="font-semibold mb-2">Node Messages:</h4>
-            <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@node_messages, pretty: true) %></pre>
-          </div>
-          <div :if={@subscription_status} class="mb-4">
-            <h4 class="font-semibold mb-2">Subscription Status:</h4>
-            <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@subscription_status, pretty: true) %></pre>
-          </div>
-        </div>
-      </details>
+      <Components.debug_section
+        cluster_info={@cluster_info}
+        local_info={@local_info}
+        node_messages={@node_messages}
+        subscription_status={@subscription_status}
+      />
     </div>
     """
   end
