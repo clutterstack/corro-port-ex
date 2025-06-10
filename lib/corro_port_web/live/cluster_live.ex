@@ -90,51 +90,6 @@ defmodule CorroPortWeb.ClusterLive do
   defp connection_status(false), do: {"Disconnected", "badge-error"}
   defp connection_status(_), do: {"Unknown", "badge-warning"}
 
-  defp parse_member_state(member) do
-    case Map.get(member, "foca_state") do
-      nil -> "Unknown"
-      foca_state_json ->
-        case Jason.decode(foca_state_json) do
-          {:ok, %{"state" => state}} -> state
-          _ -> "Unknown"
-        end
-    end
-  end
-
-  defp parse_member_node_id(member) do
-    case Map.get(member, "foca_state") do
-      nil -> "Unknown"
-      foca_state_json ->
-        case Jason.decode(foca_state_json) do
-          {:ok, %{"id" => %{"id" => node_id}}} ->
-            String.slice(node_id, 0, 8) <> "..."
-          _ -> "Unknown"
-        end
-    end
-  end
-
-  defp member_state_badge_class(state) do
-    case state do
-      "Alive" -> "badge badge-success badge-sm"
-      "Suspect" -> "badge badge-warning badge-sm"
-      "Down" -> "badge badge-error badge-sm"
-      _ -> "badge badge-neutral badge-sm"
-    end
-  end
-
-  defp count_members_by_state(cluster_info, target_states) when is_list(target_states) do
-    members = Map.get(cluster_info, "members", [])
-
-    Enum.count(members, fn member ->
-      state = parse_member_state(member)
-      state in target_states
-    end)
-  end
-
-  defp count_members_by_state(cluster_info, target_state) do
-    count_members_by_state(cluster_info, [target_state])
-  end
-
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
@@ -184,17 +139,7 @@ defmodule CorroPortWeb.ClusterLive do
           <div class="card-body">
             <h3 class="card-title text-sm">Cluster Summary</h3>
             <div :if={@cluster_info} class="space-y-2 text-sm">
-              <div><strong>Total Members:</strong> <%= Map.get(@cluster_info, "member_count", 0) %></div>
-              <div><strong>Active Members:</strong>
-                <span class="badge badge-success badge-sm">
-                  <%= count_members_by_state(@cluster_info, "Alive") %>
-                </span>
-              </div>
-              <div><strong>Suspect/Down:</strong>
-                <span class="badge badge-warning badge-sm">
-                  <%= count_members_by_state(@cluster_info, ["Suspect", "Down"]) %>
-                </span>
-              </div>
+              <div><strong>Members:</strong> <%= Map.get(@cluster_info, "member_count", 0) %></div>
               <div><strong>Tracked Peers:</strong> <%= Map.get(@cluster_info, "peer_count", 0) %></div>
               <div><strong>Last Updated:</strong> <%= format_timestamp(@last_updated) %></div>
             </div>
@@ -228,28 +173,47 @@ defmodule CorroPortWeb.ClusterLive do
             <table class="table table-zebra">
               <thead>
                 <tr>
+                  <th>Node ID</th>
                   <th>Address</th>
                   <th>State</th>
-                  <th>Node ID</th>
-                  <th>Last Updated</th>
-                  <th>RTT</th>
+                  <th>Incarnation</th>
+                  <th>Timestamp</th>
                 </tr>
               </thead>
               <tbody>
                 <tr :for={member <- Map.get(@cluster_info, "members", [])}>
-                  <td class="font-mono text-sm"><%= Map.get(member, "address", "Unknown") %></td>
-                  <td>
-                    <span class={member_state_badge_class(parse_member_state(member))}>
-                      <%= parse_member_state(member) %>
+                  <td :if={Map.has_key?(member, "parse_error")} colspan="5" class="text-error">
+                    Parse Error: <%= Map.get(member, "parse_error") %>
+                    <details class="mt-1">
+                      <summary class="text-xs cursor-pointer">Raw data</summary>
+                      <pre class="text-xs mt-1"><%= inspect(member, pretty: true) %></pre>
+                    </details>
+                  </td>
+                  <td :if={!Map.has_key?(member, "parse_error")} class="font-mono text-xs">
+                    <%= case Map.get(member, "member_id") do
+                      nil -> "Unknown"
+                      id -> String.slice(id, 0, 8) <> "..."
+                    end %>
+                  </td>
+                  <td :if={!Map.has_key?(member, "parse_error")} class="font-mono text-sm">
+                    <%= Map.get(member, "member_addr", "Unknown") %>
+                  </td>
+                  <td :if={!Map.has_key?(member, "parse_error")}>
+                    <span class={[
+                      "badge badge-sm",
+                      case Map.get(member, "member_state") do
+                        "Alive" -> "badge-success"
+                        "Suspect" -> "badge-warning"
+                        "Down" -> "badge-error"
+                        _ -> "badge-neutral"
+                      end
+                    ]}>
+                      <%= Map.get(member, "member_state", "Unknown") %>
                     </span>
                   </td>
-                  <td class="font-mono text-xs"><%= parse_member_node_id(member) %></td>
-                  <td class="text-sm"><%= format_timestamp(Map.get(member, "updated_at")) %></td>
-                  <td class="text-sm">
-                    <%= case Map.get(member, "rtt_min") do
-                      nil -> "N/A"
-                      rtt -> "#{rtt}ms"
-                    end %>
+                  <td :if={!Map.has_key?(member, "parse_error")}><%= Map.get(member, "member_incarnation", "?") %></td>
+                  <td :if={!Map.has_key?(member, "parse_error")} class="text-xs">
+                    <%= CorroPort.CorrosionAPI.format_corrosion_timestamp(Map.get(member, "member_ts")) %>
                   </td>
                 </tr>
               </tbody>

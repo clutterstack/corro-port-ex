@@ -15,7 +15,9 @@ defmodule CorroPort.CorrosionAPI do
 
     case execute_query(query, port) do
       {:ok, response} ->
-        {:ok, parse_query_response(response)}
+        members = parse_query_response(response)
+        parsed_members = Enum.map(members, &parse_member_foca_state/1)
+        {:ok, parsed_members}
       error ->
         error
     end
@@ -194,6 +196,52 @@ defmodule CorroPort.CorrosionAPI do
   end
 
   def parse_query_response(_), do: []
+
+  @doc """
+  Parses a member row from __corro_members table, extracting human-readable
+  information from the foca_state JSON column.
+  """
+  def parse_member_foca_state(member_row) do
+    case Map.get(member_row, "foca_state") do
+      foca_state when is_binary(foca_state) ->
+        case Jason.decode(foca_state) do
+          {:ok, parsed} ->
+            member_row
+            |> Map.put("parsed_foca_state", parsed)
+            |> Map.put("member_id", get_in(parsed, ["id", "id"]))
+            |> Map.put("member_addr", get_in(parsed, ["id", "addr"]))
+            |> Map.put("member_ts", get_in(parsed, ["id", "ts"]))
+            |> Map.put("member_cluster_id", get_in(parsed, ["id", "cluster_id"]))
+            |> Map.put("member_incarnation", Map.get(parsed, "incarnation"))
+            |> Map.put("member_state", Map.get(parsed, "state"))
+
+          {:error, _} ->
+            member_row
+            |> Map.put("parse_error", "Invalid JSON in foca_state")
+        end
+
+      _ ->
+        member_row
+        |> Map.put("parse_error", "Missing or invalid foca_state")
+    end
+  end
+
+  @doc """
+  Formats a timestamp from Corrosion (nanoseconds since epoch) to a readable format.
+  """
+  def format_corrosion_timestamp(nil), do: "Unknown"
+  def format_corrosion_timestamp(ts) when is_integer(ts) do
+    # Convert nanoseconds to seconds
+    seconds = div(ts, 1_000_000_000)
+
+    case DateTime.from_unix(seconds) do
+      {:ok, datetime} ->
+        Calendar.strftime(datetime, "%Y-%m-%d %H:%M:%S UTC")
+      {:error, _} ->
+        "Invalid timestamp"
+    end
+  end
+  def format_corrosion_timestamp(_), do: "Invalid timestamp"
 
   @doc """
   Determines the Corrosion API port based on the Phoenix port.
