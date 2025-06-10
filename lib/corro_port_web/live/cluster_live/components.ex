@@ -33,9 +33,6 @@ defmodule CorroPortWeb.ClusterLive.Components do
           <.icon :if={!@sending_message} name="hero-paper-airplane" class="w-4 h-4 mr-2" />
           Send Message
         </.button>
-        <.button phx-click="debug_messages" class="btn btn-outline btn-sm">
-          Debug Messages
-        </.button>
         <.button phx-click="cleanup_messages" class="btn btn-warning btn-sm">
           <.icon name="hero-trash" class="w-4 h-4 mr-2" />
           Cleanup Bad Data
@@ -281,7 +278,7 @@ defmodule CorroPortWeb.ClusterLive.Components do
       </td>
       <td><%= Map.get(@member, "member_incarnation", "?") %></td>
       <td class="text-xs">
-        <%= CorroPort.CorrosionAPI.format_corrosion_timestamp(Map.get(@member, "member_ts")) %>
+        <%= CorroPort.ClusterAPI.format_corrosion_timestamp(Map.get(@member, "member_ts")) %>
       </td>
     <% end %>
     """

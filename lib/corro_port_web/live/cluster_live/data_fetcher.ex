@@ -1,14 +1,14 @@
 defmodule CorroPortWeb.ClusterLive.DataFetcher do
   require Logger
-  alias CorroPort.{CorrosionAPI, MessageWatcher}
+  alias CorroPort.{ClusterAPI, MessagesAPI, MessageWatcher}
 
   def fetch_all_data(socket) do
     api_port = socket.assigns.api_port
 
     # Fetch all the data
-    cluster_result = CorrosionAPI.get_cluster_info(api_port)
-    local_result = CorrosionAPI.get_info(api_port)
-    messages_result = CorrosionAPI.get_latest_node_messages(api_port)
+    cluster_result = ClusterAPI.get_cluster_info(api_port)
+    local_result = ClusterAPI.get_info(api_port)
+    messages_result = MessagesAPI.get_latest_node_messages(api_port)
     subscription_status = get_subscription_status_safe()
 
     # Determine error state
@@ -44,7 +44,7 @@ defmodule CorroPortWeb.ClusterLive.DataFetcher do
   end
 
   def fetch_node_messages_data(api_port) do
-    case CorrosionAPI.get_latest_node_messages(api_port) do
+    case MessagesAPI.get_latest_node_messages(api_port) do
       {:ok, messages} -> messages
       {:error, error} ->
         Logger.debug("Failed to fetch node messages (table might not exist yet): #{error}")

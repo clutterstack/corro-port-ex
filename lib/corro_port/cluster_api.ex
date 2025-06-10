@@ -1,9 +1,9 @@
-defmodule CorroPort.CorrosionAPI do
+defmodule CorroPort.ClusterAPI do
   @moduledoc """
-  High-level API for interacting with Corrosion database operations.
+  API for querying Corrosion cluster state and system information.
 
-  This module provides application-specific functions for common Corrosion
-  operations like cluster management, node messaging, and system introspection.
+  This module provides functions for inspecting cluster membership,
+  tracked peers, system tables, and node information.
 
   Uses `CorroPort.CorrosionClient` for the underlying HTTP transport.
   """
@@ -97,81 +97,6 @@ defmodule CorroPort.CorrosionAPI do
     end
   end
 
-  ## Node Messaging
-
-  @doc """
-  Gets all messages from the node_messages table, ordered by timestamp.
-  """
-  def get_node_messages(port \\ nil) do
-    query = "SELECT * FROM node_messages ORDER BY timestamp DESC"
-
-    case CorrosionClient.execute_query(query, port) do
-      {:ok, response} ->
-        {:ok, CorrosionClient.parse_query_response(response)}
-      error ->
-        error
-    end
-  end
-
-  @doc """
-  Gets the latest message for each node from the node_messages table.
-
-  This function handles potential column alignment issues that can occur
-  with the Corrosion API response format.
-  """
-  def get_latest_node_messages(port \\ nil) do
-    query = """
-    SELECT message, node_id, timestamp, sequence
-    FROM node_messages
-    WHERE (node_id, timestamp) IN (
-      SELECT node_id, MAX(timestamp)
-      FROM node_messages
-      GROUP BY node_id
-    )
-    ORDER BY timestamp DESC
-    """
-
-    case CorrosionClient.execute_query(query, port) do
-      {:ok, response} ->
-        parsed = CorrosionClient.parse_query_response(response)
-        mapped = Enum.map(parsed, &normalize_message_row/1)
-        {:ok, mapped}
-      error ->
-        error
-    end
-  end
-
-  @doc """
-  Inserts a new message into the node_messages table.
-
-  ## Parameters
-  - `node_id`: Identifier for the node sending the message
-  - `message`: Message content
-  - `port`: API port (optional)
-
-  ## Returns
-  - `{:ok, message_data}` on success with inserted message details
-  - `{:error, reason}` on failure
-  """
-  def insert_message(node_id, message, port \\ nil) do
-    sequence = System.system_time(:millisecond)
-    timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
-
-    sql = """
-    INSERT INTO node_messages (pk, node_id, message, sequence, timestamp)
-    VALUES ('#{node_id}_#{sequence}', '#{node_id}', '#{message}', #{sequence}, '#{timestamp}')
-    """
-
-    Logger.debug("Inserting: node_id=#{node_id}, message=#{message}")
-
-    case CorrosionClient.execute_transaction([sql], port) do
-      {:ok, _response} ->
-        {:ok, %{node_id: node_id, message: message, sequence: sequence, timestamp: timestamp}}
-      error ->
-        error
-    end
-  end
-
   ## System Introspection
 
   @doc """
@@ -202,63 +127,6 @@ defmodule CorroPort.CorrosionAPI do
     {:ok, Map.put(results, "node_id", node_id)}
   end
 
-  ## Utility and Maintenance
-
-  @doc """
-  Debug function to inspect raw node_messages data.
-
-  Useful for troubleshooting data format issues.
-  """
-  def get_all_node_messages_debug(port \\ nil) do
-    query = "SELECT * FROM node_messages ORDER BY timestamp DESC LIMIT 5"
-
-    case CorrosionClient.execute_query(query, port) do
-      {:ok, response} ->
-        Logger.debug("=== RAW NODE_MESSAGES DEBUG ===")
-        Logger.debug("Raw response: #{inspect(response)}")
-        parsed = CorrosionClient.parse_query_response(response)
-        Logger.debug("Parsed response: #{inspect(parsed)}")
-        Logger.debug("=== END DEBUG ===")
-        {:ok, parsed}
-      error ->
-        error
-    end
-  end
-
-  @doc """
-  Cleanup function to remove malformed messages from the node_messages table.
-
-  Specifically targets messages where the message field contains port numbers,
-  which indicates a data corruption issue.
-  """
-  def cleanup_bad_messages(port \\ nil) do
-    cleanup_sql = """
-    DELETE FROM node_messages
-    WHERE message IN ('8081', '8082', '8083', '8084', '8085')
-    """
-
-    case CorrosionClient.execute_transaction([cleanup_sql], port) do
-      {:ok, _} ->
-        Logger.info("Cleaned up malformed messages")
-        {:ok, :cleaned}
-      error ->
-        Logger.warning("Failed to cleanup messages: #{inspect(error)}")
-        error
-    end
-  end
-
-  @doc """
-  Test function to insert a known good message.
-
-  Useful for verifying that the message insertion mechanism is working correctly.
-  """
-  def test_insert(port \\ nil) do
-    node_id = CorroPort.NodeConfig.get_corrosion_node_id()
-    test_message = "Test message from #{node_id} at #{DateTime.utc_now() |> DateTime.to_iso8601()}"
-
-    insert_message(node_id, test_message, port)
-  end
-
   ## Private Helper Functions
 
   defp maybe_add_members(cluster_data, table_names, port) do
@@ -284,36 +152,6 @@ defmodule CorroPort.CorrosionAPI do
       end
     else
       cluster_data
-    end
-  end
-
-  defp normalize_message_row(row) do
-    case row do
-      # Standard case - columns are correctly aligned
-      %{"message" => msg, "node_id" => nid, "timestamp" => ts, "sequence" => seq} ->
-        %{"node_id" => nid, "message" => msg, "timestamp" => ts, "sequence" => seq}
-
-      # Handle misaligned columns where message content is in wrong field
-      %{"node_id" => actual_message, "message" => actual_node_port, "timestamp" => ts, "sequence" => seq}
-      when is_binary(actual_message) ->
-        if String.contains?(actual_message, "Hello from") do
-          node_id = case Regex.run(~r/Hello from (node\d+)/, actual_message) do
-            [_, node_id] -> node_id
-            _ -> "unknown"
-          end
-
-          %{
-            "node_id" => node_id,
-            "message" => actual_message,
-            "timestamp" => ts,
-            "sequence" => seq
-          }
-        else
-          row
-        end
-
-      # Fallback - return as-is
-      other -> other
     end
   end
 
@@ -366,7 +204,7 @@ defmodule CorroPort.CorrosionAPI do
   Formats a Corrosion timestamp (nanoseconds since epoch) to readable format.
 
   ## Examples
-      iex> CorroPort.CorrosionAPI.format_corrosion_timestamp(1640995200000000000)
+      iex> CorroPort.ClusterAPI.format_corrosion_timestamp(1640995200000000000)
       "2022-01-01 00:00:00 UTC"
   """
   def format_corrosion_timestamp(nil), do: "Unknown"

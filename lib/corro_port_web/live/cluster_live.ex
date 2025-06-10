@@ -2,7 +2,7 @@ defmodule CorroPortWeb.ClusterLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPort.{CorrosionAPI, CorrosionClient}
+  alias CorroPort.{ClusterAPI, MessagesAPI, CorrosionClient}
   alias CorroPort.MessageWatcher
   alias CorroPortWeb.ClusterLive.Components
 
@@ -88,16 +88,6 @@ defmodule CorroPortWeb.ClusterLive do
   def handle_event("check_subscription", _params, socket) do
     status = CorroPortWeb.ClusterLive.DataFetcher.get_subscription_status_safe()
     socket = assign(socket, :subscription_status, status)
-    {:noreply, socket}
-  end
-
-  def handle_event("debug_messages", _params, socket) do
-    case CorroPortWeb.ClusterLive.MessageHandler.debug_messages(socket.assigns.api_port) do
-      {:ok, message} ->
-        socket = put_flash(socket, :info, message)
-      {:error, error} ->
-        socket = put_flash(socket, :error, error)
-    end
     {:noreply, socket}
   end
 
