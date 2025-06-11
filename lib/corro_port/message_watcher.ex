@@ -214,7 +214,10 @@ defp start_message_subscription do
 
   Logger.warning("MessageWatcher: 🚀 Starting subscription to: #{url} with query: #{query}")
 
-  # Corrected streaming function that matches Req's expected interface
+  # Track the watch_id from headers
+  watch_id_ref = :atomics.new(1, [])
+
+  # Streaming function that processes the HTTP stream
   stream_fun = fn
     {:data, data}, acc ->
       Logger.warning("MessageWatcher: 📨 Stream data received: #{inspect(data)}")
@@ -229,16 +232,35 @@ defp start_message_subscription do
     {:headers, headers}, acc ->
       Logger.warning("MessageWatcher: 📋 Stream headers: #{inspect(headers)}")
       send(parent_pid, {:stream_headers, headers})
+
+      # Extract watch_id from headers and store it
+      case List.keyfind(headers, "corro-query-id", 0) do
+        {"corro-query-id", watch_id} ->
+          :atomics.put(watch_id_ref, 1, :erlang.binary_to_term(:erlang.term_to_binary(watch_id)))
+          Logger.warning("MessageWatcher: 🆔 Stored watch ID: #{watch_id}")
+        nil ->
+          Logger.warning("MessageWatcher: ⚠️ No corro-query-id in headers")
+      end
+
       {:cont, acc}
 
-    # Handle other possible streaming events
+    {:error, error}, acc ->
+      Logger.warning("MessageWatcher: ❌ Stream error: #{inspect(error)}")
+      send(parent_pid, {:stream_error, error})
+      {:halt, acc}
+
+    {:done, reason}, acc ->
+      Logger.warning("MessageWatcher: ✅ Stream done: #{inspect(reason)}")
+      send(parent_pid, {:stream_done, reason})
+      {:halt, acc}
+
     other, acc ->
       Logger.warning("MessageWatcher: ❓ Unhandled stream event: #{inspect(other)}")
       {:cont, acc}
   end
 
   try do
-    # Start the subscription request with corrected parameters
+    # Start the subscription request with better connection settings
     case Req.post(url,
            json: query,
            headers: [
@@ -256,13 +278,28 @@ defp start_message_subscription do
            retry: false  # Don't retry automatically, we handle reconnection
          ) do
       {:ok, %Req.Response{status: 200, headers: headers}} ->
+        # Extract watch_id from response headers
         case List.keyfind(headers, "corro-query-id", 0) do
           {"corro-query-id", watch_id} ->
             Logger.warning("MessageWatcher: ✅ Successfully started subscription with watch ID: #{watch_id}")
             {:ok, watch_id}
           nil ->
-            Logger.error("MessageWatcher: ❌ No corro-query-id header in subscription response")
-            {:error, :no_watch_id}
+            # Try to get it from the atomic reference (in case it came through the stream)
+            try do
+              stored_id = :atomics.get(watch_id_ref, 1)
+              if stored_id != 0 do
+                watch_id = :erlang.binary_to_term(:erlang.term_to_binary(stored_id))
+                Logger.warning("MessageWatcher: ✅ Got watch ID from stream: #{watch_id}")
+                {:ok, watch_id}
+              else
+                Logger.error("MessageWatcher: ❌ No corro-query-id header in subscription response")
+                {:error, :no_watch_id}
+              end
+            rescue
+              _ ->
+                Logger.error("MessageWatcher: ❌ No corro-query-id header in subscription response")
+                {:error, :no_watch_id}
+            end
         end
 
       {:ok, %Req.Response{status: status, body: body}} ->

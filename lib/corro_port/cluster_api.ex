@@ -42,13 +42,17 @@ defmodule CorroPort.ClusterAPI do
   Queries the essential Corrosion system tables to build cluster state:
   - `__corro_members`: Cluster members and their status
   - `crsql_tracked_peers`: Tracked peers for replication
+  - Local node status check
 
   ## Returns
   Map containing:
   - `members`: List of cluster members (if available)
   - `tracked_peers`: List of tracked peers (if available)
-  - `member_count`: Number of cluster members
+  - `member_count`: Number of remote cluster members
+  - `active_member_count`: Number of active (non-Down) remote members
   - `peer_count`: Number of tracked peers
+  - `local_node_active`: Boolean indicating if local node is responding
+  - `total_active_nodes`: Total active nodes including local
   """
   def get_cluster_info(port \\ nil) do
     # Start with basic structure
@@ -56,22 +60,94 @@ defmodule CorroPort.ClusterAPI do
       "members" => [],
       "tracked_peers" => [],
       "member_count" => 0,
-      "peer_count" => 0
+      "active_member_count" => 0,
+      "peer_count" => 0,
+      "local_node_active" => false,
+      "total_active_nodes" => 0
     }
 
-    # Get members and peers directly
+    # Check if local node is active (can respond to API calls)
+    local_active = check_local_node_active(port)
+
+    # Get members and peers
     cluster_data
-    |> fetch_members(port)
+    |> Map.put("local_node_active", local_active)
+    |> fetch_members_with_activity(port)
     |> fetch_tracked_peers(port)
+    |> calculate_total_active_nodes()
     |> then(&{:ok, &1})
   end
 
-  defp fetch_members(cluster_data, port) do
+  @doc """
+  Checks if the local Corrosion node considers itself active.
+
+  This does a simple connectivity test to the local API as a proxy
+  for the node being up and responsive.
+  """
+  def check_local_node_active(port \\ nil) do
+    case CorrosionClient.execute_query("SELECT 1 as alive", port) do
+      {:ok, _} ->
+        Logger.debug("Local Corrosion node is responding")
+        true
+      {:error, reason} ->
+        Logger.debug("Local Corrosion node not responding: #{inspect(reason)}")
+        false
+    end
+  end
+
+  @doc """
+  Gets the local node's membership status by finding it in __corro_members.
+
+  Attempts to identify the local node by matching gossip addresses.
+  """
+  def get_local_member_status(port \\ nil) do
     case get_cluster_members(port) do
       {:ok, members} ->
-        Map.merge(cluster_data, %{"members" => members, "member_count" => length(members)})
-      {:error, _} ->
-        Logger.debug("Could not fetch cluster members (table may not exist)")
+        local_gossip_port = get_local_gossip_port()
+
+        # Find member whose gossip address matches our local gossip port
+        local_member = Enum.find(members, fn member ->
+          case Map.get(member, "member_addr") do
+            addr when is_binary(addr) ->
+              case String.split(addr, ":") do
+                [_ip, port_str] ->
+                  case Integer.parse(port_str) do
+                    {port, _} -> port == local_gossip_port
+                    _ -> false
+                  end
+                _ -> false
+              end
+            _ -> false
+          end
+        end)
+
+        case local_member do
+          nil -> {:error, :not_found_in_members}
+          member -> {:ok, member}
+        end
+
+      error -> error
+    end
+  end
+
+  defp fetch_members_with_activity(cluster_data, port) do
+    case get_cluster_members(port) do
+      {:ok, members} ->
+        # Count active members (not "Down" state)
+        active_members = Enum.filter(members, fn member ->
+          member_state = Map.get(member, "member_state", "Unknown")
+          member_state != "Down"
+        end)
+
+        Logger.debug("Found #{length(members)} total members, #{length(active_members)} active")
+
+        Map.merge(cluster_data, %{
+          "members" => members,
+          "member_count" => length(members),
+          "active_member_count" => length(active_members)
+        })
+      {:error, reason} ->
+        Logger.debug("Could not fetch cluster members: #{inspect(reason)}")
         cluster_data
     end
   end
@@ -84,6 +160,22 @@ defmodule CorroPort.ClusterAPI do
         Logger.debug("Could not fetch tracked peers (table may not exist)")
         cluster_data
     end
+  end
+
+  defp calculate_total_active_nodes(cluster_data) do
+    local_active = Map.get(cluster_data, "local_node_active", false)
+    active_members = Map.get(cluster_data, "active_member_count", 0)
+
+    total_active = if local_active, do: active_members + 1, else: active_members
+
+    Map.put(cluster_data, "total_active_nodes", total_active)
+  end
+
+  defp get_local_gossip_port do
+    config = Application.get_env(:corro_port, :node_config, %{
+      corrosion_gossip_port: 8787
+    })
+    config[:corrosion_gossip_port] || 8787
   end
 
   @doc """
@@ -102,29 +194,22 @@ defmodule CorroPort.ClusterAPI do
 
   ## System Introspection
 
-@doc """
+  @doc """
   Gets local node information using the configured Elixir node ID.
 
   Returns the node identification from the application configuration
   instead of querying Corrosion database tables.
   """
-  def get_info(_port \\ nil) do
+  def get_info(port \\ nil) do
     node_id = CorroPort.NodeConfig.get_corrosion_node_id()
+    local_active = check_local_node_active(port)
 
     {:ok, %{
-      "node_id" => node_id
+      "node_id" => node_id,
+      "local_active" => local_active
     }}
   end
 
-  defp extract_node_id_from_site(site_id_result) do
-    case site_id_result do
-      [site_info | _] when is_map(site_info) ->
-        # Get the actual site_id value (should be a UUID)
-        site_info |> Map.values() |> List.first() || "unknown"
-      _ ->
-        "unknown"
-    end
-  end
   ## Data Parsing and Formatting
 
   @doc """

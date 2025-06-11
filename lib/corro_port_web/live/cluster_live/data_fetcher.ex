@@ -52,35 +52,59 @@ defmodule CorroPortWeb.ClusterLive.DataFetcher do
     end
   end
 
-  def get_subscription_status_safe do
-    try do
-      MessageWatcher.get_status()
-    catch
-      :exit, {:timeout, _} ->
-        %{
-          subscription_active: false,
-          status: :timeout,
-          watch_id: nil,
-          reconnect_attempts: 0,
-          error: "Status check timed out"
-        }
-      :exit, {:noproc, _} ->
+def get_subscription_status_safe do
+  Logger.warning("DataFetcher: Attempting to get MessageWatcher status...")
+
+  try do
+    # Check if the process is alive first
+    case Process.whereis(CorroPort.MessageWatcher) do
+      nil ->
+        Logger.warning("DataFetcher: MessageWatcher process not found")
         %{
           subscription_active: false,
           status: :not_started,
           watch_id: nil,
           reconnect_attempts: 0,
-          error: "MessageWatcher not running"
+          error: "MessageWatcher process not running"
         }
-      type, reason ->
-        Logger.warning("Error getting subscription status: #{type} - #{inspect(reason)}")
-        %{
-          subscription_active: false,
-          status: :error,
-          watch_id: nil,
-          reconnect_attempts: 0,
-          error: "Error: #{type} - #{inspect(reason)}"
-        }
+
+      pid when is_pid(pid) ->
+        Logger.warning("DataFetcher: MessageWatcher process found at #{inspect(pid)}, calling get_status...")
+
+        # Try with a longer timeout
+        status = MessageWatcher.get_status()
+        Logger.warning("DataFetcher: Got status from MessageWatcher: #{inspect(status)}")
+        status
     end
+  catch
+    :exit, {:timeout, _} ->
+      Logger.warning("DataFetcher: MessageWatcher status call timed out")
+      %{
+        subscription_active: false,
+        status: :timeout,
+        watch_id: nil,
+        reconnect_attempts: 0,
+        error: "Status check timed out"
+      }
+    :exit, {:noproc, _} ->
+      Logger.warning("DataFetcher: MessageWatcher process not found (noproc)")
+      %{
+        subscription_active: false,
+        status: :not_started,
+        watch_id: nil,
+        reconnect_attempts: 0,
+        error: "MessageWatcher not running"
+      }
+    type, reason ->
+      Logger.warning("DataFetcher: Error getting subscription status: #{type} - #{inspect(reason)}")
+      %{
+        subscription_active: false,
+        status: :error,
+        watch_id: nil,
+        reconnect_attempts: 0,
+        error: "Error: #{type} - #{inspect(reason)}"
+      }
   end
+end
+
 end

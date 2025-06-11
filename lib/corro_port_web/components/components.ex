@@ -71,73 +71,90 @@ end
   end
 
 def status_cards(assigns) do
-    # Provide default value if replication_status is not present
-    assigns = assign_new(assigns, :replication_status, fn -> nil end)
+  ~H"""
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <.local_node_card
+      local_info={@local_info}
+      cluster_info={@cluster_info}
+      phoenix_port={@phoenix_port}
+      api_port={@api_port}
+      error={@error}
+    />
 
-    ~H"""
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <.local_node_card
-        local_info={@local_info}
-        phoenix_port={@phoenix_port}
-        api_port={@api_port}
-        error={@error}
-      />
+    <.cluster_summary_card
+      cluster_info={@cluster_info}
+      node_messages={@node_messages}
+      last_updated={@last_updated}
+      error={@error}
+    />
 
-      <.cluster_summary_card
-        cluster_info={@cluster_info}
-        node_messages={@node_messages}
-        last_updated={@last_updated}
-        error={@error}
-      />
+    <.message_activity_card
+      node_messages={@node_messages}
+      last_updated={@last_updated}
+      refresh_interval={@refresh_interval}
+    />
 
-      <.subscription_status_card
-        subscription_status={@subscription_status}
-        refresh_interval={@refresh_interval}
-        last_updated={@last_updated}
-      />
-
-      <.replication_status_card
+     <.replication_status_card
         replication_status={@replication_status}
       />
-    </div>
-    """
+
+  </div>
+  """
+end
+def message_activity_card(assigns) do
+  # Calculate if we have recent activity
+  recent_activity = if assigns.node_messages != [] do
+    # Check if any message is from the last 5 minutes
+    five_minutes_ago = DateTime.add(DateTime.utc_now(), -5, :minute)
+
+    Enum.any?(assigns.node_messages, fn msg ->
+      case Map.get(msg, "timestamp") do
+        timestamp when is_binary(timestamp) ->
+          case DateTime.from_iso8601(timestamp) do
+            {:ok, dt, _} -> DateTime.after?(dt, five_minutes_ago)
+            _ -> false
+          end
+        _ -> false
+      end
+    end)
+  else
+    false
   end
 
-def local_node_card(assigns) do
-    # Provide default empty cluster_info if not present
-    assigns = assign_new(assigns, :cluster_info, fn -> %{"members" => []} end)
+  assigns = assign(assigns, :recent_activity, recent_activity)
 
-    ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body">
-        <h3 class="card-title text-sm">Local Node</h3>
-        <div :if={@local_info} class="space-y-2 text-sm">
-          <div><strong>Node ID:</strong>
-            <span class="font-mono text-sm">
-              <%= Map.get(@local_info, "node_id", "Unknown") %>
-            </span>
-          </div>
-          <div><strong>Phoenix Port:</strong> <%= @phoenix_port %></div>
-          <div><strong>API Port:</strong> <%= @api_port %></div>
-          <div><strong>Gossip Address:</strong> <%= get_gossip_address() %></div>
-          <%= if cluster_member = find_matching_member(@cluster_info, @local_info) do %>
-            <div><strong>Member ID:</strong>
-              <span class="font-mono text-xs">
-                <%= format_member_id(cluster_member["member_id"]) %>
-              </span>
-            </div>
-            <div><strong>Member State:</strong>
-              <span class={member_state_badge_class(cluster_member["member_state"])}>
-                <%= cluster_member["member_state"] %>
-              </span>
-            </div>
-          <% end %>
+  ~H"""
+  <div class="card bg-base-200">
+    <div class="card-body">
+      <h3 class="card-title text-sm flex items-center">
+        Message Activity
+        <span :if={@recent_activity} class="badge badge-success badge-sm ml-2">
+          <.icon name="hero-signal" class="w-3 h-3 mr-1" />
+          Live
+        </span>
+        <span :if={!@recent_activity} class="badge badge-warning badge-sm ml-2">
+          Quiet
+        </span>
+      </h3>
+      <div class="space-y-2 text-sm">
+        <div><strong>Active Nodes:</strong> <%= length(@node_messages) %></div>
+        <div><strong>Auto Refresh:</strong> Every <%= div(@refresh_interval, 1000) %>s</div>
+        <div><strong>Real-time Updates:</strong>
+          <span :if={@recent_activity} class="text-success">Active</span>
+          <span :if={!@recent_activity} class="text-warning">No recent activity</span>
         </div>
-        <div :if={!@local_info && !@error} class="loading loading-spinner loading-sm"></div>
+        <div><strong>Last Check:</strong>
+          <span :if={@last_updated}>
+            <%= format_timestamp(@last_updated) %>
+          </span>
+          <span :if={!@last_updated}>Never</span>
+        </div>
       </div>
     </div>
-    """
-  end
+  </div>
+  """
+end
+
 
   # Helper function to find the cluster member that matches this local node
   defp find_matching_member(cluster_info, local_info) when is_map(cluster_info) and is_map(local_info) do
@@ -177,22 +194,93 @@ def local_node_card(assigns) do
   defp format_member_id(member_id), do: member_id
 
   def cluster_summary_card(assigns) do
-    ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body">
-        <h3 class="card-title text-sm">Cluster Summary</h3>
-        <div :if={@cluster_info} class="space-y-2 text-sm">
-          <div><strong>Total Nodes:</strong> <%= Map.get(@cluster_info, "member_count", 0) + 1 %></div>
-          <div><strong>Remote Members:</strong> <%= Map.get(@cluster_info, "member_count", 0) %></div>
-          <div><strong>Tracked Peers:</strong> <%= Map.get(@cluster_info, "peer_count", 0) %></div>
-          <div><strong>Messages Sent:</strong> <%= length(@node_messages) %> nodes</div>
-          <div><strong>Last Updated:</strong> <%= format_timestamp(@last_updated) %></div>
+  ~H"""
+  <div class="card bg-base-200">
+    <div class="card-body">
+      <h3 class="card-title text-sm">Cluster Summary</h3>
+      <div :if={@cluster_info} class="space-y-2 text-sm">
+        <div class="flex items-center justify-between">
+          <strong>Active Nodes:</strong>
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-lg"><%= Map.get(@cluster_info, "total_active_nodes", 0) %></span>
+            <span :if={Map.get(@cluster_info, "local_node_active", false)} class="badge badge-success badge-xs">
+              Local Up
+            </span>
+            <span :if={!Map.get(@cluster_info, "local_node_active", false)} class="badge badge-error badge-xs">
+              Local Down
+            </span>
+          </div>
         </div>
-        <div :if={!@cluster_info && !assigns[:error]} class="loading loading-spinner loading-sm"></div>
+
+        <div class="flex items-center justify-between">
+          <strong>Remote Members:</strong>
+          <span><%= Map.get(@cluster_info, "active_member_count", 0) %>/<%= Map.get(@cluster_info, "member_count", 0) %> active</span>
+        </div>
+
+        <div><strong>Tracked Peers:</strong> <%= Map.get(@cluster_info, "peer_count", 0) %></div>
+        <div><strong>Nodes with Messages:</strong> <%= length(@node_messages) %></div>
+
+        <div class="divider my-1"></div>
+
+        <div class="text-xs text-base-content/70">
+          <strong>Last Updated:</strong> <%= format_timestamp(@last_updated) %>
+        </div>
       </div>
+      <div :if={!@cluster_info && !assigns[:error]} class="loading loading-spinner loading-sm"></div>
     </div>
-    """
-  end
+  </div>
+  """
+end
+
+def local_node_card(assigns) do
+  ~H"""
+  <div class="card bg-base-200">
+    <div class="card-body">
+      <h3 class="card-title text-sm">Local Node</h3>
+      <div :if={@local_info} class="space-y-2 text-sm">
+        <div><strong>Node ID:</strong>
+          <span class="font-mono text-sm">
+            <%= Map.get(@local_info, "node_id", "Unknown") %>
+          </span>
+        </div>
+        <div><strong>Phoenix Port:</strong> <%= @phoenix_port %></div>
+        <div><strong>API Port:</strong> <%= @api_port %></div>
+        <div><strong>Gossip Address:</strong> <%= get_gossip_address() %></div>
+
+        <div class="flex items-center justify-between">
+          <strong>Corrosion Status:</strong>
+          <span :if={Map.get(@local_info, "local_active", false)} class="badge badge-success badge-sm">
+            Responding
+          </span>
+          <span :if={!Map.get(@local_info, "local_active", false)} class="badge badge-error badge-sm">
+            Not Responding
+          </span>
+        </div>
+
+        <%= if cluster_member = find_matching_member(@cluster_info, @local_info) do %>
+          <div class="divider my-1"></div>
+          <div><strong>Member ID:</strong>
+            <span class="font-mono text-xs">
+              <%= format_member_id(cluster_member["member_id"]) %>
+            </span>
+          </div>
+          <div class="flex items-center justify-between">
+            <strong>Cluster State:</strong>
+            <span class={member_state_badge_class(cluster_member["member_state"])}>
+              <%= cluster_member["member_state"] %>
+            </span>
+          </div>
+        <% else %>
+          <div class="text-xs text-base-content/70">
+            Not found in cluster members (may be seed node)
+          </div>
+        <% end %>
+      </div>
+      <div :if={!@local_info && !@error} class="loading loading-spinner loading-sm"></div>
+    </div>
+  </div>
+  """
+end
 
   def subscription_status_card(assigns) do
     ~H"""
