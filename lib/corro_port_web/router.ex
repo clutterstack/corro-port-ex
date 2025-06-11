@@ -21,10 +21,12 @@ defmodule CorroPortWeb.Router do
     live "/cluster", ClusterLive
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", CorroPortWeb do
-  #   pipe_through :api
-  # end
+  scope "/api", CorroPortWeb do
+    pipe_through :api
+
+    post "/acknowledge", AcknowledgmentController, :acknowledge
+    get "/acknowledge/health", AcknowledgmentController, :health
+  end
 
   # Enable LiveDashboard in development
   if Application.compile_env(:corro_port, :dev_routes) do
