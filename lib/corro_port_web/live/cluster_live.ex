@@ -134,18 +134,38 @@ defmodule CorroPortWeb.ClusterLive do
   end
 
   def handle_event("send_message", _params, socket) do
-    Logger.warning("ClusterLive: 📤 Send message button clicked")
-    case CorroPortWeb.ClusterLive.MessageHandler.send_message(socket.assigns.api_port) do
-      {:ok, message} ->
-        Logger.warning("ClusterLive: ✅ Message sent successfully")
-        socket = put_flash(socket, :info, message)
-        {:noreply, socket}
-      {:error, error} ->
-        Logger.warning("ClusterLive: ❌ Failed to send message: #{error}")
-        socket = put_flash(socket, :error, "Failed to send message: #{error}")
-        {:noreply, socket}
-    end
+  Logger.warning("ClusterLive: 📤 Send message button clicked")
+
+  # Use the existing MessageHandler to send the message
+  case CorroPortWeb.ClusterLive.MessageHandler.send_message(socket.assigns.api_port) do
+    {:ok, success_message, message_details} ->
+      Logger.warning("ClusterLive: ✅ Message sent successfully: #{inspect(message_details)}")
+
+      # Track this message for acknowledgment monitoring
+      track_message_data = %{
+        pk: message_details.pk,
+        timestamp: message_details.timestamp,
+        node_id: message_details.node_id
+      }
+
+      CorroPort.AcknowledgmentTracker.track_latest_message(track_message_data)
+      Logger.warning("ClusterLive: Now tracking message #{message_details.pk} for acknowledgments")
+
+      socket = put_flash(socket, :info, success_message)
+      {:noreply, socket}
+
+    {:ok, message} ->
+      # Handle backward compatibility with old MessageHandler format
+      Logger.warning("ClusterLive: ✅ Message sent successfully (old format)")
+      socket = put_flash(socket, :info, message)
+      {:noreply, socket}
+
+    {:error, error} ->
+      Logger.warning("ClusterLive: ❌ Failed to send message: #{error}")
+      socket = put_flash(socket, :error, "Failed to send message: #{error}")
+      {:noreply, socket}
   end
+end
 
   def handle_event("cleanup_messages", _params, socket) do
     Logger.warning("ClusterLive: 🧹 Cleanup messages button clicked")

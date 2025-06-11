@@ -114,6 +114,35 @@ defmodule CorroPort.MessageWatcher do
     {:noreply, state}
   end
 
+  def handle_info({:new_message, message_map}, socket) do
+  Logger.info("MessageWatcher received new message: #{inspect(message_map)}")
+
+  local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
+  originating_node_id = message_map["node_id"]
+
+  # Handle acknowledgment logic
+  cond do
+    # Message is from another node - send acknowledgment
+    originating_node_id != local_node_id ->
+      Logger.info("MessageWatcher: Received message from #{originating_node_id}, sending acknowledgment")
+      send_acknowledgment_async(originating_node_id, message_map)
+
+    # Message is from our local node - track it for acknowledgment monitoring
+    originating_node_id == local_node_id ->
+      Logger.info("MessageWatcher: Our message propagated back, tracking for acknowledgments")
+      track_our_message(message_map)
+
+    true ->
+      Logger.warning("MessageWatcher: Could not determine message origin: #{inspect(message_map)}")
+  end
+
+  # Broadcast to LiveView (existing logic)
+  Phoenix.PubSub.broadcast(CorroPort.PubSub, "live_updates", {:new_message, message_map})
+
+  {:noreply, socket}
+end
+
+
   def handle_info(msg, state) do
     Logger.warning("MessageWatcher: ❓ Unhandled message: #{inspect(msg)}")
     {:noreply, state}
@@ -370,4 +399,53 @@ defmodule CorroPort.MessageWatcher do
   defp calculate_uptime(connection_time) do
     DateTime.diff(DateTime.utc_now(), connection_time, :second)
   end
+
+  defp send_acknowledgment_async(originating_node_id, message_map) do
+  # Send acknowledgment in a separate task to avoid blocking MessageWatcher
+  Task.start(fn ->
+    message_data = %{
+      pk: message_map["pk"],
+      timestamp: message_map["timestamp"],
+      node_id: message_map["node_id"]
+    }
+
+    case CorroPort.AcknowledgmentSender.send_acknowledgment(originating_node_id, message_data) do
+      :ok ->
+        Logger.info("MessageWatcher: Successfully sent acknowledgment to #{originating_node_id}")
+
+      {:error, reason} ->
+        Logger.warning("MessageWatcher: Failed to send acknowledgment to #{originating_node_id}: #{inspect(reason)}")
+    end
+  end)
+end
+
+defp track_our_message(message_map) do
+  # Only track messages that originated from our "Send Message" button
+  # We can identify these by checking if they match our expected format
+  local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
+
+  # Check if this looks like a message we sent via the UI
+  # (vs. some other kind of corrosion message)
+  if is_our_ui_message?(message_map, local_node_id) do
+    message_data = %{
+      pk: message_map["pk"],
+      timestamp: message_map["timestamp"],
+      node_id: message_map["node_id"]
+    }
+
+    Logger.info("MessageWatcher: Tracking our UI message #{message_data.pk} for acknowledgments")
+    CorroPort.AcknowledgmentTracker.track_latest_message(message_data)
+  else
+    Logger.debug("MessageWatcher: Skipping acknowledgment tracking for non-UI message")
+  end
+end
+
+defp is_our_ui_message?(message_map, local_node_id) do
+  # Simple heuristic: messages from our UI contain our node_id and have the expected structure
+  # In the future, we could add a special marker to UI messages to distinguish them
+  message_map["node_id"] == local_node_id and
+  not is_nil(message_map["message"]) and
+  not is_nil(message_map["pk"]) and
+  not is_nil(message_map["timestamp"])
+end
 end

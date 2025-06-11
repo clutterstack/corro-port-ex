@@ -1,3 +1,5 @@
+# Update to lib/corro_port_web/live/cluster_live/message_handler.ex
+
 defmodule CorroPortWeb.ClusterLive.MessageHandler do
   require Logger
   alias CorroPort.{MessagesAPI, NodeConfig}
@@ -9,7 +11,18 @@ defmodule CorroPortWeb.ClusterLive.MessageHandler do
     case MessagesAPI.insert_message(node_id, message, api_port) do
       {:ok, result} ->
         Logger.info("Successfully sent message: #{inspect(result)}")
-        {:ok, "Message sent successfully!"}
+
+        # Build the pk the same way MessagesAPI does: node_id_sequence
+        pk = "#{result.node_id}_#{result.sequence}"
+
+        # Return both success message and the message details for tracking
+        {:ok, "Message sent successfully!", %{
+          pk: pk,
+          timestamp: result.timestamp,
+          node_id: result.node_id,
+          message: message
+        }}
+
       {:error, error} ->
         Logger.warning("Failed to send message: #{error}")
         {:error, "Failed to send message: #{error}"}
