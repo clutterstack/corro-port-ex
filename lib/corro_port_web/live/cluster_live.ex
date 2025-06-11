@@ -31,15 +31,50 @@ defmodule CorroPortWeb.ClusterLive do
       api_port: detected_port,
       phoenix_port: phoenix_port,
       refresh_interval: @refresh_interval,
-      replication_status: nil
+      replication_status: nil,
+      # Track real-time subscription state
+      subscription_columns: nil,
+      initial_load_complete: false,
+      pending_initial_rows: []
     })
 
     {:ok, fetch_cluster_data(socket)}
   end
 
-  # Handle real-time message updates - now with properly formatted message maps
+  # Handle subscription metadata
+  def handle_info({:columns_received, columns}, socket) do
+    Logger.warning("ClusterLive: 📊 Received column metadata: #{inspect(columns)}")
+    socket = assign(socket, :subscription_columns, columns)
+    {:noreply, socket}
+  end
+
+  # Handle subscription ready (end of initial state)
+  def handle_info({:subscription_ready}, socket) do
+    Logger.warning("ClusterLive: 🎉 Subscription is ready for real-time updates")
+    {:noreply, socket}
+  end
+
+  # Handle initial state rows (during subscription startup)
+  def handle_info({:initial_row, message_map}, socket) do
+    Logger.warning("ClusterLive: 📦 Received initial row: #{inspect(message_map)}")
+
+    # Collect initial rows until we get the end-of-query
+    if socket.assigns.initial_load_complete do
+      # Shouldn't happen, but handle gracefully
+      Logger.warning("ClusterLive: ⚠️ Got initial row after initial load was complete")
+      socket = update_node_messages_with_new_message(socket, message_map)
+      {:noreply, socket}
+    else
+      # Add to pending initial rows
+      updated_pending = [message_map | socket.assigns.pending_initial_rows]
+      socket = assign(socket, :pending_initial_rows, updated_pending)
+      {:noreply, socket}
+    end
+  end
+
+  # Handle real-time message updates (new messages after subscription is established)
   def handle_info({:new_message, message_map}, socket) do
-    Logger.warning("ClusterLive: 📨 Received new message via subscription: #{inspect(message_map)}")
+    Logger.warning("ClusterLive: 📨 Received new real-time message: #{inspect(message_map)}")
 
     if map_size(message_map) == 0 do
       Logger.warning("ClusterLive: ⚠️ Received empty message map, skipping update")
@@ -50,8 +85,9 @@ defmodule CorroPortWeb.ClusterLive do
     end
   end
 
+  # Handle incremental changes (updates/deletes)
   def handle_info({:message_change, change_type, message_map}, socket) do
-    Logger.warning("ClusterLive: 🔄 Received message #{change_type} via subscription: #{inspect(message_map)}")
+    Logger.warning("ClusterLive: 🔄 Received message #{change_type}: #{inspect(message_map)}")
 
     if map_size(message_map) == 0 do
       Logger.warning("ClusterLive: ⚠️ Received empty message map for #{change_type}, skipping update")
@@ -92,6 +128,8 @@ defmodule CorroPortWeb.ClusterLive do
       |> assign(:node_messages, updates.node_messages)
       |> assign(:error, updates.error)
       |> assign(:last_updated, updates.last_updated)
+      |> assign(:initial_load_complete, true)  # Mark as complete after manual refresh
+      |> assign(:pending_initial_rows, [])     # Clear pending rows
     {:noreply, socket}
   end
 
@@ -214,14 +252,6 @@ defmodule CorroPortWeb.ClusterLive do
     end
   end
 
-  # Fallback function for when we can't efficiently update and need to refetch
-  defp fetch_node_messages(socket) do
-    Logger.warning("ClusterLive: 📥 Fetching updated node messages from database")
-    new_messages = CorroPortWeb.ClusterLive.DataFetcher.fetch_node_messages_data(socket.assigns.api_port)
-    Logger.warning("ClusterLive: 📥 Got #{length(new_messages)} messages from database")
-    assign(socket, :node_messages, new_messages)
-  end
-
   defp fetch_cluster_data(socket) do
     updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data(socket)
 
@@ -233,7 +263,11 @@ defmodule CorroPortWeb.ClusterLive do
       error: updates.error,
       last_updated: updates.last_updated,
       # Preserve replication_status if it exists, otherwise keep it nil
-      replication_status: socket.assigns[:replication_status]
+      replication_status: socket.assigns[:replication_status],
+      # Mark initial load as complete when we do a full fetch
+      initial_load_complete: true,
+      # Clear any pending initial rows since we just did a full fetch
+      pending_initial_rows: []
     })
   end
 
