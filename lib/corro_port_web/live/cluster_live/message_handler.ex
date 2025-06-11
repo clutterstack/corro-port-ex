@@ -1,5 +1,3 @@
-# Update to lib/corro_port_web/live/cluster_live/message_handler.ex
-
 defmodule CorroPortWeb.ClusterLive.MessageHandler do
   require Logger
   alias CorroPort.{MessagesAPI, NodeConfig}
@@ -12,16 +10,25 @@ defmodule CorroPortWeb.ClusterLive.MessageHandler do
       {:ok, result} ->
         Logger.info("Successfully sent message: #{inspect(result)}")
 
-        # Build the pk the same way MessagesAPI does: node_id_sequence
-        pk = "#{result.node_id}_#{result.sequence}"
-
-        # Return both success message and the message details for tracking
-        {:ok, "Message sent successfully!", %{
-          pk: pk,
+        # NEW: Start tracking this message for acknowledgments
+        # The MessagesAPI.insert_message returns %{node_id, message, sequence, timestamp}
+        # but doesn't include pk, so we construct it the same way the SQL does
+        message_pk = "#{node_id}_#{result.sequence}"
+        message_data = %{
+          pk: message_pk,
           timestamp: result.timestamp,
-          node_id: result.node_id,
-          message: message
-        }}
+          node_id: result.node_id
+        }
+
+        case CorroPort.AcknowledgmentTracker.track_latest_message(message_data) do
+          :ok ->
+            Logger.info("MessageHandler: Started tracking message #{message_data.pk} for acknowledgments")
+            {:ok, "Message sent successfully! Now tracking acknowledgments..."}
+          {:error, track_error} ->
+            Logger.warning("MessageHandler: Failed to track message for acknowledgments: #{inspect(track_error)}")
+            # Still return success since the message was sent successfully
+            {:ok, "Message sent successfully! (Note: acknowledgment tracking failed)"}
+        end
 
       {:error, error} ->
         Logger.warning("Failed to send message: #{error}")

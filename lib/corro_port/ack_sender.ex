@@ -112,7 +112,7 @@ defmodule CorroPort.AcknowledgmentSender do
     end
   end
 
-  defp discover_node_endpoint(node_id) do
+  def discover_node_endpoint(node_id) do
     case extract_node_number(node_id) do
       {:ok, node_number} ->
         # Calculate Phoenix port: base port 4000 + node_number

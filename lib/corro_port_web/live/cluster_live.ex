@@ -2,44 +2,50 @@ defmodule CorroPortWeb.ClusterLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPort.{MessageWatcher, CorrosionClient}
-  alias CorroPortWeb.{ClusterCards, MembersTable, MessagesTable, DebugSection}
+ alias CorroPort.{MessageWatcher, CorrosionClient}
+alias CorroPortWeb.{ClusterCards, MembersTable, MessagesTable, DebugSection, AcknowledgmentCard}
 
   @refresh_interval 300_000  # 5 minutes to avoid interference with testing
 
-  def mount(_params, _session, socket) do
-    Logger.warning("ClusterLive: Mounting...")
+ def mount(_params, _session, socket) do
+  Logger.warning("ClusterLive: Mounting...")
 
-    if connected?(socket) do
-      Logger.warning("ClusterLive: Connected - subscribing to PubSub topic: #{MessageWatcher.subscription_topic()}")
-      Phoenix.PubSub.subscribe(CorroPort.PubSub, MessageWatcher.subscription_topic())
-      schedule_refresh()
-    else
-      Logger.warning("ClusterLive: Not connected yet (static render)")
-    end
-
-    detected_port = CorrosionClient.detect_api_port()
-    phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
-
-    socket = assign(socket, %{
-      page_title: "Cluster Status",
-      cluster_info: nil,
-      local_info: nil,
-      node_messages: [],
-      error: nil,
-      last_updated: nil,
-      api_port: detected_port,
-      phoenix_port: phoenix_port,
-      refresh_interval: @refresh_interval,
-      replication_status: nil,
-      # Track real-time subscription state
-      subscription_columns: nil,
-      initial_load_complete: false,
-      pending_initial_rows: []
-    })
-
-    {:ok, fetch_cluster_data(socket)}
+  if connected?(socket) do
+    Logger.warning("ClusterLive: Connected - subscribing to PubSub topics")
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, MessageWatcher.subscription_topic())
+    # NEW: Subscribe to acknowledgment updates
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroPort.AcknowledgmentTracker.get_pubsub_topic())
+    schedule_refresh()
+  else
+    Logger.warning("ClusterLive: Not connected yet (static render)")
   end
+
+  detected_port = CorrosionClient.detect_api_port()
+  phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
+
+  socket = assign(socket, %{
+    page_title: "Cluster Status",
+    cluster_info: nil,
+    local_info: nil,
+    node_messages: [],
+    error: nil,
+    last_updated: nil,
+    api_port: detected_port,
+    phoenix_port: phoenix_port,
+    refresh_interval: @refresh_interval,
+    replication_status: nil,
+    # Track real-time subscription state
+    subscription_columns: nil,
+    initial_load_complete: false,
+    pending_initial_rows: [],
+    # NEW: Acknowledgment tracking
+    acknowledgment_status: nil,
+    message_watcher_status: nil,
+    connectivity_test_results: nil
+  })
+
+  {:ok, fetch_cluster_data(socket)}
+end
 
   # Handle subscription metadata
   def handle_info({:columns_received, columns}, socket) do
@@ -105,6 +111,30 @@ defmodule CorroPortWeb.ClusterLive do
       {:noreply, socket}
     end
   end
+
+  def handle_info({:acknowledgment_update, ack_status}, socket) do
+  Logger.warning("ClusterLive: 🤝 Received acknowledgment update: #{ack_status.ack_count}/#{ack_status.expected_count}")
+  socket = assign(socket, :acknowledgment_status, ack_status)
+  {:noreply, socket}
+end
+
+def handle_info({:connectivity_test_complete, results}, socket) do
+  Logger.warning("ClusterLive: 📊 Connectivity test complete: #{inspect(results)}")
+
+  # Count successful connections
+  successful = Enum.count(results, fn {_node, result} -> match?({:ok, _}, result) end)
+  total = length(Map.keys(results))
+
+  flash_message = "Connectivity test complete: #{successful}/#{total} nodes reachable"
+  flash_type = if successful == total, do: :info, else: :warning
+
+  socket =
+    socket
+    |> assign(:connectivity_test_results, results)
+    |> put_flash(flash_type, flash_message)
+
+  {:noreply, socket}
+end
 
   def handle_info(:refresh, socket) do
     Logger.warning("ClusterLive: 🔄 Auto refresh triggered")
@@ -199,6 +229,20 @@ end
     {:noreply, socket}
   end
 
+  def handle_event("test_connectivity", _params, socket) do
+  Logger.warning("ClusterLive: 🔗 Testing acknowledgment connectivity...")
+
+  # Run connectivity test in background
+  parent_pid = self()
+  spawn(fn ->
+    results = CorroPort.AcknowledgmentSender.test_all_connectivity()
+    send(parent_pid, {:connectivity_test_complete, results})
+  end)
+
+  socket = put_flash(socket, :info, "Testing connectivity to other nodes...")
+  {:noreply, socket}
+end
+
   # Private functions for efficient message state updates
 
   defp update_node_messages_with_new_message(socket, new_message) do
@@ -273,23 +317,30 @@ end
   end
 
   defp fetch_cluster_data(socket) do
-    updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data(socket)
+  updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data(socket)
 
-    socket
-    |> assign(%{
-      cluster_info: updates.cluster_info,
-      local_info: updates.local_info,
-      node_messages: updates.node_messages,
-      error: updates.error,
-      last_updated: updates.last_updated,
-      # Preserve replication_status if it exists, otherwise keep it nil
-      replication_status: socket.assigns[:replication_status],
-      # Mark initial load as complete when we do a full fetch
-      initial_load_complete: true,
-      # Clear any pending initial rows since we just did a full fetch
-      pending_initial_rows: []
-    })
-  end
+  # NEW: Fetch acknowledgment and MessageWatcher status
+  acknowledgment_status = CorroPort.AcknowledgmentTracker.get_status()
+  message_watcher_status = CorroPort.MessageWatcher.get_status()
+
+  socket
+  |> assign(%{
+    cluster_info: updates.cluster_info,
+    local_info: updates.local_info,
+    node_messages: updates.node_messages,
+    error: updates.error,
+    last_updated: updates.last_updated,
+    # Preserve replication_status if it exists, otherwise keep it nil
+    replication_status: socket.assigns[:replication_status],
+    # Mark initial load as complete when we do a full fetch
+    initial_load_complete: true,
+    # Clear any pending initial rows since we just did a full fetch
+    pending_initial_rows: [],
+    # NEW: Add acknowledgment tracking data
+    acknowledgment_status: acknowledgment_status,
+    message_watcher_status: message_watcher_status
+  })
+end
 
   defp schedule_refresh do
     Process.send_after(self(), :refresh, @refresh_interval)
@@ -345,45 +396,86 @@ end
     end
   end
 
-  def render(assigns) do
-    # Ensure replication_status exists in assigns
-    assigns = assign_new(assigns, :replication_status, fn -> nil end)
-
-    ~H"""
-    <div class="space-y-6">
-      <ClusterCards.cluster_header
-      />
-
-      <ClusterCards.error_alerts
-        error={@error}
-      />
-
-      <ClusterCards.status_cards
-        local_info={@local_info}
-        cluster_info={@cluster_info}
-        node_messages={@node_messages}
-        last_updated={@last_updated}
-        phoenix_port={@phoenix_port}
-        api_port={@api_port}
-        refresh_interval={@refresh_interval}
-        replication_status={@replication_status}
-        error={@error}
-      />
-
-      <MessagesTable.node_messages_table
-        node_messages={@node_messages}
-      />
-
-      <MembersTable.cluster_members_table
-        cluster_info={@cluster_info}
-      />
-
-      <DebugSection.debug_section
-        cluster_info={@cluster_info}
-        local_info={@local_info}
-        node_messages={@node_messages}
-      />
-    </div>
-    """
+  defp connectivity_result_class(result) do
+  case result do
+    {:ok, _} -> "badge badge-success badge-sm"
+    {:error, _} -> "badge badge-error badge-sm"
   end
+end
+
+defp format_connectivity_result(result) do
+  case result do
+    {:ok, _} -> "✓ Connected"
+    {:error, :connection_refused} -> "✗ Refused"
+    {:error, :timeout} -> "✗ Timeout"
+    {:error, reason} when is_binary(reason) -> "✗ #{String.slice(reason, 0, 10)}..."
+    {:error, _} -> "✗ Error"
+  end
+end
+
+  def render(assigns) do
+  # Ensure all assigns exist
+  assigns =
+    assigns
+    |> assign_new(:replication_status, fn -> nil end)
+    |> assign_new(:acknowledgment_status, fn -> nil end)
+    |> assign_new(:message_watcher_status, fn -> nil end)
+    |> assign_new(:connectivity_test_results, fn -> nil end)
+
+  ~H"""
+  <div class="space-y-6">
+    <ClusterCards.cluster_header />
+
+    <ClusterCards.error_alerts error={@error} />
+
+    <ClusterCards.status_cards
+      local_info={@local_info}
+      cluster_info={@cluster_info}
+      node_messages={@node_messages}
+      last_updated={@last_updated}
+      phoenix_port={@phoenix_port}
+      api_port={@api_port}
+      refresh_interval={@refresh_interval}
+      replication_status={@replication_status}
+      error={@error}
+    />
+
+    <!-- NEW: Add acknowledgment status card -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <AcknowledgmentCard.acknowledgment_status_card
+        ack_status={@acknowledgment_status}
+        message_watcher_status={@message_watcher_status}
+      />
+
+      <!-- Connectivity Test Results -->
+      <div :if={@connectivity_test_results} class="card bg-base-200">
+        <div class="card-body">
+          <h3 class="card-title text-sm">Connectivity Test Results</h3>
+          <div class="space-y-2">
+            <div
+              :for={{node_id, result} <- @connectivity_test_results}
+              class="flex items-center justify-between text-sm"
+            >
+              <span class="font-mono"><%= node_id %></span>
+              <span class={connectivity_result_class(result)}>
+                <%= format_connectivity_result(result) %>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <MessagesTable.node_messages_table node_messages={@node_messages} />
+
+    <MembersTable.cluster_members_table cluster_info={@cluster_info} />
+
+    <DebugSection.debug_section
+      cluster_info={@cluster_info}
+      local_info={@local_info}
+      node_messages={@node_messages}
+    />
+  </div>
+  """
+end
 end
