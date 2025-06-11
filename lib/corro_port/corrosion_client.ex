@@ -30,7 +30,7 @@ defmodule CorroPort.CorrosionClient do
     port = port || get_api_port()
     base_url = "http://127.0.0.1:#{port}"
 
-    Logger.debug("Executing query on port #{port}: #{query}")
+    # Logger.debug("Executing query on port #{port}: #{query}")
 
     case Req.post("#{base_url}/v1/queries",
                   json: query,

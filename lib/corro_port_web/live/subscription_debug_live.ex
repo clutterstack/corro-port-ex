@@ -8,7 +8,7 @@ defmodule CorroPortWeb.SubscriptionDebugLive do
     if connected?(socket) do
       # Subscribe to both topics
       Phoenix.PubSub.subscribe(CorroPort.PubSub, MessageWatcher.subscription_topic())
-      Phoenix.PubSub.subscribe(CorroPort.PubSub, MessageWatcher.status_topic())
+      # Phoenix.PubSub.subscribe(CorroPort.PubSub, MessageWatcher.status_topic())
     end
 
     {:ok, assign(socket, %{

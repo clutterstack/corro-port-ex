@@ -11,6 +11,11 @@ defmodule CorroPort.Application do
       CorroPortWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:corro_port, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: CorroPort.PubSub},
+      {Finch,
+       name: WhereCorro.Finch,
+       pools: %{
+         default: [conn_opts: [transport_opts: [inet6: true]]]
+       }},
       CorroPort.CorroGenserver,
       # Add the MessageWatcher to subscribe to Corrosion changes
       CorroPort.MessageWatcher,

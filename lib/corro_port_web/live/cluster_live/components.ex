@@ -60,9 +60,12 @@ defmodule CorroPortWeb.ClusterLive.Components do
     """
   end
 
-  def status_cards(assigns) do
+def status_cards(assigns) do
+    # Provide default value if replication_status is not present
+    assigns = assign_new(assigns, :replication_status, fn -> nil end)
+
     ~H"""
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       <.local_node_card
         local_info={@local_info}
         phoenix_port={@phoenix_port}
@@ -81,6 +84,10 @@ defmodule CorroPortWeb.ClusterLive.Components do
         subscription_status={@subscription_status}
         refresh_interval={@refresh_interval}
         last_updated={@last_updated}
+      />
+
+      <.replication_status_card
+        replication_status={@replication_status}
       />
     </div>
     """
@@ -425,4 +432,43 @@ def local_node_card(assigns) do
     gossip_port = config[:corrosion_gossip_port] || 8787
     "127.0.0.1:#{gossip_port}"
   end
+
+
+  def replication_status_card(assigns) do
+  ~H"""
+  <div class="card bg-base-200">
+    <div class="card-body">
+      <h3 class="card-title text-sm flex items-center">
+        Replication Status
+        <.button
+          phx-click="check_replication"
+          class="btn btn-xs btn-outline ml-2"
+        >
+          Check
+        </.button>
+      </h3>
+      <div class="space-y-2 text-sm">
+        <div :if={@replication_status}>
+          <div><strong>Last Check:</strong> <%= format_timestamp(@replication_status.last_check) %></div>
+          <div><strong>Message Count:</strong> <%= @replication_status.total_messages || "Unknown" %></div>
+          <div><strong>Sequence Gaps:</strong>
+            <span class={if @replication_status.has_gaps, do: "text-warning", else: "text-success"}>
+              <%= if @replication_status.has_gaps, do: "⚠️ Found gaps", else: "✅ None" %>
+            </span>
+          </div>
+          <div><strong>Conflicts:</strong>
+            <span class={if @replication_status.conflicts > 0, do: "text-error", else: "text-success"}>
+              <%= @replication_status.conflicts || 0 %>
+            </span>
+          </div>
+        </div>
+        <div :if={!@replication_status} class="text-base-content/70">
+          Click "Check" to analyze replication state
+        </div>
+      </div>
+    </div>
+  </div>
+  """
+end
+
 end
