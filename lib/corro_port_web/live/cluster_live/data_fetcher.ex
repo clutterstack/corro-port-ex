@@ -1,6 +1,6 @@
 defmodule CorroPortWeb.ClusterLive.DataFetcher do
   require Logger
-  alias CorroPort.{ClusterAPI, MessagesAPI, MessageWatcher}
+  alias CorroPort.{ClusterAPI, MessagesAPI}
 
   def fetch_all_data(socket) do
     api_port = socket.assigns.api_port

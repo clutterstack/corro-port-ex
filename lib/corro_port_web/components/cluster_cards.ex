@@ -131,42 +131,6 @@ def message_activity_card(assigns) do
 end
 
 
-  # Helper function to find the cluster member that matches this local node
-  defp find_matching_member(cluster_info, local_info) when is_map(cluster_info) and is_map(local_info) do
-    members = Map.get(cluster_info, "members", [])
-    local_gossip_port = get_local_gossip_port()
-
-    # Find member whose gossip address matches our local gossip port
-    Enum.find(members, fn member ->
-      case Map.get(member, "member_addr") do
-        addr when is_binary(addr) ->
-          # Extract port from address like "127.0.0.1:8787"
-          case String.split(addr, ":") do
-            [_ip, port_str] ->
-              case Integer.parse(port_str) do
-                {port, _} -> port == local_gossip_port
-                _ -> false
-              end
-            _ -> false
-          end
-        _ -> false
-      end
-    end)
-  end
-  defp find_matching_member(_, _), do: nil
-
-  defp get_local_gossip_port do
-    config = Application.get_env(:corro_port, :node_config, %{
-      corrosion_gossip_port: 8787
-    })
-    config[:corrosion_gossip_port] || 8787
-  end
-
-  defp format_member_id(nil), do: "Unknown"
-  defp format_member_id(member_id) when byte_size(member_id) > 12 do
-    String.slice(member_id, 0, 8) <> "..."
-  end
-  defp format_member_id(member_id), do: member_id
 
   def cluster_summary_card(assigns) do
   ~H"""
@@ -237,19 +201,6 @@ def local_node_card(assigns) do
   </div>
   """
 end
-
-defp member_state_badge_class(state) do
-    base_classes = "badge badge-sm"
-
-    state_class = case state do
-      "Alive" -> "badge-success"
-      "Suspect" -> "badge-warning"
-      "Down" -> "badge-error"
-      _ -> "badge-neutral"
-    end
-
-    "#{base_classes} #{state_class}"
-  end
 
 def replication_status_card(assigns) do
   ~H"""
