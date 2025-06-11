@@ -2,9 +2,8 @@ defmodule CorroPortWeb.ClusterLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPort.{MessagesAPI, CorrosionClient}
-  alias CorroPort.MessageWatcher
-  alias CorroPortWeb.{Components, ClusterCards, MembersTable, MessagesTable, DebugSection}
+  alias CorroPort.{MessageWatcher, CorrosionClient}
+  alias CorroPortWeb.{ClusterCards, MembersTable, MessagesTable, DebugSection}
 
   @refresh_interval 30_000  # 30 seconds instead of 5
 
@@ -92,13 +91,13 @@ defmodule CorroPortWeb.ClusterLive do
     end
   end
 
-  def handle_event("check_subscription", _params, socket) do
-    Logger.warning("ClusterLive: 🔍 Check subscription button clicked")
-    status = CorroPortWeb.ClusterLive.DataFetcher.get_subscription_status_safe()
-    Logger.warning("ClusterLive: 📊 Subscription status: #{inspect(status)}")
-    socket = assign(socket, :subscription_status, status)
-    {:noreply, socket}
-  end
+  # def handle_event("check_subscription", _params, socket) do
+  #   Logger.warning("ClusterLive: 🔍 Check subscription button clicked")
+  #   status = CorroPortWeb.ClusterLive.DataFetcher.get_subscription_status_safe()
+  #   Logger.warning("ClusterLive: 📊 Subscription status: #{inspect(status)}")
+  #   socket = assign(socket, :subscription_status, status)
+  #   {:noreply, socket}
+  # end
 
   def handle_event("cleanup_messages", _params, socket) do
     Logger.warning("ClusterLive: 🧹 Cleanup messages button clicked")

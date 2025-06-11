@@ -19,7 +19,7 @@ defmodule CorroPort.CorroGenserver do
     GenServer.start_link(__MODULE__, args, Keyword.put_new(opts, :name, __MODULE__))
   end
 
-  def init(args \\ []) do
+  def init(_args \\ []) do
     Process.flag(:trap_exit, true)
 
     # Generate and write the node-specific Corrosion config
@@ -114,7 +114,7 @@ defmodule CorroPort.CorroGenserver do
   end
 
   def handle_info({:EXIT, port, :normal}, %{node_id: node_id} = state) do
-    Logger.info("#{node_id} handle_info: EXIT")
+    Logger.info("#{node_id} handle_info: EXIT on port #{inspect(port)}")
     {:noreply, state}
   end
 

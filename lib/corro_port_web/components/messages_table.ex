@@ -1,7 +1,5 @@
 defmodule CorroPortWeb.MessagesTable do
   use Phoenix.Component
-  import CorroPortWeb.CoreComponents
-
 
   def node_messages_table(assigns) do
     ~H"""
@@ -46,19 +44,6 @@ defmodule CorroPortWeb.MessagesTable do
     """
   end
 
-  defp member_state_badge_class(state) do
-    base_classes = "badge badge-sm"
-
-    state_class = case state do
-      "Alive" -> "badge-success"
-      "Suspect" -> "badge-warning"
-      "Down" -> "badge-error"
-      _ -> "badge-neutral"
-    end
-
-    "#{base_classes} #{state_class}"
-  end
-
   defp format_timestamp(nil), do: "Unknown"
   defp format_timestamp(timestamp) when is_binary(timestamp) do
     case DateTime.from_iso8601(timestamp) do
@@ -71,13 +56,6 @@ defmodule CorroPortWeb.MessagesTable do
   end
   defp format_timestamp(_), do: "Unknown"
 
-  defp get_gossip_address do
-    config = Application.get_env(:corro_port, :node_config, %{
-      corrosion_gossip_port: 8787
-    })
-    gossip_port = config[:corrosion_gossip_port] || 8787
-    "127.0.0.1:#{gossip_port}"
-  end
 
 
 end

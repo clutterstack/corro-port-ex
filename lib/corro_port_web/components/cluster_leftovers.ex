@@ -1,6 +1,5 @@
 defmodule CorroPortWeb.DebugSection do
   use Phoenix.Component
-  import CorroPortWeb.CoreComponents
 
   def debug_section(assigns) do
     ~H"""

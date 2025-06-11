@@ -1,6 +1,5 @@
 defmodule CorroPortWeb.MembersTable do
   use Phoenix.Component
-  import CorroPortWeb.CoreComponents
 
   def cluster_members_table(assigns) do
     ~H"""
@@ -136,15 +135,6 @@ defmodule CorroPortWeb.MembersTable do
 
     "#{base_classes} #{state_class}"
   end
-
-  defp get_gossip_address do
-    config = Application.get_env(:corro_port, :node_config, %{
-      corrosion_gossip_port: 8787
-    })
-    gossip_port = config[:corrosion_gossip_port] || 8787
-    "127.0.0.1:#{gossip_port}"
-  end
-
 
 
 end

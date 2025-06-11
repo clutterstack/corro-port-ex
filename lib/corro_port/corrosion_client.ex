@@ -105,7 +105,7 @@ defmodule CorroPort.CorrosionClient do
   def parse_query_response(response) when is_binary(response) do
     lines = String.split(response, "\n")
 
-    {columns, rows} = Enum.reduce(lines, {nil, []}, fn line, {cols, rows_acc} ->
+    {_columns, rows} = Enum.reduce(lines, {nil, []}, fn line, {cols, rows_acc} ->
       case String.trim(line) do
         "" -> {cols, rows_acc}
         json_line ->

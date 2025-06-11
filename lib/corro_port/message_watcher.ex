@@ -176,7 +176,6 @@ end
       :exit, {:timeout, _} ->
         %{
           watch_id: nil,
-          subscription_active: false,
           reconnect_attempts: 0,
           status: :timeout,
           error: "GenServer call timed out"

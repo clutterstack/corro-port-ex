@@ -14,7 +14,6 @@ def cluster_header(assigns) do
     <:subtitle>
       <div class="flex items-center gap-4">
         <span>Monitoring cluster health and node connectivity</span>
-        <.simple_live_indicator subscription_status={@subscription_status} />
       </div>
     </:subtitle>
     <:actions>
@@ -31,22 +30,6 @@ def cluster_header(assigns) do
       </.button>
     </:actions>
   </.header>
-  """
-end
-
-def simple_live_indicator(assigns) do
-  ~H"""
-  <%= if is_subscription_working?(@subscription_status) do %>
-    <div class="flex items-center gap-1 text-success text-sm">
-      <div class="w-2 h-2 bg-success rounded-full animate-pulse"></div>
-      <span>Live Updates</span>
-    </div>
-  <% else %>
-    <div class="flex items-center gap-1 text-warning text-sm">
-      <div class="w-2 h-2 bg-warning rounded-full"></div>
-      <span>Auto-refresh</span>
-    </div>
-  <% end %>
   """
 end
   def error_alerts(assigns) do
@@ -331,101 +314,6 @@ def replication_status_card(assigns) do
   """
 end
 
-  def live_status_badge(assigns) do
-    ~H"""
-    <%= if is_subscription_working?(@subscription_status) do %>
-      <div class="flex items-center gap-2">
-        <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-        <span class="badge badge-success badge-sm">Live</span>
-      </div>
-    <% else %>
-      <%= case get_connection_status(@subscription_status) do %>
-        <% "Connecting" -> %>
-          <div class="flex items-center gap-2">
-            <div class="loading loading-spinner loading-xs"></div>
-            <span class="badge badge-warning badge-sm">Connecting</span>
-          </div>
-        <% "Reconnecting" -> %>
-          <div class="flex items-center gap-2">
-            <div class="loading loading-spinner loading-xs"></div>
-            <span class="badge badge-warning badge-sm">Reconnecting</span>
-          </div>
-        <% _ -> %>
-          <div class="flex items-center gap-2">
-            <div class="w-2 h-2 bg-orange-500 rounded-full"></div>
-            <span class="badge badge-warning badge-sm">Polling</span>
-          </div>
-      <% end %>
-    <% end %>
-    """
-  end
-
-  def fallback_info(assigns) do
-    ~H"""
-    <%= if is_subscription_working?(@subscription_status) do %>
-      Real-time updates active - data appears instantly
-    <% else %>
-      Using automatic refresh every <%= div(@refresh_interval, 1000) %> seconds
-    <% end %>
-    """
-  end
-
-  # Helper functions for subscription status
-
-  defp is_subscription_working?(subscription_status) do
-    subscription_status &&
-    subscription_status.subscription_active &&
-    subscription_status.status == :connected &&
-    has_recent_activity?(subscription_status)
-  end
-
-  defp has_recent_activity?(subscription_status) do
-    case subscription_status do
-      %{last_data_received: last_data} when not is_nil(last_data) ->
-        # Consider it active if we got data in the last 2 minutes
-        DateTime.diff(DateTime.utc_now(), last_data, :second) < 120
-      _ ->
-        false
-    end
-  end
-
-  defp format_last_activity(subscription_status) do
-    case subscription_status do
-      %{last_data_received: last_data} when not is_nil(last_data) ->
-        format_timestamp(last_data)
-      %{status: :connected} ->
-        "Connected (no data yet)"
-      %{status: :connecting} ->
-        "Connecting..."
-      _ ->
-        "No recent activity"
-    end
-  end
-
-  defp get_message_count(subscription_status) do
-    case subscription_status do
-      %{total_messages_processed: count} when is_integer(count) -> count
-      _ -> 0
-    end
-  end
-
-  defp format_data_freshness(last_updated) do
-    case last_updated do
-      %DateTime{} = dt -> format_timestamp(dt)
-      _ -> "Unknown"
-    end
-  end
-
-  defp get_connection_status(subscription_status) do
-    case subscription_status do
-      %{status: :connected} -> "Connected"
-      %{status: :connecting} -> "Connecting"
-      %{status: :reconnecting} -> "Reconnecting"
-      %{status: :error} -> "Error"
-      %{status: :failed} -> "Failed"
-      _ -> "Disconnected"
-    end
-  end
 
   defp format_timestamp(nil), do: "Unknown"
   defp format_timestamp(timestamp) when is_binary(timestamp) do
