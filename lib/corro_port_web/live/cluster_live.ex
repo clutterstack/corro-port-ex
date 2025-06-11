@@ -31,7 +31,6 @@ defmodule CorroPortWeb.ClusterLive do
       api_port: detected_port,
       phoenix_port: phoenix_port,
       refresh_interval: @refresh_interval,
-      subscription_status: %{subscription_active: false, status: :unknown},
       replication_status: nil
     })
 
@@ -72,7 +71,6 @@ defmodule CorroPortWeb.ClusterLive do
       |> assign(:local_info, updates.local_info)
       |> assign(:node_messages, updates.node_messages)
       |> assign(:error, updates.error)
-      |> assign(:subscription_status, updates.subscription_status)
       |> assign(:last_updated, updates.last_updated)
     {:noreply, socket}
   end
@@ -90,14 +88,6 @@ defmodule CorroPortWeb.ClusterLive do
         {:noreply, socket}
     end
   end
-
-  # def handle_event("check_subscription", _params, socket) do
-  #   Logger.warning("ClusterLive: 🔍 Check subscription button clicked")
-  #   status = CorroPortWeb.ClusterLive.DataFetcher.get_subscription_status_safe()
-  #   Logger.warning("ClusterLive: 📊 Subscription status: #{inspect(status)}")
-  #   socket = assign(socket, :subscription_status, status)
-  #   {:noreply, socket}
-  # end
 
   def handle_event("cleanup_messages", _params, socket) do
     Logger.warning("ClusterLive: 🧹 Cleanup messages button clicked")
@@ -141,7 +131,6 @@ defmodule CorroPortWeb.ClusterLive do
       local_info: updates.local_info,
       node_messages: updates.node_messages,
       error: updates.error,
-      subscription_status: updates.subscription_status,
       last_updated: updates.last_updated,
       # Preserve replication_status if it exists, otherwise keep it nil
       replication_status: socket.assigns[:replication_status]
@@ -216,12 +205,10 @@ defmodule CorroPortWeb.ClusterLive do
     ~H"""
     <div class="space-y-6">
       <ClusterCards.cluster_header
-        subscription_status={@subscription_status}
       />
 
       <ClusterCards.error_alerts
         error={@error}
-        subscription_status={@subscription_status}
       />
 
       <ClusterCards.status_cards
@@ -232,14 +219,12 @@ defmodule CorroPortWeb.ClusterLive do
         phoenix_port={@phoenix_port}
         api_port={@api_port}
         refresh_interval={@refresh_interval}
-        subscription_status={@subscription_status}
         replication_status={@replication_status}
         error={@error}
       />
 
       <MessagesTable.node_messages_table
         node_messages={@node_messages}
-        subscription_status={@subscription_status}
       />
 
       <MembersTable.cluster_members_table
@@ -250,7 +235,6 @@ defmodule CorroPortWeb.ClusterLive do
         cluster_info={@cluster_info}
         local_info={@local_info}
         node_messages={@node_messages}
-        subscription_status={@subscription_status}
       />
     </div>
     """

@@ -41,13 +41,6 @@ end
         <span><%= assigns[:error] %></span>
       </div>
       <% end %>
-
-      <%= if assigns[:subscription_status] && Map.get(assigns[:subscription_status], :status) == :error do %>
-      <div class="alert alert-warning">
-        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-        <span>Subscription Issue: <%= inspect Map.get(assigns[:subscription_status], :status) %></span>
-      </div>
-      <% end %>
     </div>
     """
   end

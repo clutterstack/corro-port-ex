@@ -112,10 +112,6 @@ defmodule CorroPortWeb.MembersTable do
           <h4 class="font-semibold mb-2">Node Messages:</h4>
           <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@node_messages, pretty: true) %></pre>
         </div>
-        <div :if={@subscription_status} class="mb-4">
-          <h4 class="font-semibold mb-2">Subscription Status:</h4>
-          <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@subscription_status, pretty: true) %></pre>
-        </div>
       </div>
     </details>
     """

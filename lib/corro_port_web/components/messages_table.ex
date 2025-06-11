@@ -7,9 +7,6 @@ defmodule CorroPortWeb.MessagesTable do
       <div class="card-body">
         <h3 class="card-title">
           Latest Messages from Each Node
-          <span :if={@subscription_status && @subscription_status.subscription_active} class="badge badge-success badge-sm">
-            Live
-          </span>
         </h3>
         <div class="overflow-x-auto">
           <table class="table table-zebra">
