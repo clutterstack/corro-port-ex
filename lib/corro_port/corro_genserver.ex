@@ -42,9 +42,11 @@ defmodule CorroPort.CorroGenserver do
 
     Logger.info("Starting Corrosion for #{node_id} with config: #{config_path}")
 
-    # Start Corrosion with the generated config
+    # Start Corrosion with the generated config - add :binary option for proper string output
     port_args = [@command, "agent", "-c", config_path]
-    port = Port.open({:spawn_executable, @wrapper}, args: port_args)
+    port = Port.open({:spawn_executable, @wrapper},
+      [:binary, :exit_status, args: port_args]  # :binary ensures we get strings, not char lists
+    )
     Port.monitor(port)
 
     {:ok, %{
@@ -82,8 +84,20 @@ defmodule CorroPort.CorroGenserver do
   end
 
   # This callback handles data incoming from Corrosion's STDOUT
-  def handle_info({port, {:data, text_line}}, %{port: port, node_id: node_id} = state) do
-    Logger.info("[#{node_id}] #{inspect(text_line)}")
+  # With :binary option, data should now be a proper string
+  def handle_info({port, {:data, text_line}}, %{port: port, node_id: node_id} = state) when is_binary(text_line) do
+    Logger.warning("[#{node_id}] #{text_line}")
+    {:noreply, %{state | latest_output: text_line}}
+  end
+
+  # Fallback for any remaining char list data (shouldn't happen with :binary)
+  def handle_info({port, {:data, data}}, %{port: port, node_id: node_id} = state) do
+    text_line = case data do
+      bytes when is_list(bytes) -> List.to_string(bytes)
+      other -> inspect(other)
+    end
+
+    Logger.warning("[#{node_id}] #{text_line}")
     {:noreply, %{state | latest_output: text_line}}
   end
 
