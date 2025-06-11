@@ -1,45 +1,55 @@
-defmodule CorroPortWeb.ClusterLive.Components do
+defmodule CorroPortWeb.Components do
   use Phoenix.Component
   import CorroPortWeb.CoreComponents
 
-  def cluster_header(assigns) do
-    ~H"""
-    <.header>
-      Corrosion Cluster Status
-      <:subtitle>
-        Monitoring cluster health and node connectivity
-        <span :if={@subscription_status && @subscription_status.subscription_active} class="badge badge-success badge-sm ml-2">
-          Live Updates
-        </span>
-        <span :if={@subscription_status && !@subscription_status.subscription_active} class="badge badge-warning badge-sm ml-2">
-          <%= subscription_status_text(@subscription_status.status) %>
-        </span>
-      </:subtitle>
-      <:actions>
-        <.button phx-click="refresh" variant="primary">
-          <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" />
-          Refresh
-        </.button>
-        <.button phx-click="check_subscription" class="btn btn-outline">
-          <.icon name="hero-signal" class="w-4 h-4 mr-2" />
-          Check Sub
-        </.button>
-        <.button
-          phx-click="send_message"
-          class="btn btn-secondary"
-        >
-          <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" />
-          Send Message
-        </.button>
-        <.button phx-click="cleanup_messages" class="btn btn-warning btn-sm">
-          <.icon name="hero-trash" class="w-4 h-4 mr-2" />
-          Cleanup Bad Data
-        </.button>
-      </:actions>
-    </.header>
-    """
-  end
+  @moduledoc """
+  Function components
 
+
+  """
+
+def cluster_header(assigns) do
+  ~H"""
+  <.header>
+    Corrosion Cluster Status
+    <:subtitle>
+      <div class="flex items-center gap-4">
+        <span>Monitoring cluster health and node connectivity</span>
+        <.simple_live_indicator subscription_status={@subscription_status} />
+      </div>
+    </:subtitle>
+    <:actions>
+      <.button phx-click="refresh" variant="primary">
+        <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" />
+        Refresh
+      </.button>
+      <.button
+        phx-click="send_message"
+        class="btn btn-secondary"
+      >
+        <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" />
+        Send Message
+      </.button>
+    </:actions>
+  </.header>
+  """
+end
+
+def simple_live_indicator(assigns) do
+  ~H"""
+  <%= if is_subscription_working?(@subscription_status) do %>
+    <div class="flex items-center gap-1 text-success text-sm">
+      <div class="w-2 h-2 bg-success rounded-full animate-pulse"></div>
+      <span>Live Updates</span>
+    </div>
+  <% else %>
+    <div class="flex items-center gap-1 text-warning text-sm">
+      <div class="w-2 h-2 bg-warning rounded-full"></div>
+      <span>Auto-refresh</span>
+    </div>
+  <% end %>
+  """
+end
   def error_alerts(assigns) do
     ~H"""
     <div>
@@ -110,9 +120,6 @@ def local_node_card(assigns) do
           <div><strong>Phoenix Port:</strong> <%= @phoenix_port %></div>
           <div><strong>API Port:</strong> <%= @api_port %></div>
           <div><strong>Gossip Address:</strong> <%= get_gossip_address() %></div>
-          <div><strong>Status:</strong>
-            <span class="badge badge-success badge-sm">Active</span>
-          </div>
           <%= if cluster_member = find_matching_member(@cluster_info, @local_info) do %>
             <div><strong>Member ID:</strong>
               <span class="font-mono text-xs">
@@ -193,35 +200,155 @@ def local_node_card(assigns) do
       <div class="card-body">
         <h3 class="card-title text-sm">Real-time Updates</h3>
         <div class="space-y-2 text-sm">
-          <div><strong>Auto Refresh:</strong> Every <%= div(@refresh_interval, 1000) %>s</div>
-          <div><strong>Subscription:</strong>
-            <span :if={@subscription_status && @subscription_status.subscription_active} class="badge badge-success badge-sm">
-              Active
-            </span>
-            <span :if={@subscription_status && !@subscription_status.subscription_active} class="badge badge-warning badge-sm">
-              <%= subscription_status_text(@subscription_status.status) %>
-            </span>
-            <span :if={!@subscription_status} class="badge badge-neutral badge-sm">
-              Unknown
+          <!-- Primary status indicator -->
+          <div class="flex items-center justify-between">
+            <span><strong>Status:</strong></span>
+            <.live_status_badge subscription_status={@subscription_status} />
+          </div>
+
+          <!-- Last activity (most important metric) -->
+          <div>
+            <strong>Last Activity:</strong>
+            <span class="text-xs">
+              <%= format_last_activity(@subscription_status) %>
             </span>
           </div>
-          <div :if={@subscription_status && @subscription_status.watch_id}>
-            <strong>Watch ID:</strong>
-            <span class="font-mono text-xs"><%= String.slice(@subscription_status.watch_id, 0, 8) %>...</span>
-          </div>
-          <div :if={@subscription_status && @subscription_status.reconnect_attempts > 0}>
-            <strong>Reconnects:</strong> <%= @subscription_status.reconnect_attempts %>
-          </div>
-          <div><strong>Last Check:</strong>
-            <span :if={@last_updated}>
-              <%= format_timestamp(@last_updated) %>
+
+          <!-- Message count (shows it's working) -->
+          <div>
+            <strong>Live Updates:</strong>
+            <span class="font-semibold">
+              <%= get_message_count(@subscription_status) %> received
             </span>
-            <span :if={!@last_updated}>Never</span>
           </div>
+
+          <!-- Data freshness -->
+          <div>
+            <strong>Data Age:</strong>
+            <span class="text-xs">
+              <%= format_data_freshness(@last_updated) %>
+            </span>
+          </div>
+
+          <!-- Fallback info -->
+          <div class="text-xs text-base-content/60">
+            <.fallback_info subscription_status={@subscription_status} refresh_interval={@refresh_interval} />
+          </div>
+
+          <!-- Debug details (collapsed) -->
+          <details class="text-xs">
+            <summary class="cursor-pointer text-base-content/70">Technical Details</summary>
+            <div class="mt-2 space-y-1 pl-2 border-l-2 border-base-300">
+              <div>Connection: <%= get_connection_status(@subscription_status) %></div>
+              <div :if={@subscription_status && @subscription_status.watch_id}>
+                Watch ID: <%= String.slice(@subscription_status.watch_id, 0, 8) %>...
+              </div>
+              <div :if={@subscription_status && @subscription_status.reconnect_attempts > 0}>
+                Reconnections: <%= @subscription_status.reconnect_attempts %>
+              </div>
+              <div>Auto-refresh: Every <%= div(@refresh_interval, 1000) %>s</div>
+            </div>
+          </details>
         </div>
       </div>
     </div>
     """
+  end
+
+  def live_status_badge(assigns) do
+    ~H"""
+    <%= if is_subscription_working?(@subscription_status) do %>
+      <div class="flex items-center gap-2">
+        <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+        <span class="badge badge-success badge-sm">Live</span>
+      </div>
+    <% else %>
+      <%= case get_connection_status(@subscription_status) do %>
+        <% "Connecting" -> %>
+          <div class="flex items-center gap-2">
+            <div class="loading loading-spinner loading-xs"></div>
+            <span class="badge badge-warning badge-sm">Connecting</span>
+          </div>
+        <% "Reconnecting" -> %>
+          <div class="flex items-center gap-2">
+            <div class="loading loading-spinner loading-xs"></div>
+            <span class="badge badge-warning badge-sm">Reconnecting</span>
+          </div>
+        <% _ -> %>
+          <div class="flex items-center gap-2">
+            <div class="w-2 h-2 bg-orange-500 rounded-full"></div>
+            <span class="badge badge-warning badge-sm">Polling</span>
+          </div>
+      <% end %>
+    <% end %>
+    """
+  end
+
+  def fallback_info(assigns) do
+    ~H"""
+    <%= if is_subscription_working?(@subscription_status) do %>
+      Real-time updates active - data appears instantly
+    <% else %>
+      Using automatic refresh every <%= div(@refresh_interval, 1000) %> seconds
+    <% end %>
+    """
+  end
+
+  # Helper functions for subscription status
+
+  defp is_subscription_working?(subscription_status) do
+    subscription_status &&
+    subscription_status.subscription_active &&
+    subscription_status.status == :connected &&
+    has_recent_activity?(subscription_status)
+  end
+
+  defp has_recent_activity?(subscription_status) do
+    case subscription_status do
+      %{last_data_received: last_data} when not is_nil(last_data) ->
+        # Consider it active if we got data in the last 2 minutes
+        DateTime.diff(DateTime.utc_now(), last_data, :second) < 120
+      _ ->
+        false
+    end
+  end
+
+  defp format_last_activity(subscription_status) do
+    case subscription_status do
+      %{last_data_received: last_data} when not is_nil(last_data) ->
+        format_timestamp(last_data)
+      %{status: :connected} ->
+        "Connected (no data yet)"
+      %{status: :connecting} ->
+        "Connecting..."
+      _ ->
+        "No recent activity"
+    end
+  end
+
+  defp get_message_count(subscription_status) do
+    case subscription_status do
+      %{total_messages_processed: count} when is_integer(count) -> count
+      _ -> 0
+    end
+  end
+
+  defp format_data_freshness(last_updated) do
+    case last_updated do
+      %DateTime{} = dt -> format_timestamp(dt)
+      _ -> "Unknown"
+    end
+  end
+
+  defp get_connection_status(subscription_status) do
+    case subscription_status do
+      %{status: :connected} -> "Connected"
+      %{status: :connecting} -> "Connecting"
+      %{status: :reconnecting} -> "Reconnecting"
+      %{status: :error} -> "Error"
+      %{status: :failed} -> "Failed"
+      _ -> "Disconnected"
+    end
   end
 
   def node_messages_table(assigns) do

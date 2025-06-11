@@ -4,7 +4,7 @@ defmodule CorroPortWeb.ClusterLive do
 
   alias CorroPort.{MessagesAPI, CorrosionClient}
   alias CorroPort.MessageWatcher
-  alias CorroPortWeb.ClusterLive.Components
+  alias CorroPortWeb.Components
 
   @refresh_interval 30_000  # 30 seconds instead of 5
 
