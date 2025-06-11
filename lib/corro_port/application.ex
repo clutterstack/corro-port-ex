@@ -19,6 +19,7 @@ defmodule CorroPort.Application do
       CorroPort.CorroGenserver,
       # Add the MessageWatcher to subscribe to Corrosion changes
       CorroPort.MessageWatcher,
+      CorroPort.AcknowledgmentTracker,
       # Start a worker by calling: CorroPort.Worker.start_link(arg)
       # {CorroPort.Worker, arg},
       # Start to serve requests, typically the last entry
