@@ -5,6 +5,8 @@ defmodule CorroPort.MessageWatcher do
   This GenServer manages a long-running HTTP streaming connection to Corrosion's
   subscription endpoint. The stream stays open indefinitely and sends us updates
   as they happen.
+
+  Now also handles acknowledgment sending when receiving messages from other nodes.
   """
 
   use GenServer
@@ -30,7 +32,10 @@ defmodule CorroPort.MessageWatcher do
       total_messages_processed: 0,
       connection_established_at: nil,
       columns: nil,
-      initial_state_received: false
+      initial_state_received: false,
+      # Track acknowledgments sent
+      acknowledgments_sent: 0,
+      last_acknowledgment_sent: nil
     }}
   end
 
@@ -149,7 +154,10 @@ defmodule CorroPort.MessageWatcher do
       uptime_seconds: calculate_uptime(state.connection_established_at),
       columns: state.columns,
       initial_state_received: state.initial_state_received,
-      stream_pid: state.stream_pid
+      stream_pid: state.stream_pid,
+      # New acknowledgment stats
+      acknowledgments_sent: state.acknowledgments_sent,
+      last_acknowledgment_sent: state.last_acknowledgment_sent
     }
     {:reply, status, state}
   end
@@ -304,18 +312,27 @@ defmodule CorroPort.MessageWatcher do
         if state.initial_state_received do
           # This is a new row after initial state was loaded
           broadcast_event({:new_message, message_map})
+          # NEW: Handle acknowledgment for new messages
+          handle_new_message_acknowledgment(message_map, state)
         else
           # This is part of the initial state dump
           broadcast_event({:initial_row, message_map})
+          state
         end
-
-        %{state | total_messages_processed: state.total_messages_processed + 1}
 
       %{"change" => [change_type, _change_id, values, _version]} when not is_nil(state.columns) ->
         message_map = build_message_map(values, state.columns)
         Logger.warning("MessageWatcher: 🔄 Change #{change_type}: #{inspect(message_map)}")
         broadcast_event({:message_change, String.upcase(change_type), message_map})
-        %{state | total_messages_processed: state.total_messages_processed + 1}
+
+        new_state = %{state | total_messages_processed: state.total_messages_processed + 1}
+
+        # NEW: Handle acknowledgment for INSERT changes (new messages)
+        if String.upcase(change_type) == "INSERT" do
+          handle_new_message_acknowledgment(message_map, new_state)
+        else
+          new_state
+        end
 
       %{"row" => _} ->
         Logger.warning("MessageWatcher: ⚠️ Got row data but no columns stored yet")
@@ -332,6 +349,61 @@ defmodule CorroPort.MessageWatcher do
       other ->
         Logger.warning("MessageWatcher: ❓ Unhandled message event: #{inspect(other)}")
         state
+    end
+  end
+
+  # NEW: Handle acknowledgment logic for new messages
+  defp handle_new_message_acknowledgment(message_map, state) do
+    if map_size(message_map) == 0 do
+      Logger.warning("MessageWatcher: ⚠️ Received empty message map, skipping acknowledgment handling")
+      state
+    else
+      local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
+      message_node_id = Map.get(message_map, "node_id")
+      message_pk = Map.get(message_map, "pk")
+
+      case {message_node_id, message_pk} do
+        {nil, _} ->
+          Logger.warning("MessageWatcher: ⚠️ Message missing node_id, skipping acknowledgment")
+          state
+
+        {_, nil} ->
+          Logger.warning("MessageWatcher: ⚠️ Message missing pk, skipping acknowledgment")
+          state
+
+        {^local_node_id, _} ->
+          # This is from our own node - don't send acknowledgment to ourselves
+          Logger.debug("MessageWatcher: 📝 Received our own message #{message_pk}, no acknowledgment needed")
+          state
+
+        {other_node_id, pk} ->
+          # This is from another node - send acknowledgment
+          Logger.info("MessageWatcher: 🤝 Sending acknowledgment to #{other_node_id} for message #{pk}")
+
+          # Create message data for the acknowledgment sender
+          message_data = %{
+            pk: pk,
+            timestamp: Map.get(message_map, "timestamp"),
+            node_id: other_node_id
+          }
+
+          # Send acknowledgment in a separate process to avoid blocking the MessageWatcher
+          spawn(fn ->
+            case CorroPort.AcknowledgmentSender.send_acknowledgment(other_node_id, message_data) do
+              :ok ->
+                Logger.info("MessageWatcher: ✅ Successfully sent acknowledgment to #{other_node_id}")
+              {:error, reason} ->
+                Logger.warning("MessageWatcher: ❌ Failed to send acknowledgment to #{other_node_id}: #{inspect(reason)}")
+            end
+          end)
+
+          # Update state with acknowledgment stats
+          %{state |
+            total_messages_processed: state.total_messages_processed + 1,
+            acknowledgments_sent: state.acknowledgments_sent + 1,
+            last_acknowledgment_sent: DateTime.utc_now()
+          }
+      end
     end
   end
 
