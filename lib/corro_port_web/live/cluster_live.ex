@@ -5,7 +5,7 @@ defmodule CorroPortWeb.ClusterLive do
   alias CorroPort.{MessageWatcher, CorrosionClient}
   alias CorroPortWeb.{ClusterCards, MembersTable, MessagesTable, DebugSection}
 
-  @refresh_interval 30_000  # 30 seconds instead of 5
+  @refresh_interval 300_000  # 5 minutes to avoid interference with testing
 
   def mount(_params, _session, socket) do
     Logger.warning("ClusterLive: Mounting...")
@@ -37,17 +37,37 @@ defmodule CorroPortWeb.ClusterLive do
     {:ok, fetch_cluster_data(socket)}
   end
 
-  # Handle real-time message updates
-  def handle_info({:new_message, values}, socket) do
-    Logger.warning("ClusterLive: 📨 Received new message via subscription: #{inspect(values)}")
-    socket = fetch_node_messages(socket)
-    {:noreply, socket}
+  # Handle real-time message updates - now with properly formatted message maps
+  def handle_info({:new_message, message_map}, socket) do
+    Logger.warning("ClusterLive: 📨 Received new message via subscription: #{inspect(message_map)}")
+
+    if map_size(message_map) == 0 do
+      Logger.warning("ClusterLive: ⚠️ Received empty message map, skipping update")
+      {:noreply, socket}
+    else
+      socket = update_node_messages_with_new_message(socket, message_map)
+      {:noreply, socket}
+    end
   end
 
-  def handle_info({:message_change, change_type, values}, socket) do
-    Logger.warning("ClusterLive: 🔄 Received message #{change_type} via subscription: #{inspect(values)}")
-    socket = fetch_node_messages(socket)
-    {:noreply, socket}
+  def handle_info({:message_change, change_type, message_map}, socket) do
+    Logger.warning("ClusterLive: 🔄 Received message #{change_type} via subscription: #{inspect(message_map)}")
+
+    if map_size(message_map) == 0 do
+      Logger.warning("ClusterLive: ⚠️ Received empty message map for #{change_type}, skipping update")
+      {:noreply, socket}
+    else
+      socket = case change_type do
+        "DELETE" -> remove_message_from_state(socket, message_map)
+        "UPDATE" -> update_message_in_state(socket, message_map)
+        "INSERT" -> update_node_messages_with_new_message(socket, message_map)
+        _ ->
+          Logger.warning("ClusterLive: ❓ Unknown change type: #{change_type}")
+          socket
+      end
+
+      {:noreply, socket}
+    end
   end
 
   def handle_info(:refresh, socket) do
@@ -121,7 +141,87 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, socket}
   end
 
-  # Private functions
+  # Private functions for efficient message state updates
+
+  defp update_node_messages_with_new_message(socket, new_message) do
+    current_messages = socket.assigns.node_messages
+    node_id = Map.get(new_message, "node_id")
+
+    if is_nil(node_id) do
+      Logger.warning("ClusterLive: ⚠️ Received message without node_id: #{inspect(new_message)}")
+      socket
+    else
+      Logger.warning("ClusterLive: 📝 Updating messages for node: #{node_id}")
+
+      # Since we want latest messages per node, replace the existing message for this node
+      # or add it if it doesn't exist
+      updated_messages =
+        current_messages
+        |> Enum.reject(fn msg -> Map.get(msg, "node_id") == node_id end)
+        |> List.insert_at(0, new_message)  # Insert at beginning (most recent first)
+        |> Enum.sort_by(fn msg ->
+          case Map.get(msg, "timestamp") do
+            nil -> ""
+            ts -> ts
+          end
+        end, :desc)  # Sort by timestamp descending
+
+      Logger.warning("ClusterLive: 📊 Updated node_messages: #{length(current_messages)} -> #{length(updated_messages)} messages")
+      assign(socket, :node_messages, updated_messages)
+    end
+  end
+
+  defp update_message_in_state(socket, updated_message) do
+    current_messages = socket.assigns.node_messages
+    message_pk = Map.get(updated_message, "pk")
+
+    if is_nil(message_pk) do
+      Logger.warning("ClusterLive: ⚠️ Received message update without pk: #{inspect(updated_message)}")
+      socket
+    else
+      Logger.warning("ClusterLive: 📝 Updating message with pk: #{message_pk}")
+
+      updated_messages =
+        Enum.map(current_messages, fn msg ->
+          if Map.get(msg, "pk") == message_pk do
+            updated_message
+          else
+            msg
+          end
+        end)
+
+      assign(socket, :node_messages, updated_messages)
+    end
+  end
+
+  defp remove_message_from_state(socket, deleted_message) do
+    current_messages = socket.assigns.node_messages
+    message_pk = Map.get(deleted_message, "pk")
+
+    if is_nil(message_pk) do
+      Logger.warning("ClusterLive: ⚠️ Received message deletion without pk: #{inspect(deleted_message)}")
+      socket
+    else
+      Logger.warning("ClusterLive: 🗑️ Removing message with pk: #{message_pk}")
+
+      updated_messages =
+        Enum.reject(current_messages, fn msg ->
+          Map.get(msg, "pk") == message_pk
+        end)
+
+      Logger.warning("ClusterLive: 📊 Removed message: #{length(current_messages)} -> #{length(updated_messages)} messages")
+      assign(socket, :node_messages, updated_messages)
+    end
+  end
+
+  # Fallback function for when we can't efficiently update and need to refetch
+  defp fetch_node_messages(socket) do
+    Logger.warning("ClusterLive: 📥 Fetching updated node messages from database")
+    new_messages = CorroPortWeb.ClusterLive.DataFetcher.fetch_node_messages_data(socket.assigns.api_port)
+    Logger.warning("ClusterLive: 📥 Got #{length(new_messages)} messages from database")
+    assign(socket, :node_messages, new_messages)
+  end
+
   defp fetch_cluster_data(socket) do
     updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data(socket)
 
@@ -135,13 +235,6 @@ defmodule CorroPortWeb.ClusterLive do
       # Preserve replication_status if it exists, otherwise keep it nil
       replication_status: socket.assigns[:replication_status]
     })
-  end
-
-  defp fetch_node_messages(socket) do
-    Logger.warning("ClusterLive: 📥 Fetching updated node messages")
-    new_messages = CorroPortWeb.ClusterLive.DataFetcher.fetch_node_messages_data(socket.assigns.api_port)
-    Logger.warning("ClusterLive: 📥 Got #{length(new_messages)} messages")
-    assign(socket, :node_messages, new_messages)
   end
 
   defp schedule_refresh do
