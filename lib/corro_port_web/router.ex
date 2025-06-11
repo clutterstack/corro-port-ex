@@ -19,7 +19,6 @@ defmodule CorroPortWeb.Router do
 
     get "/", PageController, :home
     live "/cluster", ClusterLive
-    live "/subscription-debug", SubscriptionDebugLive
   end
 
   # Other scopes may use custom stacks.

@@ -231,25 +231,6 @@ def local_node_card(assigns) do
             Not Responding
           </span>
         </div>
-
-        <%= if cluster_member = find_matching_member(@cluster_info, @local_info) do %>
-          <div class="divider my-1"></div>
-          <div><strong>Member ID:</strong>
-            <span class="font-mono text-xs">
-              <%= format_member_id(cluster_member["member_id"]) %>
-            </span>
-          </div>
-          <div class="flex items-center justify-between">
-            <strong>Cluster State:</strong>
-            <span class={member_state_badge_class(cluster_member["member_state"])}>
-              <%= cluster_member["member_state"] %>
-            </span>
-          </div>
-        <% else %>
-          <div class="text-xs text-base-content/70">
-            Not found in cluster members (may be seed node)
-          </div>
-        <% end %>
       </div>
       <div :if={!@local_info && !@error} class="loading loading-spinner loading-sm"></div>
     </div>
