@@ -11,8 +11,11 @@ defmodule CorroPortWeb.ClusterLive.MessageHandler do
         Logger.info("Successfully sent message: #{inspect(result)}")
 
         # NEW: Start tracking this message for acknowledgments
+        # The MessagesAPI.insert_message returns %{node_id, message, sequence, timestamp}
+        # but doesn't include pk, so we construct it the same way the SQL does
+        message_pk = "#{node_id}_#{result.sequence}"
         message_data = %{
-          pk: result.pk || "#{node_id}_#{result.sequence}",
+          pk: message_pk,
           timestamp: result.timestamp,
           node_id: result.node_id
         }
