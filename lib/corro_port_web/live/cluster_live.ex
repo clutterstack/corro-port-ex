@@ -4,7 +4,7 @@ defmodule CorroPortWeb.ClusterLive do
 
   alias CorroPort.{MessagesAPI, CorrosionClient}
   alias CorroPort.MessageWatcher
-  alias CorroPortWeb.Components
+  alias CorroPortWeb.{Components, ClusterCards, MembersTable, MessagesTable, DebugSection}
 
   @refresh_interval 30_000  # 30 seconds instead of 5
 
@@ -216,16 +216,16 @@ defmodule CorroPortWeb.ClusterLive do
 
     ~H"""
     <div class="space-y-6">
-      <Components.cluster_header
+      <ClusterCards.cluster_header
         subscription_status={@subscription_status}
       />
 
-      <Components.error_alerts
+      <ClusterCards.error_alerts
         error={@error}
         subscription_status={@subscription_status}
       />
 
-      <Components.status_cards
+      <ClusterCards.status_cards
         local_info={@local_info}
         cluster_info={@cluster_info}
         node_messages={@node_messages}
@@ -238,16 +238,16 @@ defmodule CorroPortWeb.ClusterLive do
         error={@error}
       />
 
-      <Components.node_messages_table
+      <MessagesTable.node_messages_table
         node_messages={@node_messages}
         subscription_status={@subscription_status}
       />
 
-      <Components.cluster_members_table
+      <MembersTable.cluster_members_table
         cluster_info={@cluster_info}
       />
 
-      <Components.debug_section
+      <DebugSection.debug_section
         cluster_info={@cluster_info}
         local_info={@local_info}
         node_messages={@node_messages}

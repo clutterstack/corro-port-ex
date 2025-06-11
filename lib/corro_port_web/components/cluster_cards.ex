@@ -1,10 +1,9 @@
-defmodule CorroPortWeb.Components do
+defmodule CorroPortWeb.ClusterCards do
   use Phoenix.Component
   import CorroPortWeb.CoreComponents
 
   @moduledoc """
-  Function components
-
+  Function components to illustrate Corrosion cluster status.
 
   """
 
@@ -282,66 +281,55 @@ def local_node_card(assigns) do
   """
 end
 
-  def subscription_status_card(assigns) do
-    ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body">
-        <h3 class="card-title text-sm">Real-time Updates</h3>
-        <div class="space-y-2 text-sm">
-          <!-- Primary status indicator -->
-          <div class="flex items-center justify-between">
-            <span><strong>Status:</strong></span>
-            <.live_status_badge subscription_status={@subscription_status} />
-          </div>
+defp member_state_badge_class(state) do
+    base_classes = "badge badge-sm"
 
-          <!-- Last activity (most important metric) -->
-          <div>
-            <strong>Last Activity:</strong>
-            <span class="text-xs">
-              <%= format_last_activity(@subscription_status) %>
+    state_class = case state do
+      "Alive" -> "badge-success"
+      "Suspect" -> "badge-warning"
+      "Down" -> "badge-error"
+      _ -> "badge-neutral"
+    end
+
+    "#{base_classes} #{state_class}"
+  end
+
+def replication_status_card(assigns) do
+  ~H"""
+  <div class="card bg-base-200">
+    <div class="card-body">
+      <h3 class="card-title text-sm flex items-center">
+        Replication Status
+        <.button
+          phx-click="check_replication"
+          class="btn btn-xs btn-outline ml-2"
+        >
+          Check
+        </.button>
+      </h3>
+      <div class="space-y-2 text-sm">
+        <div :if={@replication_status}>
+          <div><strong>Last Check:</strong> <%= format_timestamp(@replication_status.last_check) %></div>
+          <div><strong>Message Count:</strong> <%= @replication_status.total_messages || "Unknown" %></div>
+          <div><strong>Sequence Gaps:</strong>
+            <span class={if @replication_status.has_gaps, do: "text-warning", else: "text-success"}>
+              <%= if @replication_status.has_gaps, do: "⚠️ Found gaps", else: "✅ None" %>
             </span>
           </div>
-
-          <!-- Message count (shows it's working) -->
-          <div>
-            <strong>Live Updates:</strong>
-            <span class="font-semibold">
-              <%= get_message_count(@subscription_status) %> received
+          <div><strong>Conflicts:</strong>
+            <span class={if @replication_status.conflicts > 0, do: "text-error", else: "text-success"}>
+              <%= @replication_status.conflicts || 0 %>
             </span>
           </div>
-
-          <!-- Data freshness -->
-          <div>
-            <strong>Data Age:</strong>
-            <span class="text-xs">
-              <%= format_data_freshness(@last_updated) %>
-            </span>
-          </div>
-
-          <!-- Fallback info -->
-          <div class="text-xs text-base-content/60">
-            <.fallback_info subscription_status={@subscription_status} refresh_interval={@refresh_interval} />
-          </div>
-
-          <!-- Debug details (collapsed) -->
-          <details class="text-xs">
-            <summary class="cursor-pointer text-base-content/70">Technical Details</summary>
-            <div class="mt-2 space-y-1 pl-2 border-l-2 border-base-300">
-              <div>Connection: <%= get_connection_status(@subscription_status) %></div>
-              <div :if={@subscription_status && @subscription_status.watch_id}>
-                Watch ID: <%= String.slice(@subscription_status.watch_id, 0, 8) %>...
-              </div>
-              <div :if={@subscription_status && @subscription_status.reconnect_attempts > 0}>
-                Reconnections: <%= @subscription_status.reconnect_attempts %>
-              </div>
-              <div>Auto-refresh: Every <%= div(@refresh_interval, 1000) %>s</div>
-            </div>
-          </details>
+        </div>
+        <div :if={!@replication_status} class="text-base-content/70">
+          Click "Check" to analyze replication state
         </div>
       </div>
     </div>
-    """
-  end
+  </div>
+  """
+end
 
   def live_status_badge(assigns) do
     ~H"""
@@ -439,195 +427,6 @@ end
     end
   end
 
-  def node_messages_table(assigns) do
-    ~H"""
-    <div :if={@node_messages != []} class="card bg-base-100">
-      <div class="card-body">
-        <h3 class="card-title">
-          Latest Messages from Each Node
-          <span :if={@subscription_status && @subscription_status.subscription_active} class="badge badge-success badge-sm">
-            Live
-          </span>
-        </h3>
-        <div class="overflow-x-auto">
-          <table class="table table-zebra">
-            <thead>
-              <tr>
-                <th>Node ID</th>
-                <th>Message</th>
-                <th>Timestamp</th>
-                <th>Sequence</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr :for={message <- @node_messages}>
-                <td class="font-mono text-sm">
-                  <%= Map.get(message, "node_id", "Unknown") %>
-                </td>
-                <td class="max-w-md truncate">
-                  <%= Map.get(message, "message", "") %>
-                </td>
-                <td class="text-xs">
-                  <%= format_timestamp(Map.get(message, "timestamp")) %>
-                </td>
-                <td class="font-mono text-xs">
-                  <%= Map.get(message, "sequence", "") %>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-    """
-  end
-
-  def cluster_members_table(assigns) do
-    ~H"""
-    <div :if={@cluster_info} class="card bg-base-100">
-      <div class="card-body">
-        <h3 class="card-title">Cluster Members</h3>
-
-        <div :if={Map.get(@cluster_info, "members", []) != []} class="overflow-x-auto">
-          <table class="table table-zebra">
-            <thead>
-              <tr>
-                <th>Node ID</th>
-                <th>Address</th>
-                <th>State</th>
-                <th>Incarnation</th>
-                <th>Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr :for={member <- Map.get(@cluster_info, "members", [])}>
-                <.cluster_member_row member={member} />
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <.tracked_peers_section cluster_info={@cluster_info} />
-
-        <div :if={Map.get(@cluster_info, "members", []) == [] && Map.get(@cluster_info, "tracked_peers", []) == []}>
-          <p class="text-base-content/70">No cluster members or peers found. This might be a single-node setup or the cluster is still forming.</p>
-        </div>
-      </div>
-    </div>
-    """
-  end
-
-  def cluster_member_row(assigns) do
-    ~H"""
-    <%= if Map.has_key?(@member, "parse_error") do %>
-      <td colspan="5" class="text-error">
-        Parse Error: <%= Map.get(@member, "parse_error") %>
-        <details class="mt-1">
-          <summary class="text-xs cursor-pointer">Raw data</summary>
-          <pre class="text-xs mt-1"><%= inspect(@member, pretty: true) %></pre>
-        </details>
-      </td>
-    <% else %>
-      <td class="font-mono text-xs">
-        <%= case Map.get(@member, "member_id") do
-          nil -> "Unknown"
-          id -> String.slice(id, 0, 8) <> "..."
-        end %>
-      </td>
-      <td class="font-mono text-sm">
-        <%= Map.get(@member, "member_addr", "Unknown") %>
-      </td>
-      <td>
-        <span class={member_state_badge_class(Map.get(@member, "member_state"))}>
-          <%= Map.get(@member, "member_state", "Unknown") %>
-        </span>
-      </td>
-      <td><%= Map.get(@member, "member_incarnation", "?") %></td>
-      <td class="text-xs">
-        <%= CorroPort.ClusterAPI.format_corrosion_timestamp(Map.get(@member, "member_ts")) %>
-      </td>
-    <% end %>
-    """
-  end
-
-  def tracked_peers_section(assigns) do
-    ~H"""
-    <div :if={Map.get(@cluster_info, "tracked_peers", []) != []} class="mt-6">
-      <h4 class="font-semibold mb-2">Tracked Peers</h4>
-      <div class="overflow-x-auto">
-        <table class="table table-zebra">
-          <thead>
-            <tr>
-              <th>Peer Info</th>
-              <th>Details</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr :for={peer <- Map.get(@cluster_info, "tracked_peers", [])}>
-              <td class="font-mono text-sm">
-                <%= inspect(peer) |> String.slice(0, 50) %>...
-              </td>
-              <td><%= inspect(peer) %></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-    """
-  end
-
-  def debug_section(assigns) do
-    ~H"""
-    <details class="collapse collapse-arrow bg-base-200" :if={@cluster_info || @local_info}>
-      <summary class="collapse-title text-sm font-medium">Raw API Response (Debug)</summary>
-      <div class="collapse-content">
-        <div :if={@cluster_info} class="mb-4">
-          <h4 class="font-semibold mb-2">Cluster Info:</h4>
-          <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@cluster_info, pretty: true) %></pre>
-        </div>
-        <div :if={@local_info} class="mb-4">
-          <h4 class="font-semibold mb-2">Local Info:</h4>
-          <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@local_info, pretty: true) %></pre>
-        </div>
-        <div :if={@node_messages != []} class="mb-4">
-          <h4 class="font-semibold mb-2">Node Messages:</h4>
-          <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@node_messages, pretty: true) %></pre>
-        </div>
-        <div :if={@subscription_status} class="mb-4">
-          <h4 class="font-semibold mb-2">Subscription Status:</h4>
-          <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@subscription_status, pretty: true) %></pre>
-        </div>
-      </div>
-    </details>
-    """
-  end
-
-  # Helper functions
-  defp subscription_status_text(status) do
-    case status do
-      :timeout -> "Timeout"
-      :not_started -> "Not Started"
-      :error -> "Error"
-      :connecting -> "Connecting"
-      :reconnecting -> "Reconnecting"
-      :failed -> "Failed"
-      _ -> "Inactive"
-    end
-  end
-
-  defp member_state_badge_class(state) do
-    base_classes = "badge badge-sm"
-
-    state_class = case state do
-      "Alive" -> "badge-success"
-      "Suspect" -> "badge-warning"
-      "Down" -> "badge-error"
-      _ -> "badge-neutral"
-    end
-
-    "#{base_classes} #{state_class}"
-  end
-
   defp format_timestamp(nil), do: "Unknown"
   defp format_timestamp(timestamp) when is_binary(timestamp) do
     case DateTime.from_iso8601(timestamp) do
@@ -649,41 +448,6 @@ end
   end
 
 
-  def replication_status_card(assigns) do
-  ~H"""
-  <div class="card bg-base-200">
-    <div class="card-body">
-      <h3 class="card-title text-sm flex items-center">
-        Replication Status
-        <.button
-          phx-click="check_replication"
-          class="btn btn-xs btn-outline ml-2"
-        >
-          Check
-        </.button>
-      </h3>
-      <div class="space-y-2 text-sm">
-        <div :if={@replication_status}>
-          <div><strong>Last Check:</strong> <%= format_timestamp(@replication_status.last_check) %></div>
-          <div><strong>Message Count:</strong> <%= @replication_status.total_messages || "Unknown" %></div>
-          <div><strong>Sequence Gaps:</strong>
-            <span class={if @replication_status.has_gaps, do: "text-warning", else: "text-success"}>
-              <%= if @replication_status.has_gaps, do: "⚠️ Found gaps", else: "✅ None" %>
-            </span>
-          </div>
-          <div><strong>Conflicts:</strong>
-            <span class={if @replication_status.conflicts > 0, do: "text-error", else: "text-success"}>
-              <%= @replication_status.conflicts || 0 %>
-            </span>
-          </div>
-        </div>
-        <div :if={!@replication_status} class="text-base-content/70">
-          Click "Check" to analyze replication state
-        </div>
-      </div>
-    </div>
-  </div>
-  """
-end
+
 
 end
