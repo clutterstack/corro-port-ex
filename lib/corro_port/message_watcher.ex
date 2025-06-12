@@ -325,9 +325,16 @@ end
   defp handle_message_event(data, state) do
     case data do
       %{"eoq" => _time} ->
-        Logger.warning("MessageWatcher: 🏁 End of initial query - subscription is now live")
-        broadcast_event({:subscription_ready})
-        %{state | initial_state_received: true}
+  Logger.warning("MessageWatcher: 🏁 End of initial query - subscription is now live")
+  broadcast_event({:subscription_ready})
+
+  # FIX: When we receive eoq, that means the subscription is successfully established
+  %{state |
+    initial_state_received: true,
+    status: :connected,  # ← Set to connected when we get eoq
+    connection_established_at: DateTime.utc_now(),  # ← Track when subscription became active
+    reconnect_attempts: 0  # ← Reset reconnect counter on successful connection
+  }
 
       %{"columns" => columns} ->
         Logger.warning("MessageWatcher: 📊 Got column names: #{inspect(columns)}")

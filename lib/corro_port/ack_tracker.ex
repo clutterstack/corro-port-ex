@@ -191,17 +191,54 @@ defmodule CorroPort.AcknowledgmentTracker do
   end
 
   defp calculate_expected_nodes do
-    # For now, use a simple approach: assume nodes 1-3 exist, exclude ourselves
-    local_node_config = Application.get_env(:corro_port, :node_config, %{node_id: 1})
-    local_node_id = local_node_config[:node_id] || 1
+  # Get the local node's configuration
+  local_node_config = Application.get_env(:corro_port, :node_config, %{node_id: 1})
+  local_node_id = local_node_config[:node_id] || 1
+  local_node_string = "node#{local_node_id}"
 
-    # Generate expected node IDs (exclude our own node)
-    all_node_ids = [1, 2, 3]
-    expected_node_ids = Enum.reject(all_node_ids, fn id -> id == local_node_id end)
+  # Try to get cluster members to determine expected nodes dynamically
+  case CorroPort.ClusterAPI.get_cluster_members() do
+    {:ok, members} ->
+      # Extract active nodes from cluster members
+      active_ports =
+        members
+        |> Enum.filter(fn member ->
+          Map.get(member, "member_state") == "Alive"
+        end)
+        |> Enum.map(fn member ->
+          case Map.get(member, "member_addr") do
+            addr when is_binary(addr) ->
+              case String.split(addr, ":") do
+                [_ip, port_str] ->
+                  case Integer.parse(port_str) do
+                    {port, _} -> port
+                    _ -> nil
+                  end
+                _ -> nil
+              end
+            _ -> nil
+          end
+        end)
+        |> Enum.reject(&is_nil/1)
 
-    # Convert to node_id strings like "node1", "node2" etc
-    Enum.map(expected_node_ids, fn id -> "node#{id}" end)
+      # Convert gossip ports to node IDs (8787 -> node1, 8788 -> node2, etc)
+      expected_node_ids =
+        active_ports
+        |> Enum.map(fn port -> "node#{port - 8786}" end)
+        |> Enum.reject(fn node_id -> node_id == local_node_string end)  # Exclude ourselves
+        |> Enum.sort()
+
+      Logger.debug("AcknowledgmentTracker: Calculated expected nodes from cluster: #{inspect(expected_node_ids)}")
+      expected_node_ids
+
+    {:error, reason} ->
+      Logger.warning("AcknowledgmentTracker: Could not get cluster members (#{inspect(reason)}), falling back to static list")
+      # Fallback to the old hardcoded approach
+      all_node_ids = [1, 2, 3, 4]  # Include node 4 in fallback
+      expected_node_ids = Enum.reject(all_node_ids, fn id -> id == local_node_id end)
+      Enum.map(expected_node_ids, fn id -> "node#{id}" end)
   end
+end
 
   defp broadcast_update do
     status = build_status()

@@ -166,20 +166,19 @@ end
   def handle_event("send_message", _params, socket) do
   Logger.warning("ClusterLive: 📤 Send message button clicked")
 
-  # Use the existing MessageHandler to send the message
   case CorroPortWeb.ClusterLive.MessageHandler.send_message(socket.assigns.api_port) do
-    {:ok, success_message, message_details} ->
-      Logger.warning("ClusterLive: ✅ Message sent successfully: #{inspect(message_details)}")
+    {:ok, success_message, message_data} ->
+      Logger.warning("ClusterLive: ✅ Message sent successfully: #{inspect(message_data)}")
 
-      # Track this message for acknowledgment monitoring
+      # Track this message for acknowledgment monitoring using the returned data
       track_message_data = %{
-        pk: message_details.pk,
-        timestamp: message_details.timestamp,
-        node_id: message_details.node_id
+        pk: message_data.pk,
+        timestamp: message_data.timestamp,
+        node_id: message_data.node_id
       }
 
       CorroPort.AcknowledgmentTracker.track_latest_message(track_message_data)
-      Logger.warning("ClusterLive: Now tracking message #{message_details.pk} for acknowledgments")
+      Logger.warning("ClusterLive: Now tracking message #{message_data.pk} for acknowledgments")
 
       socket = put_flash(socket, :info, success_message)
       {:noreply, socket}
