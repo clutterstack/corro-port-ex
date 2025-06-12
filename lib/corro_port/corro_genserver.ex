@@ -43,10 +43,15 @@ defmodule CorroPort.CorroGenserver do
     Logger.info("Starting Corrosion for #{node_id} with config: #{config_path}")
 
     # Start Corrosion with the generated config - add :binary option for proper string output
-    port_args = [@command, "agent", "-c", config_path]
-    port = Port.open({:spawn_executable, @wrapper},
-      [:binary, :exit_status, args: port_args]  # :binary ensures we get strings, not char lists
-    )
+    # If using a wrapper to make sure Corrosion stops when we do:
+    # port_args = [@command, "agent", "-c", config_path]
+    # port = Port.open({:spawn_executable, @wrapper},
+    #   [:binary, :exit_status, args: port_args]  # :binary ensures we get strings, not char lists
+    # )
+
+    # If no wrapper:
+    port = Port.open({:spawn, "#{@command} agent -c #{config_path}"}, [:binary, :exit_status])
+
     Port.monitor(port)
 
     {:ok, %{

@@ -8,16 +8,16 @@ alias CorroPortWeb.{ClusterCards, MembersTable, MessagesTable, DebugSection, Ack
   @refresh_interval 300_000  # 5 minutes to avoid interference with testing
 
  def mount(_params, _session, socket) do
-  Logger.warning("ClusterLive: Mounting...")
+  # Logger.debug("ClusterLive: Mounting...")
 
   if connected?(socket) do
-    Logger.warning("ClusterLive: Connected - subscribing to PubSub topics")
+    # Logger.debug("ClusterLive: Connected - subscribing to PubSub topics")
     Phoenix.PubSub.subscribe(CorroPort.PubSub, MessageWatcher.subscription_topic())
     # NEW: Subscribe to acknowledgment updates
     Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroPort.AcknowledgmentTracker.get_pubsub_topic())
     schedule_refresh()
   else
-    Logger.warning("ClusterLive: Not connected yet (static render)")
+    # Logger.debug("ClusterLive: Not connected yet (static render)")
   end
 
   detected_port = CorrosionClient.detect_api_port()
@@ -49,25 +49,25 @@ end
 
   # Handle subscription metadata
   def handle_info({:columns_received, columns}, socket) do
-    Logger.warning("ClusterLive: 📊 Received column metadata: #{inspect(columns)}")
+    # Logger.debug("ClusterLive: 📊 Received column metadata: #{inspect(columns)}")
     socket = assign(socket, :subscription_columns, columns)
     {:noreply, socket}
   end
 
   # Handle subscription ready (end of initial state)
   def handle_info({:subscription_ready}, socket) do
-    Logger.warning("ClusterLive: 🎉 Subscription is ready for real-time updates")
+    # Logger.debug("ClusterLive: 🎉 Subscription is ready for real-time updates")
     {:noreply, socket}
   end
 
   # Handle initial state rows (during subscription startup)
   def handle_info({:initial_row, message_map}, socket) do
-    Logger.warning("ClusterLive: 📦 Received initial row: #{inspect(message_map)}")
+    # Logger.debug("ClusterLive: 📦 Received initial row: #{inspect(message_map)}")
 
     # Collect initial rows until we get the end-of-query
     if socket.assigns.initial_load_complete do
       # Shouldn't happen, but handle gracefully
-      Logger.warning("ClusterLive: ⚠️ Got initial row after initial load was complete")
+      # Logger.debug("ClusterLive: ⚠️ Got initial row after initial load was complete")
       socket = update_node_messages_with_new_message(socket, message_map)
       {:noreply, socket}
     else
@@ -80,10 +80,10 @@ end
 
   # Handle real-time message updates (new messages after subscription is established)
   def handle_info({:new_message, message_map}, socket) do
-    Logger.warning("ClusterLive: 📨 Received new real-time message: #{inspect(message_map)}")
+    # Logger.debug("ClusterLive: 📨 Received new real-time message: #{inspect(message_map)}")
 
     if map_size(message_map) == 0 do
-      Logger.warning("ClusterLive: ⚠️ Received empty message map, skipping update")
+      # Logger.debug("ClusterLive: ⚠️ Received empty message map, skipping update")
       {:noreply, socket}
     else
       socket = update_node_messages_with_new_message(socket, message_map)
@@ -93,10 +93,10 @@ end
 
   # Handle incremental changes (updates/deletes)
   def handle_info({:message_change, change_type, message_map}, socket) do
-    Logger.warning("ClusterLive: 🔄 Received message #{change_type}: #{inspect(message_map)}")
+    # Logger.debug("ClusterLive: 🔄 Received message #{change_type}: #{inspect(message_map)}")
 
     if map_size(message_map) == 0 do
-      Logger.warning("ClusterLive: ⚠️ Received empty message map for #{change_type}, skipping update")
+      # Logger.debug("ClusterLive: ⚠️ Received empty message map for #{change_type}, skipping update")
       {:noreply, socket}
     else
       socket = case change_type do
@@ -104,7 +104,7 @@ end
         "UPDATE" -> update_message_in_state(socket, message_map)
         "INSERT" -> update_node_messages_with_new_message(socket, message_map)
         _ ->
-          Logger.warning("ClusterLive: ❓ Unknown change type: #{change_type}")
+          # Logger.debug("ClusterLive: ❓ Unknown change type: #{change_type}")
           socket
       end
 
@@ -113,13 +113,13 @@ end
   end
 
   def handle_info({:acknowledgment_update, ack_status}, socket) do
-  Logger.warning("ClusterLive: 🤝 Received acknowledgment update: #{ack_status.ack_count}/#{ack_status.expected_count}")
+  # Logger.debug("ClusterLive: 🤝 Received acknowledgment update: #{ack_status.ack_count}/#{ack_status.expected_count}")
   socket = assign(socket, :acknowledgment_status, ack_status)
   {:noreply, socket}
 end
 
 def handle_info({:connectivity_test_complete, results}, socket) do
-  Logger.warning("ClusterLive: 📊 Connectivity test complete: #{inspect(results)}")
+  # Logger.debug("ClusterLive: 📊 Connectivity test complete: #{inspect(results)}")
 
   # Count successful connections
   successful = Enum.count(results, fn {_node, result} -> match?({:ok, _}, result) end)
@@ -137,19 +137,19 @@ def handle_info({:connectivity_test_complete, results}, socket) do
 end
 
   def handle_info(:refresh, socket) do
-    Logger.warning("ClusterLive: 🔄 Auto refresh triggered")
+    # Logger.debug("ClusterLive: 🔄 Auto refresh triggered")
     schedule_refresh()
     {:noreply, fetch_cluster_data(socket)}
   end
 
   def handle_info(msg, socket) do
-    Logger.warning("ClusterLive: ❓ Unhandled message: #{inspect(msg)}")
+    # Logger.debug("ClusterLive: ❓ Unhandled message: #{inspect(msg)}")
     {:noreply, socket}
   end
 
   # Event handlers
   def handle_event("refresh", _params, socket) do
-    Logger.warning("ClusterLive: 🔄 Manual refresh triggered")
+    # Logger.debug("ClusterLive: 🔄 Manual refresh triggered")
     updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data(socket)
     socket =
       socket
@@ -164,11 +164,11 @@ end
   end
 
   def handle_event("send_message", _params, socket) do
-  Logger.warning("ClusterLive: 📤 Send message button clicked")
+  # Logger.debug("ClusterLive: 📤 Send message button clicked")
 
   case CorroPortWeb.ClusterLive.MessageHandler.send_message(socket.assigns.api_port) do
     {:ok, success_message, message_data} ->
-      Logger.warning("ClusterLive: ✅ Message sent successfully: #{inspect(message_data)}")
+      # Logger.debug("ClusterLive: ✅ Message sent successfully: #{inspect(message_data)}")
 
       # Track this message for acknowledgment monitoring using the returned data
       track_message_data = %{
@@ -178,26 +178,26 @@ end
       }
 
       CorroPort.AcknowledgmentTracker.track_latest_message(track_message_data)
-      Logger.warning("ClusterLive: Now tracking message #{message_data.pk} for acknowledgments")
+      # Logger.debug("ClusterLive: Now tracking message #{message_data.pk} for acknowledgments")
 
       socket = put_flash(socket, :info, success_message)
       {:noreply, socket}
 
     {:ok, message} ->
       # Handle backward compatibility with old MessageHandler format
-      Logger.warning("ClusterLive: ✅ Message sent successfully (old format)")
+      # Logger.debug("ClusterLive: ✅ Message sent successfully (old format)")
       socket = put_flash(socket, :info, message)
       {:noreply, socket}
 
     {:error, error} ->
-      Logger.warning("ClusterLive: ❌ Failed to send message: #{error}")
+      # Logger.debug("ClusterLive: ❌ Failed to send message: #{error}")
       socket = put_flash(socket, :error, "Failed to send message: #{error}")
       {:noreply, socket}
   end
 end
 
   def handle_event("cleanup_messages", _params, socket) do
-    Logger.warning("ClusterLive: 🧹 Cleanup messages button clicked")
+    # Logger.debug("ClusterLive: 🧹 Cleanup messages button clicked")
     case CorroPortWeb.ClusterLive.MessageHandler.cleanup_messages(socket.assigns.api_port) do
       {:ok, message} ->
         # Refresh node messages after cleanup
@@ -214,7 +214,7 @@ end
   end
 
   def handle_event("check_replication", _params, socket) do
-    Logger.warning("ClusterLive: 🔍 Checking replication status...")
+    # Logger.debug("ClusterLive: 🔍 Checking replication status...")
 
     # Run diagnostics in background
     spawn(fn ->
@@ -229,7 +229,7 @@ end
   end
 
   def handle_event("test_connectivity", _params, socket) do
-  Logger.warning("ClusterLive: 🔗 Testing acknowledgment connectivity...")
+  # Logger.debug("ClusterLive: 🔗 Testing acknowledgment connectivity...")
 
   # Run connectivity test in background
   parent_pid = self()
@@ -249,10 +249,10 @@ end
     node_id = Map.get(new_message, "node_id")
 
     if is_nil(node_id) do
-      Logger.warning("ClusterLive: ⚠️ Received message without node_id: #{inspect(new_message)}")
+      # Logger.debug("ClusterLive: ⚠️ Received message without node_id: #{inspect(new_message)}")
       socket
     else
-      Logger.warning("ClusterLive: 📝 Updating messages for node: #{node_id}")
+      # Logger.debug("ClusterLive: 📝 Updating messages for node: #{node_id}")
 
       # Since we want latest messages per node, replace the existing message for this node
       # or add it if it doesn't exist
@@ -267,7 +267,7 @@ end
           end
         end, :desc)  # Sort by timestamp descending
 
-      Logger.warning("ClusterLive: 📊 Updated node_messages: #{length(current_messages)} -> #{length(updated_messages)} messages")
+      # Logger.debug("ClusterLive: 📊 Updated node_messages: #{length(current_messages)} -> #{length(updated_messages)} messages")
       assign(socket, :node_messages, updated_messages)
     end
   end
@@ -277,10 +277,10 @@ end
     message_pk = Map.get(updated_message, "pk")
 
     if is_nil(message_pk) do
-      Logger.warning("ClusterLive: ⚠️ Received message update without pk: #{inspect(updated_message)}")
+      # Logger.debug("ClusterLive: ⚠️ Received message update without pk: #{inspect(updated_message)}")
       socket
     else
-      Logger.warning("ClusterLive: 📝 Updating message with pk: #{message_pk}")
+      # Logger.debug("ClusterLive: 📝 Updating message with pk: #{message_pk}")
 
       updated_messages =
         Enum.map(current_messages, fn msg ->
@@ -300,17 +300,17 @@ end
     message_pk = Map.get(deleted_message, "pk")
 
     if is_nil(message_pk) do
-      Logger.warning("ClusterLive: ⚠️ Received message deletion without pk: #{inspect(deleted_message)}")
+      # Logger.debug("ClusterLive: ⚠️ Received message deletion without pk: #{inspect(deleted_message)}")
       socket
     else
-      Logger.warning("ClusterLive: 🗑️ Removing message with pk: #{message_pk}")
+      # Logger.debug("ClusterLive: 🗑️ Removing message with pk: #{message_pk}")
 
       updated_messages =
         Enum.reject(current_messages, fn msg ->
           Map.get(msg, "pk") == message_pk
         end)
 
-      Logger.warning("ClusterLive: 📊 Removed message: #{length(current_messages)} -> #{length(updated_messages)} messages")
+      # Logger.debug("ClusterLive: 📊 Removed message: #{length(current_messages)} -> #{length(updated_messages)} messages")
       assign(socket, :node_messages, updated_messages)
     end
   end
