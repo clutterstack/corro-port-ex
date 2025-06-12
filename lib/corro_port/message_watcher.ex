@@ -499,12 +499,30 @@ end
 end
 
 defp track_our_message(message_map) do
-  # Only track messages that originated from our "Send Message" button
-  # We can identify these by checking if they match our expected format
+  # Check if we're already tracking this specific message
+  current_status = CorroPort.AcknowledgmentTracker.get_status()
+  message_pk = Map.get(message_map, "pk")
+
+  case current_status.latest_message do
+    %{pk: current_pk} ->
+      if current_pk == message_pk do
+        # We're already tracking this exact message, don't re-track it
+        Logger.debug("MessageWatcher: Already tracking message #{current_pk}, skipping re-track")
+      else
+        # Different message, track this new one
+        track_new_message(message_map)
+      end
+
+    _ ->
+      # No message being tracked, track this one
+      track_new_message(message_map)
+  end
+end
+
+defp track_new_message(message_map) do
   local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
   # Check if this looks like a message we sent via the UI
-  # (vs. some other kind of corrosion message)
   if is_our_ui_message?(message_map, local_node_id) do
     message_data = %{
       pk: message_map["pk"],

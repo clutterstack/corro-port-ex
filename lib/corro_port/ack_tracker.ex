@@ -7,7 +7,7 @@ defmodule CorroPort.AcknowledgmentTracker do
 
   ETS table structure:
   - {:latest_message, %{pk: "message_pk", timestamp: "iso8601", node_id: "node1"}}
-  - {"ack", ack_node_id, ack_timestamp}
+  - {:ack, ack_node_id, %{timestamp: timestamp, node_id: ack_node_id}}
   """
 
   use GenServer
@@ -117,8 +117,17 @@ defmodule CorroPort.AcknowledgmentTracker do
     # Check if we have a latest message to acknowledge
     case :ets.lookup(@table_name, :latest_message) do
       [{:latest_message, _message_data}] ->
-        # Add the acknowledgment
-        :ets.insert(@table_name, {"ack", ack_node_id, current_time})
+        # Add the acknowledgment with node_id as part of the key
+        # This ensures each node can only have one acknowledgment entry
+        ack_key = {:ack, ack_node_id}
+        ack_value = %{timestamp: current_time, node_id: ack_node_id}
+
+        Logger.info("AcknowledgmentTracker: Inserting ETS entry: #{inspect(ack_key)} -> #{inspect(ack_value)}")
+        :ets.insert(@table_name, {ack_key, ack_value})
+
+        # Debug: Show all current acknowledgments in ETS
+        all_acks = :ets.match(@table_name, {{:ack, :"$1"}, :"$2"})
+        Logger.info("AcknowledgmentTracker: All acknowledgments in ETS: #{inspect(all_acks)}")
 
         # Broadcast the update
         broadcast_update()
@@ -156,8 +165,8 @@ defmodule CorroPort.AcknowledgmentTracker do
   # Private Functions
 
   defp clear_acknowledgments do
-    # Delete all acknowledgment entries (those starting with "ack")
-    :ets.match_delete(@table_name, {"ack", :_, :_})
+    # Delete all acknowledgment entries (those with {:ack, _} as key)
+    :ets.match_delete(@table_name, {{:ack, :_}, :_})
   end
 
   defp build_status do
@@ -167,19 +176,23 @@ defmodule CorroPort.AcknowledgmentTracker do
       [] -> nil
     end
 
-    # Get all acknowledgments
-    ack_pattern = {"ack", :"$1", :"$2"}
+    # Get all acknowledgments - now using the corrected pattern
+    ack_pattern = {{:ack, :"$1"}, :"$2"}
     ack_matches = :ets.match(@table_name, ack_pattern)
 
-    acknowledgments = Enum.map(ack_matches, fn [node_id, timestamp] ->
+    Logger.debug("AcknowledgmentTracker: Raw ETS matches: #{inspect(ack_matches)}")
+
+    acknowledgments = Enum.map(ack_matches, fn [node_id, ack_data] ->
       %{
         node_id: node_id,
-        timestamp: timestamp
+        timestamp: ack_data.timestamp
       }
     end)
     |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
 
     expected_nodes = calculate_expected_nodes()
+
+    Logger.info("AcknowledgmentTracker: Found #{length(acknowledgments)} acknowledgments from #{inspect(Enum.map(acknowledgments, & &1.node_id))}")
 
     %{
       latest_message: latest_message,
@@ -191,54 +204,54 @@ defmodule CorroPort.AcknowledgmentTracker do
   end
 
   defp calculate_expected_nodes do
-  # Get the local node's configuration
-  local_node_config = Application.get_env(:corro_port, :node_config, %{node_id: 1})
-  local_node_id = local_node_config[:node_id] || 1
-  local_node_string = "node#{local_node_id}"
+    # Get the local node's configuration
+    local_node_config = Application.get_env(:corro_port, :node_config, %{node_id: 1})
+    local_node_id = local_node_config[:node_id] || 1
+    local_node_string = "node#{local_node_id}"
 
-  # Try to get cluster members to determine expected nodes dynamically
-  case CorroPort.ClusterAPI.get_cluster_members() do
-    {:ok, members} ->
-      # Extract active nodes from cluster members
-      active_ports =
-        members
-        |> Enum.filter(fn member ->
-          Map.get(member, "member_state") == "Alive"
-        end)
-        |> Enum.map(fn member ->
-          case Map.get(member, "member_addr") do
-            addr when is_binary(addr) ->
-              case String.split(addr, ":") do
-                [_ip, port_str] ->
-                  case Integer.parse(port_str) do
-                    {port, _} -> port
-                    _ -> nil
-                  end
-                _ -> nil
-              end
-            _ -> nil
-          end
-        end)
-        |> Enum.reject(&is_nil/1)
+    # Try to get cluster members to determine expected nodes dynamically
+    case CorroPort.ClusterAPI.get_cluster_members() do
+      {:ok, members} ->
+        # Extract active nodes from cluster members
+        active_ports =
+          members
+          |> Enum.filter(fn member ->
+            Map.get(member, "member_state") == "Alive"
+          end)
+          |> Enum.map(fn member ->
+            case Map.get(member, "member_addr") do
+              addr when is_binary(addr) ->
+                case String.split(addr, ":") do
+                  [_ip, port_str] ->
+                    case Integer.parse(port_str) do
+                      {port, _} -> port
+                      _ -> nil
+                    end
+                  _ -> nil
+                end
+              _ -> nil
+            end
+          end)
+          |> Enum.reject(&is_nil/1)
 
-      # Convert gossip ports to node IDs (8787 -> node1, 8788 -> node2, etc)
-      expected_node_ids =
-        active_ports
-        |> Enum.map(fn port -> "node#{port - 8786}" end)
-        |> Enum.reject(fn node_id -> node_id == local_node_string end)  # Exclude ourselves
-        |> Enum.sort()
+        # Convert gossip ports to node IDs (8787 -> node1, 8788 -> node2, etc)
+        expected_node_ids =
+          active_ports
+          |> Enum.map(fn port -> "node#{port - 8786}" end)
+          |> Enum.reject(fn node_id -> node_id == local_node_string end)  # Exclude ourselves
+          |> Enum.sort()
 
-      Logger.debug("AcknowledgmentTracker: Calculated expected nodes from cluster: #{inspect(expected_node_ids)}")
-      expected_node_ids
+        Logger.debug("AcknowledgmentTracker: Calculated expected nodes from cluster: #{inspect(expected_node_ids)}")
+        expected_node_ids
 
-    {:error, reason} ->
-      Logger.warning("AcknowledgmentTracker: Could not get cluster members (#{inspect(reason)}), falling back to static list")
-      # Fallback to the old hardcoded approach
-      all_node_ids = [1, 2, 3, 4]  # Include node 4 in fallback
-      expected_node_ids = Enum.reject(all_node_ids, fn id -> id == local_node_id end)
-      Enum.map(expected_node_ids, fn id -> "node#{id}" end)
+      {:error, reason} ->
+        Logger.warning("AcknowledgmentTracker: Could not get cluster members (#{inspect(reason)}), falling back to static list")
+        # Fallback to the old hardcoded approach
+        all_node_ids = [1, 2, 3, 4]  # Include node 4 in fallback
+        expected_node_ids = Enum.reject(all_node_ids, fn id -> id == local_node_id end)
+        Enum.map(expected_node_ids, fn id -> "node#{id}" end)
+    end
   end
-end
 
   defp broadcast_update do
     status = build_status()

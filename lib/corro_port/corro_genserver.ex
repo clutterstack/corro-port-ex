@@ -50,7 +50,9 @@ defmodule CorroPort.CorroGenserver do
     # )
 
     # If no wrapper:
-    port = Port.open({:spawn, "#{@command} agent -c #{config_path}"}, [:binary, :exit_status])
+    port = Port.open({:spawn_executable, @command}, [:binary, :exit_status, args: ["agent", "-c", config_path]])
+    # or with spawn
+    # port = Port.open({:spawn, "#{@command} agent -c #{config_path}"}, [:binary, :exit_status])
 
     Port.monitor(port)
 
