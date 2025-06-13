@@ -7,29 +7,37 @@ defmodule CorroPort.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
-      CorroPortWeb.Telemetry,
-      {DNSCluster, query: Application.get_env(:corro_port, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: CorroPort.PubSub},
-      {Finch,
-       name: WhereCorro.Finch,
-       pools: %{
-         default: [conn_opts: [transport_opts: [inet6: true]]]
-       }},
-      CorroPort.CorroGenserver,
-      # Add the MessageWatcher to subscribe to Corrosion changes
-      CorroPort.MessageWatcher,
-      CorroPort.AcknowledgmentTracker,
-      # Start a worker by calling: CorroPort.Worker.start_link(arg)
-      # {CorroPort.Worker, arg},
-      # Start to serve requests, typically the last entry
-      CorroPortWeb.Endpoint
-    ]
+    # Start Corrosion before our stuff. Let it do its own stdin/stout
+    {:ok, config_file} = CorroPort.NodeConfig.write_corrosion_config()
+    corrosion_cmd = "corrosion/corrosion-mac agent -c #{config_file}"
 
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: CorroPort.Supervisor]
-    Supervisor.start_link(children, opts)
+    case :exec.run_link(corrosion_cmd, []) do
+      {:ok, _exec_pid, _os_pid} ->
+        children = [
+          CorroPortWeb.Telemetry,
+          {DNSCluster, query: Application.get_env(:corro_port, :dns_cluster_query) || :ignore},
+          {Phoenix.PubSub, name: CorroPort.PubSub},
+          {Finch,
+          name: WhereCorro.Finch,
+          pools: %{
+            default: [conn_opts: [transport_opts: [inet6: true]]]
+          }},
+          # CorroPort.CorroStartup,
+          # Add the CorroSubscriber to subscribe to Corrosion changes
+          CorroPort.CorroSubscriber,
+          CorroPort.AckTracker,
+          # Start a worker by calling: CorroPort.Worker.start_link(arg)
+          # {CorroPort.Worker, arg},
+          # Start to serve requests, typically the last entry
+          CorroPortWeb.Endpoint
+        ]
+
+        opts = [strategy: :one_for_one, name: CorroPort.Supervisor]
+        Supervisor.start_link(children, opts)
+
+      {:error, reason} ->
+        raise "Failed to start corrosion agent: #{inspect(reason)}"
+    end
   end
 
   # Tell Phoenix to update the endpoint configuration

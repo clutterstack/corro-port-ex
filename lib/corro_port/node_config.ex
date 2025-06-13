@@ -1,6 +1,7 @@
 defmodule CorroPort.NodeConfig do
   @moduledoc """
   Manages node-specific configuration for both Elixir and Corrosion.
+  Writes a config file for Corrosion based on application env vars (config values).
   """
 
   @doc """
@@ -27,7 +28,7 @@ defmodule CorroPort.NodeConfig do
     # For other nodes, bootstrap from node 1
     bootstrap_config =
       if node_id == 1 do
-        "bootstrap = []"
+        "bootstrap = [\"127.0.0.1:8788\"]"
       else
         "bootstrap = [\"127.0.0.1:8787\"]"
       end
