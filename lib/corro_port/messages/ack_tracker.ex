@@ -1,4 +1,4 @@
-defmodule CorroPort.AcknowledgmentTracker do
+defmodule CorroPort.AckTracker do
   @moduledoc """
   Tracks acknowledgments for the latest message sent by this node.
 
@@ -13,8 +13,8 @@ defmodule CorroPort.AcknowledgmentTracker do
   use GenServer
   require Logger
 
-  @table_name :acknowledgment_tracker
-  @pubsub_topic "acknowledgment_updates"
+  @table_name :ack_tracker
+  @pubsub_topic "ack_updates"
 
   # Client API
 
@@ -79,7 +79,7 @@ defmodule CorroPort.AcknowledgmentTracker do
   # GenServer Implementation
 
   def init(_opts) do
-    Logger.info("AcknowledgmentTracker starting...")
+    Logger.info("AckTracker starting...")
 
     # Create ETS table
     table = :ets.new(@table_name, [
@@ -89,13 +89,13 @@ defmodule CorroPort.AcknowledgmentTracker do
       read_concurrency: true
     ])
 
-    Logger.info("AcknowledgmentTracker ETS table created: #{@table_name}")
+    Logger.info("AckTracker ETS table created: #{@table_name}")
 
     {:ok, %{table: table}}
   end
 
   def handle_call({:track_latest_message, message_data}, _from, state) do
-    Logger.info("AcknowledgmentTracker: Tracking new message #{message_data.pk}")
+    Logger.info("AckTracker: Tracking new message #{message_data.pk}")
 
     # Clear previous acknowledgments
     clear_acknowledgments()
@@ -112,7 +112,7 @@ defmodule CorroPort.AcknowledgmentTracker do
   def handle_call({:add_acknowledgment, ack_node_id}, _from, state) do
     current_time = DateTime.utc_now()
 
-    Logger.info("AcknowledgmentTracker: Adding acknowledgment from #{ack_node_id}")
+    Logger.info("AckTracker: Adding acknowledgment from #{ack_node_id}")
 
     # Check if we have a latest message to acknowledge
     case :ets.lookup(@table_name, :latest_message) do
@@ -122,12 +122,12 @@ defmodule CorroPort.AcknowledgmentTracker do
         ack_key = {:ack, ack_node_id}
         ack_value = %{timestamp: current_time, node_id: ack_node_id}
 
-        Logger.info("AcknowledgmentTracker: Inserting ETS entry: #{inspect(ack_key)} -> #{inspect(ack_value)}")
+        Logger.info("AckTracker: Inserting ETS entry: #{inspect(ack_key)} -> #{inspect(ack_value)}")
         :ets.insert(@table_name, {ack_key, ack_value})
 
         # Debug: Show all current acknowledgments in ETS
         all_acks = :ets.match(@table_name, {{:ack, :"$1"}, :"$2"})
-        Logger.info("AcknowledgmentTracker: All acknowledgments in ETS: #{inspect(all_acks)}")
+        Logger.info("AckTracker: All acknowledgments in ETS: #{inspect(all_acks)}")
 
         # Broadcast the update
         broadcast_update()
@@ -135,7 +135,7 @@ defmodule CorroPort.AcknowledgmentTracker do
         {:reply, :ok, state}
 
       [] ->
-        Logger.warning("AcknowledgmentTracker: Received acknowledgment from #{ack_node_id} but no latest message is being tracked")
+        Logger.warning("AckTracker: Received acknowledgment from #{ack_node_id} but no latest message is being tracked")
         {:reply, {:error, :no_message_tracked}, state}
     end
   end
@@ -151,14 +151,14 @@ defmodule CorroPort.AcknowledgmentTracker do
   end
 
   def handle_call(:clear_all, _from, state) do
-    Logger.info("AcknowledgmentTracker: Clearing all data")
+    Logger.info("AckTracker: Clearing all data")
     :ets.delete_all_objects(@table_name)
     broadcast_update()
     {:reply, :ok, state}
   end
 
   def terminate(_reason, _state) do
-    Logger.info("AcknowledgmentTracker shutting down")
+    Logger.info("AckTracker shutting down")
     :ok
   end
 
@@ -180,7 +180,7 @@ defmodule CorroPort.AcknowledgmentTracker do
     ack_pattern = {{:ack, :"$1"}, :"$2"}
     ack_matches = :ets.match(@table_name, ack_pattern)
 
-    Logger.debug("AcknowledgmentTracker: Raw ETS matches: #{inspect(ack_matches)}")
+    Logger.debug("AckTracker: Raw ETS matches: #{inspect(ack_matches)}")
 
     acknowledgments = Enum.map(ack_matches, fn [node_id, ack_data] ->
       %{
@@ -192,7 +192,7 @@ defmodule CorroPort.AcknowledgmentTracker do
 
     expected_nodes = calculate_expected_nodes()
 
-    Logger.info("AcknowledgmentTracker: Found #{length(acknowledgments)} acknowledgments from #{inspect(Enum.map(acknowledgments, & &1.node_id))}")
+    Logger.info("AckTracker: Found #{length(acknowledgments)} acknowledgments from #{inspect(Enum.map(acknowledgments, & &1.node_id))}")
 
     %{
       latest_message: latest_message,
@@ -241,11 +241,11 @@ defmodule CorroPort.AcknowledgmentTracker do
           |> Enum.reject(fn node_id -> node_id == local_node_string end)  # Exclude ourselves
           |> Enum.sort()
 
-        Logger.debug("AcknowledgmentTracker: Calculated expected nodes from cluster: #{inspect(expected_node_ids)}")
+        Logger.debug("AckTracker: Calculated expected nodes from cluster: #{inspect(expected_node_ids)}")
         expected_node_ids
 
       {:error, reason} ->
-        Logger.warning("AcknowledgmentTracker: Could not get cluster members (#{inspect(reason)}), falling back to static list")
+        Logger.warning("AckTracker: Could not get cluster members (#{inspect(reason)}), falling back to static list")
         # Fallback to the old hardcoded approach
         all_node_ids = [1, 2, 3, 4]  # Include node 4 in fallback
         expected_node_ids = Enum.reject(all_node_ids, fn id -> id == local_node_id end)
@@ -258,7 +258,7 @@ defmodule CorroPort.AcknowledgmentTracker do
     Phoenix.PubSub.broadcast(
       CorroPort.PubSub,
       @pubsub_topic,
-      {:acknowledgment_update, status}
+      {:ack_update, status}
     )
   end
 end

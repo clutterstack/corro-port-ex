@@ -26,7 +26,7 @@ In the IEx session (node 1), you can:
 
 ```elixir
 # Check the current node status
-CorroPort.CorroGenserver.get_status()
+CorroPort.CorroStartup.get_status()
 
 # Check the node configuration
 CorroPort.NodeConfig.get_node_config()

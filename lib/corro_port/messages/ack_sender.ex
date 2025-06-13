@@ -10,7 +10,7 @@ defmodule CorroPort.AcknowledgmentSender do
 
   require Logger
 
-  @acknowledgment_timeout 5_000  # 5 seconds
+  @ack_timeout 5_000  # 5 seconds
 
   @doc """
   Send an acknowledgment to the originating node for a received message.
@@ -53,7 +53,7 @@ defmodule CorroPort.AcknowledgmentSender do
 
         Logger.info("AcknowledgmentSender: Testing connectivity to #{target_node_id} at #{health_url}")
 
-        case Req.get(health_url, receive_timeout: @acknowledgment_timeout) do
+        case Req.get(health_url, receive_timeout: @ack_timeout) do
           {:ok, %{status: 200, body: body}} ->
             Logger.info("AcknowledgmentSender: Successfully connected to #{target_node_id}")
             {:ok, body}
@@ -81,7 +81,7 @@ defmodule CorroPort.AcknowledgmentSender do
   Map of node_id => connectivity_result
   """
   def test_all_connectivity do
-    expected_nodes = CorroPort.AcknowledgmentTracker.get_expected_nodes()
+    expected_nodes = CorroPort.AckTracker.get_expected_nodes()
 
     Logger.info("AcknowledgmentSender: Testing connectivity to all expected nodes: #{inspect(expected_nodes)}")
 
@@ -160,7 +160,7 @@ defmodule CorroPort.AcknowledgmentSender do
     case Req.post(ack_url,
            json: payload,
            headers: [{"content-type", "application/json"}],
-           receive_timeout: @acknowledgment_timeout) do
+           receive_timeout: @ack_timeout) do
 
       {:ok, %{status: 200, body: body}} ->
         Logger.info("AcknowledgmentSender: Successfully sent acknowledgment to #{originating_node_id}")
@@ -178,7 +178,7 @@ defmodule CorroPort.AcknowledgmentSender do
         {:error, error}
 
       {:error, %{reason: :timeout}} ->
-        Logger.warning("AcknowledgmentSender: Acknowledgment timed out to #{originating_node_id} after #{@acknowledgment_timeout}ms")
+        Logger.warning("AcknowledgmentSender: Acknowledgment timed out to #{originating_node_id} after #{@ack_timeout}ms")
         {:error, :timeout}
 
       {:error, %{reason: :econnrefused}} ->

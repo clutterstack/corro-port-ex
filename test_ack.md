@@ -1,13 +1,13 @@
 # Start tracking a message
 message_data = %{pk: "test_123", timestamp: "2025-06-11T10:00:00Z", node_id: "node1"}
-CorroPort.AcknowledgmentTracker.track_latest_message(message_data)
+CorroPort.AckTracker.track_latest_message(message_data)
 
 # Add some acknowledgments
-CorroPort.AcknowledgmentTracker.add_acknowledgment("node2")
-CorroPort.AcknowledgmentTracker.add_acknowledgment("node3")
+CorroPort.AckTracker.add_acknowledgment("node2")
+CorroPort.AckTracker.add_acknowledgment("node3")
 
 # Check status
-CorroPort.AcknowledgmentTracker.get_status()
+CorroPort.AckTracker.get_status()
 
 ```
 # Should show something like:
@@ -21,12 +21,12 @@ CorroPort.AcknowledgmentTracker.get_status()
 ```
 
 
-# 1. First, track a message in the AcknowledgmentTracker
+# 1. First, track a message in the AckTracker
 message_data = %{pk: "node1_test123", timestamp: "2025-06-11T10:00:00Z", node_id: "node1"}
-CorroPort.AcknowledgmentTracker.track_latest_message(message_data)
+CorroPort.AckTracker.track_latest_message(message_data)
 
 # 2. Check the current status
-CorroPort.AcknowledgmentTracker.get_status()
+CorroPort.AckTracker.get_status()
 
 # 3. Now test the API endpoint using curl (from terminal):
 # curl -X POST http://localhost:4001/api/acknowledge \
@@ -47,12 +47,12 @@ Req.post("http://localhost:#{Application.get_env(:corro_port, CorroPortWeb.Endpo
 )
 
 # 5. Check status again to see the acknowledgment
-CorroPort.AcknowledgmentTracker.get_status()
+CorroPort.AckTracker.get_status()
 
 # 6. Test the health endpoint
 Req.get("http://localhost:#{Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port]}/api/acknowledge/health")
 
-Excellent! Now let's create the `AcknowledgmentSender` that will send HTTP requests to other nodes when we receive their messages via MessageWatcher.Now let's test the `AcknowledgmentSender`. We'll need a multi-node setup for proper testing, but we can test some parts in isolation first.
+Excellent! Now let's create the `AcknowledgmentSender` that will send HTTP requests to other nodes when we receive their messages via CorroSubscriber.Now let's test the `AcknowledgmentSender`. We'll need a multi-node setup for proper testing, but we can test some parts in isolation first.
 
 **Test commands for IEx:**
 
@@ -91,14 +91,14 @@ NODE_ID=3 iex --sname corro3 -S mix phx.server
 ```elixir
 # On Node 1 (localhost:4001), track a message
 message_data = %{pk: "node1_test456", timestamp: "2025-06-11T10:00:00Z", node_id: "node1"}
-CorroPort.AcknowledgmentTracker.track_latest_message(message_data)
+CorroPort.AckTracker.track_latest_message(message_data)
 
 # On Node 2 (localhost:4002), send acknowledgment to Node 1
 message_data = %{pk: "node1_test456", timestamp: "2025-06-11T10:00:00Z", node_id: "node1"}
 CorroPort.AcknowledgmentSender.send_acknowledgment("node1", message_data)
 
 # Back on Node 1, check if acknowledgment was received
-CorroPort.AcknowledgmentTracker.get_status()
+CorroPort.AckTracker.get_status()
 ```
 
 The `AcknowledgmentSender` provides:
@@ -118,7 +118,7 @@ The `AcknowledgmentSender` provides:
 - ✅ Network timeout: Returns `{:error, :timeout}`, logs warning
 - ✅ Invalid node ID: Returns `{:error, reason}`, logs warning
 
-Ready to test this and then integrate it with MessageWatcher?
+Ready to test this and then integrate it with CorroSubscriber?
 
 # Testing the Acknowledgment Integration
 
@@ -147,7 +147,7 @@ Ready to test this and then integrate it with MessageWatcher?
    - Progress bar showing 0/2 acknowledgments initially
    - Expected nodes: node2, node3 (with outline badges)
 
-3. Wait a few seconds for MessageWatcher to process the message on nodes 2 & 3
+3. Wait a few seconds for CorroSubscriber to process the message on nodes 2 & 3
 4. Watch the acknowledgment card update in real-time:
    - Progress bar should fill up as acknowledgments arrive
    - Node badges should turn green with checkmarks
@@ -158,8 +158,8 @@ Ready to test this and then integrate it with MessageWatcher?
 2. Check Node 2's acknowledgment card shows tracking for the new message
 3. Verify Node 1 and Node 3 automatically send acknowledgments back to Node 2
 
-### 4. Verify MessageWatcher Stats
-1. Check the "MessageWatcher Stats" section in the acknowledgment card
+### 4. Verify CorroSubscriber Stats
+1. Check the "CorroSubscriber Stats" section in the acknowledgment card
 2. Should show:
    - Number of acknowledgments sent
    - Total messages processed
@@ -170,8 +170,8 @@ Ready to test this and then integrate it with MessageWatcher?
 ```
 Node1 clicks "Send Message" 
 → Message inserted into Corrosion
-→ MessageWatcher on Node2/3 receives the new message
-→ MessageWatcher automatically sends HTTP acknowledgment to Node1
+→ CorroSubscriber on Node2/3 receives the new message
+→ CorroSubscriber automatically sends HTTP acknowledgment to Node1
 → Node1's AcknowledgmentController receives the ack
 → Node1's ClusterLive updates in real-time via PubSub
 ```
@@ -186,14 +186,14 @@ Node1 clicks "Send Message"
 
 If acknowledgments aren't working:
 
-1. **Check MessageWatcher logs** (look for "🤝 Sending acknowledgment"):
+1. **Check CorroSubscriber logs** (look for "🤝 Sending acknowledgment"):
    ```elixir
-   CorroPort.MessageWatcher.get_status()
+   CorroPort.CorroSubscriber.get_status()
    ```
 
-2. **Check AcknowledgmentTracker status**:
+2. **Check AckTracker status**:
    ```elixir
-   CorroPort.AcknowledgmentTracker.get_status()
+   CorroPort.AckTracker.get_status()
    ```
 
 3. **Test connectivity manually**:
@@ -213,4 +213,4 @@ If acknowledgments aren't working:
 ✅ Other nodes automatically send acknowledgments  
 ✅ Progress bar updates in real-time  
 ✅ All expected acknowledgments received (2/2)  
-✅ MessageWatcher stats increment correctly
+✅ CorroSubscriber stats increment correctly

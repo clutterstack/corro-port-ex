@@ -2,7 +2,7 @@ defmodule CorroPortWeb.ClusterLive do
   use CorroPortWeb, :live_view
   require Logger
 
- alias CorroPort.{MessageWatcher, CorrosionClient}
+ alias CorroPort.{CorroSubscriber, CorrosionClient}
 alias CorroPortWeb.{ClusterCards, MembersTable, MessagesTable, DebugSection, AcknowledgmentCard}
 
   @refresh_interval 300_000  # 5 minutes to avoid interference with testing
@@ -12,9 +12,9 @@ alias CorroPortWeb.{ClusterCards, MembersTable, MessagesTable, DebugSection, Ack
 
   if connected?(socket) do
     # Logger.debug("ClusterLive: Connected - subscribing to PubSub topics")
-    Phoenix.PubSub.subscribe(CorroPort.PubSub, MessageWatcher.subscription_topic())
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroSubscriber.subscription_topic())
     # NEW: Subscribe to acknowledgment updates
-    Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroPort.AcknowledgmentTracker.get_pubsub_topic())
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroPort.AckTracker.get_pubsub_topic())
     schedule_refresh()
   else
     # Logger.debug("ClusterLive: Not connected yet (static render)")
@@ -39,8 +39,8 @@ alias CorroPortWeb.{ClusterCards, MembersTable, MessagesTable, DebugSection, Ack
     initial_load_complete: false,
     pending_initial_rows: [],
     # NEW: Acknowledgment tracking
-    acknowledgment_status: nil,
-    message_watcher_status: nil,
+    ack_status: nil,
+    subscription_status: nil,
     connectivity_test_results: nil
   })
 
@@ -112,9 +112,9 @@ end
     end
   end
 
-  def handle_info({:acknowledgment_update, ack_status}, socket) do
+  def handle_info({:ack_update, ack_status}, socket) do
   # Logger.debug("ClusterLive: 🤝 Received acknowledgment update: #{ack_status.ack_count}/#{ack_status.expected_count}")
-  socket = assign(socket, :acknowledgment_status, ack_status)
+  socket = assign(socket, :ack_status, ack_status)
   {:noreply, socket}
 end
 
@@ -177,7 +177,7 @@ end
         node_id: message_data.node_id
       }
 
-      CorroPort.AcknowledgmentTracker.track_latest_message(track_message_data)
+      CorroPort.AckTracker.track_latest_message(track_message_data)
       # Logger.debug("ClusterLive: Now tracking message #{message_data.pk} for acknowledgments")
 
       socket = put_flash(socket, :info, success_message)
@@ -318,9 +318,9 @@ end
   defp fetch_cluster_data(socket) do
   updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data(socket)
 
-  # NEW: Fetch acknowledgment and MessageWatcher status
-  acknowledgment_status = CorroPort.AcknowledgmentTracker.get_status()
-  message_watcher_status = CorroPort.MessageWatcher.get_status()
+  # NEW: Fetch acknowledgment and CorroSubscriber status
+  ack_status = CorroPort.AckTracker.get_status()
+  subscription_status = CorroPort.CorroSubscriber.get_status()
 
   socket
   |> assign(%{
@@ -336,8 +336,8 @@ end
     # Clear any pending initial rows since we just did a full fetch
     pending_initial_rows: [],
     # NEW: Add acknowledgment tracking data
-    acknowledgment_status: acknowledgment_status,
-    message_watcher_status: message_watcher_status
+    ack_status: ack_status,
+    subscription_status: subscription_status
   })
 end
 
@@ -417,8 +417,8 @@ end
   assigns =
     assigns
     |> assign_new(:replication_status, fn -> nil end)
-    |> assign_new(:acknowledgment_status, fn -> nil end)
-    |> assign_new(:message_watcher_status, fn -> nil end)
+    |> assign_new(:ack_status, fn -> nil end)
+    |> assign_new(:subscription_status, fn -> nil end)
     |> assign_new(:connectivity_test_results, fn -> nil end)
 
   ~H"""
@@ -441,9 +441,9 @@ end
 
     <!-- NEW: Add acknowledgment status card -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <AcknowledgmentCard.acknowledgment_status_card
-        ack_status={@acknowledgment_status}
-        message_watcher_status={@message_watcher_status}
+      <AcknowledgmentCard.ack_status_card
+        ack_status={@ack_status}
+        subscription_status={@subscription_status}
       />
 
       <!-- Connectivity Test Results -->

@@ -13,7 +13,7 @@ defmodule CorroPortWeb.AcknowledgmentController do
   }
   """
   def acknowledge(conn, params) do
-    case validate_acknowledgment_params(params) do
+    case validate_ack_params(params) do
       {:ok, ack_data} ->
         handle_acknowledgment(conn, ack_data)
 
@@ -25,7 +25,7 @@ defmodule CorroPortWeb.AcknowledgmentController do
     end
   end
 
-  defp validate_acknowledgment_params(params) do
+  defp validate_ack_params(params) do
     required_fields = ["message_pk", "ack_node_id"]
 
     case check_required_fields(params, required_fields) do
@@ -56,7 +56,7 @@ defmodule CorroPortWeb.AcknowledgmentController do
     Logger.info("AcknowledgmentController: Received acknowledgment from #{ack_data.ack_node_id} for message #{ack_data.message_pk}")
 
     # Add the acknowledgment to our tracker
-    case CorroPort.AcknowledgmentTracker.add_acknowledgment(ack_data.ack_node_id) do
+    case CorroPort.AckTracker.add_acknowledgment(ack_data.ack_node_id) do
       :ok ->
         Logger.info("AcknowledgmentController: Successfully recorded acknowledgment from #{ack_data.ack_node_id}")
 
@@ -103,7 +103,7 @@ defmodule CorroPortWeb.AcknowledgmentController do
       status: "healthy",
       node_id: local_node_id,
       timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-      acknowledgment_tracker_status: CorroPort.AcknowledgmentTracker.get_status()
+      ack_tracker_status: CorroPort.AckTracker.get_status()
     })
   end
 end

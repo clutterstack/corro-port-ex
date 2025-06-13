@@ -1,4 +1,4 @@
-defmodule CorroPort.CorroGenserver do
+defmodule CorroPort.CorroStartup do
   use GenServer
   require Logger
 

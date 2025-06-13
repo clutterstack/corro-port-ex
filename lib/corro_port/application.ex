@@ -24,8 +24,8 @@ defmodule CorroPort.Application do
           }},
           # CorroPort.CorroStartup,
           # Add the CorroSubscriber to subscribe to Corrosion changes
-          CorroPort.CorroSubscriber,
-          CorroPort.AckTracker,
+          # CorroPort.CorroSubscriber,
+          # CorroPort.AckTracker,
           # Start a worker by calling: CorroPort.Worker.start_link(arg)
           # {CorroPort.Worker, arg},
           # Start to serve requests, typically the last entry
