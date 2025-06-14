@@ -20,6 +20,7 @@ defmodule CorroPortWeb.Router do
     get "/", PageController, :home
     live "/cluster", ClusterLive
     live "/node-info", NodeInfoLive
+    live "/messages", MessagesLive
   end
 
   scope "/api", CorroPortWeb do
