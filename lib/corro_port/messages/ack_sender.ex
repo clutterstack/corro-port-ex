@@ -1,156 +1,168 @@
-defmodule CorroPort.AcknowledgmentSender do
+defmodule CorroPort.AckSender do
   @moduledoc """
-  Sends HTTP acknowledgments to originating nodes when we receive their messages.
+  Automatically sends acknowledgments to other nodes when we receive their messages.
 
-  This module handles:
-  - Node discovery (figuring out which Phoenix port a node is running on)
-  - HTTP POST requests to other nodes' /api/acknowledge endpoints
-  - Error handling and logging for failed acknowledgments
+  Listens to CorroSubscriber's message updates and sends HTTP acknowledgments
+  to the originating node when we see a message from another node.
   """
 
+  use GenServer
   require Logger
 
-  # 5 seconds
   @ack_timeout 5_000
 
-  @doc """
-  Send an acknowledgment to the originating node for a received message.
-
-  ## Parameters
-  - originating_node_id: String like "node1", "node2" etc
-  - message_data: Map with keys :pk, :timestamp, :node_id
-
-  ## Returns
-  - :ok on success
-  - {:error, reason} on failure
-  """
-  def send_acknowledgment(originating_node_id, message_data) do
-    local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
-
-    # Don't send acknowledgments to ourselves
-    if originating_node_id == local_node_id do
-      Logger.debug(
-        "AcknowledgmentSender: Skipping acknowledgment to self (#{originating_node_id})"
-      )
-
-      :ok
-    else
-      Logger.info(
-        "AcknowledgmentSender: Sending acknowledgment to #{originating_node_id} for message #{message_data.pk}"
-      )
-
-      do_send_acknowledgment(originating_node_id, message_data, local_node_id)
-    end
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @doc """
-  Test connectivity to another node's acknowledgment endpoint.
+  def init(_opts) do
+    Logger.info("AckSender starting...")
 
-  ## Parameters
-  - target_node_id: String like "node1", "node2" etc
+    # Subscribe to CorroSubscriber's message updates
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroPort.CorroSubscriber.subscription_topic())
 
-  ## Returns
-  - {:ok, response_data} on success
-  - {:error, reason} on failure
-  """
-  def test_connectivity(target_node_id) do
-    case discover_node_endpoint(target_node_id) do
-      {:ok, base_url} ->
-        health_url = "#{base_url}/api/acknowledge/health"
+    {:ok, %{
+      acknowledgments_sent: 0,
+      total_messages_processed: 0
+    }}
+  end
 
-        Logger.info(
-          "AcknowledgmentSender: Testing connectivity to #{target_node_id} at #{health_url}"
-        )
+  # Handle new messages from CorroSubscriber
+  def handle_info({:new_message, message_map}, state) do
+    new_state = %{state | total_messages_processed: state.total_messages_processed + 1}
 
-        case Req.get(health_url, receive_timeout: @ack_timeout) do
-          {:ok, %{status: 200, body: body}} ->
-            Logger.info("AcknowledgmentSender: Successfully connected to #{target_node_id}")
-            {:ok, body}
+    case Map.get(message_map, "node_id") do
+      nil ->
+        Logger.debug("AckSender: Received message without node_id, skipping")
+        {:noreply, new_state}
 
-          {:ok, %{status: status, body: body}} ->
-            error = "HTTP #{status}: #{inspect(body)}"
+      originating_node_id ->
+        local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
-            Logger.warning(
-              "AcknowledgmentSender: Health check failed for #{target_node_id}: #{error}"
-            )
+        if originating_node_id != local_node_id do
+          Logger.info("AckSender: 🤝 Sending acknowledgment for message from #{originating_node_id}")
 
-            {:error, error}
+          # Send acknowledgment in background (fire-and-forget)
+          spawn(fn -> send_acknowledgment_async(originating_node_id, message_map) end)
 
-          {:error, reason} ->
-            Logger.warning(
-              "AcknowledgmentSender: Connection failed to #{target_node_id}: #{inspect(reason)}"
-            )
-
-            {:error, reason}
+          final_state = %{new_state | acknowledgments_sent: new_state.acknowledgments_sent + 1}
+          {:noreply, final_state}
+        else
+          Logger.debug("AckSender: Ignoring message from self (#{local_node_id})")
+          {:noreply, new_state}
         end
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 
-  @doc """
-  Get a list of all expected nodes and test connectivity to each.
-  Useful for debugging cluster connectivity.
+  def handle_info({:initial_row, message_map}, state) do
+    # For initial state, we probably don't want to send acks
+    # But let's log and count for stats
+    new_state = %{state | total_messages_processed: state.total_messages_processed + 1}
 
-  ## Returns
-  Map of node_id => connectivity_result
-  """
-  def test_all_connectivity do
-    expected_nodes = CorroPort.AckTracker.get_expected_nodes()
+    ## Don't need to see logs for initial subscription output.
+    # originating_node_id = Map.get(message_map, "node_id")
+    # local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
+    # if originating_node_id && originating_node_id != local_node_id do
+    #   Logger.debug("AckSender: Saw initial message from #{originating_node_id}, not sending ack")
+    # end
 
-    Logger.info(
-      "AcknowledgmentSender: Testing connectivity to all expected nodes: #{inspect(expected_nodes)}"
-    )
+    {:noreply, new_state}
+  end
 
-    results =
-      Enum.reduce(expected_nodes, %{}, fn node_id, acc ->
-        result = test_connectivity(node_id)
-        Map.put(acc, node_id, result)
-      end)
+  # Handle message changes (updates/deletes)
+  def handle_info({:message_change, change_type, message_map}, state) do
+    new_state = %{state | total_messages_processed: state.total_messages_processed + 1}
 
-    # Log summary
-    successful = Enum.count(results, fn {_node, result} -> match?({:ok, _}, result) end)
-    total = length(expected_nodes)
+    # Only send acks for INSERTs (new messages), not UPDATEs or DELETEs
+    if change_type == "INSERT" do
+      originating_node_id = Map.get(message_map, "node_id")
+      local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
-    Logger.info(
-      "AcknowledgmentSender: Connectivity test complete: #{successful}/#{total} nodes reachable"
-    )
+      if originating_node_id && originating_node_id != local_node_id do
+        Logger.info("AckSender: 🤝 Sending acknowledgment for INSERT from #{originating_node_id}")
 
-    results
+        spawn(fn -> send_acknowledgment_async(originating_node_id, message_map) end)
+
+        final_state = %{new_state | acknowledgments_sent: new_state.acknowledgments_sent + 1}
+        {:noreply, final_state}
+      else
+        {:noreply, new_state}
+      end
+    else
+      Logger.debug("AckSender: Ignoring #{change_type} change")
+      {:noreply, new_state}
+    end
+  end
+
+  # Ignore other CorroSubscriber events
+  def handle_info({:columns_received, _}, state), do: {:noreply, state}
+  def handle_info({:subscription_ready}, state), do: {:noreply, state}
+  def handle_info({:subscription_connected, _}, state), do: {:noreply, state}
+  def handle_info({:subscription_error, _}, state), do: {:noreply, state}
+  def handle_info({:subscription_closed, _}, state), do: {:noreply, state}
+
+  def handle_info(msg, state) do
+    Logger.debug("AckSender: Unhandled message: #{inspect(msg)}")
+    {:noreply, state}
+  end
+
+  # Public API for stats/debugging
+  def get_status do
+    try do
+      GenServer.call(__MODULE__, :get_status, 1000)
+    catch
+      :exit, _ -> %{status: :unavailable}
+    end
+  end
+
+  def handle_call(:get_status, _from, state) do
+    status = %{
+      acknowledgments_sent: state.acknowledgments_sent,
+      total_messages_processed: state.total_messages_processed,
+      status: :running
+    }
+    {:reply, status, state}
+  end
+
+  def terminate(reason, _state) do
+    Logger.info("AckSender shutting down: #{inspect(reason)}")
+    :ok
   end
 
   # Private Functions
 
-  defp do_send_acknowledgment(originating_node_id, message_data, local_node_id) do
-    case discover_node_endpoint(originating_node_id) do
-      {:ok, base_url} ->
-        send_http_acknowledgment(base_url, originating_node_id, message_data, local_node_id)
+  defp send_acknowledgment_async(originating_node_id, message_map) do
+    local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
-      {:error, reason} ->
-        Logger.warning(
-          "AcknowledgmentSender: Could not discover endpoint for #{originating_node_id}: #{reason}"
-        )
+    # Build the acknowledgment payload
+    message_pk = Map.get(message_map, "pk")
+    message_timestamp = Map.get(message_map, "timestamp")
 
-        {:error, reason}
+    if message_pk do
+      case discover_node_endpoint(originating_node_id) do
+        {:ok, base_url} ->
+          send_http_acknowledgment(base_url, originating_node_id, message_pk, message_timestamp, local_node_id)
+
+        {:error, reason} ->
+          Logger.warning("AckSender: Could not discover endpoint for #{originating_node_id}: #{reason}")
+      end
+    else
+      Logger.warning("AckSender: Message missing pk, cannot send acknowledgment: #{inspect(message_map)}")
     end
   end
 
-  def discover_node_endpoint(node_id) do
+  defp discover_node_endpoint(node_id) do
     case extract_node_number(node_id) do
       {:ok, node_number} ->
         # Calculate Phoenix port: base port 4000 + node_number
         phoenix_port = 4000 + node_number
         base_url = "http://127.0.0.1:#{phoenix_port}"
 
-        Logger.debug("AcknowledgmentSender: Discovered endpoint for #{node_id}: #{base_url}")
+        Logger.debug("AckSender: Discovered endpoint for #{node_id}: #{base_url}")
         {:ok, base_url}
 
       {:error, reason} ->
-        Logger.warning(
-          "AcknowledgmentSender: Could not extract node number from #{node_id}: #{reason}"
-        )
-
+        Logger.warning("AckSender: Could not extract node number from #{node_id}: #{reason}")
         {:error, reason}
     end
   end
@@ -173,18 +185,16 @@ defmodule CorroPort.AcknowledgmentSender do
     {:error, "Node ID must be a string, got: #{inspect(node_id)}"}
   end
 
-  defp send_http_acknowledgment(base_url, originating_node_id, message_data, local_node_id) do
+  defp send_http_acknowledgment(base_url, originating_node_id, message_pk, message_timestamp, local_node_id) do
     ack_url = "#{base_url}/api/acknowledge"
 
     payload = %{
-      "message_pk" => message_data.pk,
+      "message_pk" => message_pk,
       "ack_node_id" => local_node_id,
-      "message_timestamp" => message_data.timestamp
+      "message_timestamp" => message_timestamp
     }
 
-    Logger.debug(
-      "AcknowledgmentSender: Sending POST to #{ack_url} with payload: #{inspect(payload)}"
-    )
+    Logger.debug("AckSender: Sending POST to #{ack_url} with payload: #{inspect(payload)}")
 
     case Req.post(ack_url,
            json: payload,
@@ -192,50 +202,24 @@ defmodule CorroPort.AcknowledgmentSender do
            receive_timeout: @ack_timeout
          ) do
       {:ok, %{status: 200, body: body}} ->
-        Logger.info(
-          "AcknowledgmentSender: Successfully sent acknowledgment to #{originating_node_id}"
-        )
-
-        Logger.debug("AcknowledgmentSender: Response: #{inspect(body)}")
-        :ok
+        Logger.info("AckSender: ✅ Successfully sent acknowledgment to #{originating_node_id}")
+        Logger.debug("AckSender: Response: #{inspect(body)}")
 
       {:ok, %{status: 404}} ->
-        # The target node isn't tracking this message anymore - not necessarily an error
-        Logger.info(
-          "AcknowledgmentSender: Target node #{originating_node_id} is not tracking message #{message_data.pk} (404)"
-        )
-
-        :ok
+        # Target node isn't tracking this message - not an error
+        Logger.info("AckSender: Target node #{originating_node_id} is not tracking message #{message_pk} (404)")
 
       {:ok, %{status: status, body: body}} ->
-        error = "HTTP #{status}: #{inspect(body)}"
-
-        Logger.warning(
-          "AcknowledgmentSender: Acknowledgment failed to #{originating_node_id}: #{error}"
-        )
-
-        {:error, error}
+        Logger.warning("AckSender: Acknowledgment failed to #{originating_node_id}: HTTP #{status}: #{inspect(body)}")
 
       {:error, %{reason: :timeout}} ->
-        Logger.warning(
-          "AcknowledgmentSender: Acknowledgment timed out to #{originating_node_id} after #{@ack_timeout}ms"
-        )
-
-        {:error, :timeout}
+        Logger.warning("AckSender: Acknowledgment timed out to #{originating_node_id} after #{@ack_timeout}ms")
 
       {:error, %{reason: :econnrefused}} ->
-        Logger.warning(
-          "AcknowledgmentSender: Connection refused to #{originating_node_id} at #{ack_url}"
-        )
-
-        {:error, :connection_refused}
+        Logger.warning("AckSender: Connection refused to #{originating_node_id} at #{ack_url}")
 
       {:error, reason} ->
-        Logger.warning(
-          "AcknowledgmentSender: Acknowledgment failed to #{originating_node_id}: #{inspect(reason)}"
-        )
-
-        {:error, reason}
+        Logger.warning("AckSender: Acknowledgment failed to #{originating_node_id}: #{inspect(reason)}")
     end
   end
 end

@@ -3,47 +3,45 @@ defmodule CorroPortWeb.ClusterLive do
   require Logger
 
   alias CorroPort.{CorroSubscriber, CorrosionClient}
-  alias CorroPortWeb.{ClusterCards, MembersTable, MessagesTable, DebugSection, AcknowledgmentCard}
+  alias CorroPortWeb.{ClusterCards, MembersTable, AllMessagesTable, DebugSection, AckStatusCard}
 
   # 5 minutes to avoid interference with testing
   @refresh_interval 300_000
 
   def mount(_params, _session, socket) do
-    if connected?(socket) do
-      # Logger.debug("ClusterLive: Connected - subscribing to PubSub topics")
-      # Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroSubscriber.subscription_topic())
-      # NEW: Subscribe to acknowledgment updates
-      # Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroPort.AckTracker.get_pubsub_topic())
-      schedule_refresh()
-    else
-      # Logger.debug("ClusterLive: Not connected yet (static render)")
-    end
-
-    phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
-
-    socket =
-      assign(socket, %{
-        page_title: "Cluster Status",
-        cluster_info: nil,
-        local_info: nil,
-        node_messages: [],
-        error: nil,
-        last_updated: nil,
-        api_port: CorrosionClient.get_api_port(),
-        phoenix_port: phoenix_port,
-        refresh_interval: @refresh_interval,
-        replication_status: nil,
-        # Track real-time subscription state
-        subscription_columns: nil,
-        initial_load_complete: false,
-        pending_initial_rows: [],
-        ack_status: nil,
-        subscription_status: nil,
-        connectivity_test_results: nil
-      })
-
-    {:ok, fetch_cluster_data(socket)}
+  if connected?(socket) do
+    # Subscribe to acknowledgment updates
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroPort.AckTracker.get_pubsub_topic())
+    schedule_refresh()
   end
+
+  phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
+
+  socket =
+    assign(socket, %{
+      page_title: "Cluster Status",
+      cluster_info: nil,
+      local_info: nil,
+      node_messages: [],
+      all_messages: [],          # NEW: All messages from database
+      error: nil,
+      last_updated: nil,
+      api_port: CorrosionClient.get_api_port(),
+      phoenix_port: phoenix_port,
+      refresh_interval: @refresh_interval,
+      replication_status: nil,
+      subscription_columns: nil,
+      initial_load_complete: false,
+      pending_initial_rows: [],
+      ack_status: nil,           # NEW: Acknowledgment status
+      ack_sender_status: nil,    # NEW: AckSender stats
+      loading_messages: false,   # NEW: Loading state for messages
+      messages_error: nil,       # NEW: Error state for messages
+      local_node_id: CorroPort.NodeConfig.get_corrosion_node_id()  # NEW: Local node ID
+    })
+
+  {:ok, fetch_cluster_data(socket)}
+end
 
   # Handle subscription metadata
   def handle_info({:columns_received, columns}, socket) do
@@ -117,11 +115,11 @@ defmodule CorroPortWeb.ClusterLive do
     end
   end
 
-  def handle_info({:ack_update, ack_status}, socket) do
-    # Logger.debug("ClusterLive: 🤝 Received acknowledgment update: #{ack_status.ack_count}/#{ack_status.expected_count}")
-    socket = assign(socket, :ack_status, ack_status)
-    {:noreply, socket}
-  end
+def handle_info({:ack_update, ack_status}, socket) do
+  Logger.debug("ClusterLive: 🤝 Received acknowledgment update: #{ack_status.ack_count}/#{ack_status.expected_count}")
+  socket = assign(socket, :ack_status, ack_status)
+  {:noreply, socket}
+end
 
   def handle_info({:connectivity_test_complete, results}, socket) do
     # Logger.debug("ClusterLive: 📊 Connectivity test complete: #{inspect(results)}")
@@ -172,34 +170,31 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, socket}
   end
 
-  def handle_event("send_message", _params, socket) do
-    # Logger.debug("ClusterLive: 📤 Send message button clicked")
+def handle_event("send_message", _params, socket) do
+  case CorroPortWeb.ClusterLive.MessageHandler.send_message() do
+    {:ok, success_message, message_data} ->
+      Logger.debug("ClusterLive: ✅ Message sent successfully: #{inspect(message_data)}")
 
-    case CorroPortWeb.ClusterLive.MessageHandler.send_message() do
-      {:ok, success_message, message_data} ->
-        # Logger.debug("ClusterLive: ✅ Message sent successfully: #{inspect(message_data)}")
+      # Track this message for acknowledgment monitoring
+      track_message_data = %{
+        pk: message_data.pk,
+        timestamp: message_data.timestamp,
+        node_id: message_data.node_id
+      }
 
-        # Track this message for acknowledgment monitoring using the returned data
-        track_message_data = %{
-          pk: message_data.pk,
-          timestamp: message_data.timestamp,
-          node_id: message_data.node_id
-        }
+      # THIS IS THE MISSING PIECE:
+      CorroPort.AckTracker.track_latest_message(track_message_data)
+      Logger.debug("ClusterLive: Now tracking message #{message_data.pk} for acknowledgments")
 
-        # CorroPort.AckTracker.track_latest_message(track_message_data)
-        # Logger.debug("ClusterLive: Now tracking message #{message_data.pk} for acknowledgments")
+      socket = put_flash(socket, :info, success_message)
+      {:noreply, socket}
 
-        socket = put_flash(socket, :info, success_message)
-        {:noreply, socket}
-
-      {:error, error} ->
-        Logger.warning("TODO: This will fail until I make MessageHandler take no port arg")
-
-        # Logger.debug("ClusterLive: ❌ Failed to send message: #{error}")
-        socket = put_flash(socket, :error, "Failed to send message: #{error}")
-        {:noreply, socket}
-    end
+    {:error, error} ->
+      socket = put_flash(socket, :error, "Failed to send message: #{error}")
+      {:noreply, socket}
   end
+end
+
 
   def handle_event("cleanup_messages", _params, socket) do
     # Logger.debug("ClusterLive: 🧹 Cleanup messages button clicked")
@@ -224,6 +219,12 @@ defmodule CorroPortWeb.ClusterLive do
         {:noreply, socket}
     end
   end
+
+  def handle_event("refresh_messages", _params, socket) do
+  Logger.debug("ClusterLive: 🔄 Manual messages refresh triggered")
+  socket = fetch_all_messages(socket)
+  {:noreply, socket}
+end
 
   def handle_event("check_replication", _params, socket) do
     # Logger.debug("ClusterLive: 🔍 Checking replication status...")
@@ -334,33 +335,52 @@ defmodule CorroPortWeb.ClusterLive do
   end
 
   defp fetch_cluster_data(socket) do
-    updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data()
+  updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data()
 
-    # NEW: Fetch acknowledgment and CorroSubscriber status
-    # ack_status = CorroPort.AckTracker.get_status()
-    # subscription_status = CorroPort.CorroSubscriber.get_status()
+  # Fetch acknowledgment status and AckSender status
+  ack_status = CorroPort.AckTracker.get_status()
+  ack_sender_status = CorroPort.AckSender.get_status()
 
-    socket
-    |> assign(%{
-      cluster_info: updates.cluster_info,
-      local_info: updates.local_info,
-      node_messages: updates.node_messages,
-      error: updates.error,
-      last_updated: updates.last_updated,
-      # Preserve replication_status if it exists, otherwise keep it nil
-      replication_status: socket.assigns[:replication_status],
-      # Mark initial load as complete when we do a full fetch
-      initial_load_complete: true,
-      # Clear any pending initial rows since we just did a full fetch
-      pending_initial_rows: []
-      # ack_status: ack_status,
-      # subscription_status: subscription_status
-    })
-  end
-
+  socket
+  |> assign(%{
+    cluster_info: updates.cluster_info,
+    local_info: updates.local_info,
+    node_messages: updates.node_messages,
+    error: updates.error,
+    last_updated: updates.last_updated,
+    replication_status: socket.assigns[:replication_status],
+    initial_load_complete: true,
+    pending_initial_rows: [],
+    ack_status: ack_status,
+    ack_sender_status: ack_sender_status
+  })
+  |> fetch_all_messages()
+end
   defp schedule_refresh do
     Process.send_after(self(), :refresh, @refresh_interval)
   end
+
+  defp fetch_all_messages(socket) do
+  socket = assign(socket, :loading_messages, true)
+
+  case CorroPort.MessagesAPI.get_node_messages() do
+    {:ok, messages} ->
+      Logger.debug("ClusterLive: Fetched #{length(messages)} total messages")
+      assign(socket, %{
+        all_messages: messages,
+        loading_messages: false,
+        messages_error: nil
+      })
+
+    {:error, error} ->
+      Logger.warning("ClusterLive: Failed to fetch all messages: #{inspect(error)}")
+      assign(socket, %{
+        all_messages: [],
+        loading_messages: false,
+        messages_error: "Failed to load messages: #{inspect(error)}"
+      })
+  end
+end
 
   # Helper functions for replication status
   defp get_replication_status() do
@@ -436,42 +456,52 @@ defmodule CorroPortWeb.ClusterLive do
   end
 
   def render(assigns) do
-    # Ensure all assigns exist
-    assigns =
-      assigns
-      |> assign_new(:replication_status, fn -> nil end)
-      |> assign_new(:ack_status, fn -> nil end)
-      # |> assign_new(:subscription_status, fn -> nil end)
-      |> assign_new(:connectivity_test_results, fn -> nil end)
+  ~H"""
+  <div class="space-y-6">
+    <ClusterCards.cluster_header />
+    <ClusterCards.error_alerts error={@error} />
+    <ClusterCards.status_cards
+      local_info={@local_info}
+      cluster_info={@cluster_info}
+      node_messages={@node_messages}
+      last_updated={@last_updated}
+      phoenix_port={@phoenix_port}
+      api_port={@api_port}
+      refresh_interval={@refresh_interval}
+      replication_status={@replication_status}
+      error={@error}
+    />
 
-    ~H"""
-    <div class="space-y-6">
-      <ClusterCards.cluster_header />
+    <MembersTable.cluster_members_table cluster_info={@cluster_info} />
 
-      <ClusterCards.error_alerts error={@error} />
-
-      <ClusterCards.status_cards
-        local_info={@local_info}
-        cluster_info={@cluster_info}
-        node_messages={@node_messages}
-        last_updated={@last_updated}
-        phoenix_port={@phoenix_port}
-        api_port={@api_port}
-        refresh_interval={@refresh_interval}
-        replication_status={@replication_status}
-        error={@error}
+    <!-- NEW: Acknowledgment and Messages Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <CorroPortWeb.AckStatusCard.ack_status_card
+        ack_status={@ack_status}
+        ack_sender_status={@ack_sender_status}
       />
 
-      <MembersTable.cluster_members_table cluster_info={@cluster_info} />
-
-      <DebugSection.debug_section
-        cluster_info={@cluster_info}
-        local_info={@local_info}
-        node_messages={@node_messages}
-      />
+      <!-- You could add another card here, or make the messages table full width -->
+      <div class="lg:col-span-1">
+        <!-- Placeholder for future card or make messages table span full width -->
+      </div>
     </div>
-    """
-  end
+
+    <CorroPortWeb.AllMessagesTable.all_messages_table
+      all_messages={@all_messages}
+      loading_messages={@loading_messages}
+      messages_error={@messages_error}
+      local_node_id={@local_node_id}
+    />
+
+    <DebugSection.debug_section
+      cluster_info={@cluster_info}
+      local_info={@local_info}
+      node_messages={@node_messages}
+    />
+  </div>
+  """
+end
 
   # <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
   #       <AcknowledgmentCard.ack_status_card

@@ -1,4 +1,4 @@
-defmodule CorroPortWeb.AcknowledgmentCard do
+defmodule CorroPortWeb.AckStatusCard do
   use Phoenix.Component
   import CorroPortWeb.CoreComponents
 
@@ -7,10 +7,8 @@ defmodule CorroPortWeb.AcknowledgmentCard do
     <div class="card bg-base-200">
       <div class="card-body">
         <h3 class="card-title text-sm flex items-center">
+          <.icon name="hero-check-circle" class="w-4 h-4 mr-2" />
           Message Acknowledgments
-          <.button phx-click="test_connectivity" class="btn btn-xs btn-outline ml-2">
-            Test
-          </.button>
         </h3>
 
         <div :if={@ack_status} class="space-y-3">
@@ -24,14 +22,14 @@ defmodule CorroPortWeb.AcknowledgmentCard do
               Sent: {format_timestamp(@ack_status.latest_message.timestamp)}
             </div>
           </div>
-          
-    <!-- No message being tracked -->
+
+          <!-- No message being tracked -->
           <div :if={!@ack_status.latest_message} class="text-center text-base-content/70 py-2">
             No message currently being tracked
             <div class="text-xs mt-1">Click "Send Message" to start tracking</div>
           </div>
-          
-    <!-- Acknowledgment Progress -->
+
+          <!-- Acknowledgment Progress -->
           <div :if={@ack_status.latest_message} class="space-y-2">
             <div class="flex items-center justify-between text-sm">
               <span class="font-semibold">Acknowledgments:</span>
@@ -39,20 +37,20 @@ defmodule CorroPortWeb.AcknowledgmentCard do
                 {@ack_status.ack_count}/{@ack_status.expected_count}
               </span>
             </div>
-            
-    <!-- Progress Bar -->
+
+            <!-- Progress Bar -->
             <div class="w-full bg-base-300 rounded-full h-2">
               <div
                 class={[
                   "h-2 rounded-full transition-all duration-300",
                   ack_progress_bar_class(@ack_status.ack_count, @ack_status.expected_count)
                 ]}
-                style={"width: #{if @ack_status.expected_count > 0, do: (@ack_status.ack_count / @ack_status.expected_count * 100), else: 0}%"}
+                style={"width: #{calculate_progress_percentage(@ack_status.ack_count, @ack_status.expected_count)}%"}
               >
               </div>
             </div>
-            
-    <!-- Expected Nodes -->
+
+            <!-- Expected Nodes -->
             <div class="space-y-1">
               <div class="text-xs font-semibold">Expected from:</div>
               <div class="flex flex-wrap gap-1">
@@ -73,8 +71,8 @@ defmodule CorroPortWeb.AcknowledgmentCard do
                 </span>
               </div>
             </div>
-            
-    <!-- Recent Acknowledgments -->
+
+            <!-- Recent Acknowledgments -->
             <div :if={@ack_status.acknowledgments != []} class="space-y-1">
               <div class="text-xs font-semibold">Recent acknowledgments:</div>
               <div class="space-y-1 max-h-20 overflow-y-auto">
@@ -89,24 +87,24 @@ defmodule CorroPortWeb.AcknowledgmentCard do
             </div>
           </div>
         </div>
-        
-    <!-- Loading state -->
+
+        <!-- Loading state -->
         <div :if={!@ack_status} class="flex items-center justify-center py-4">
           <div class="loading loading-spinner loading-sm"></div>
           <span class="ml-2 text-sm">Loading acknowledgment status...</span>
         </div>
-        
-    <!-- CorroSubscriber Stats -->
-        <div :if={@subscription_status} class="mt-4 pt-3 border-t border-base-300">
-          <div class="text-xs font-semibold mb-2">CorroSubscriber Stats:</div>
+
+        <!-- AckSender Stats -->
+        <div :if={@ack_sender_status} class="mt-4 pt-3 border-t border-base-300">
+          <div class="text-xs font-semibold mb-2">AckSender Stats:</div>
           <div class="grid grid-cols-2 gap-2 text-xs">
             <div>
               <span class="text-base-content/70">Acks sent:</span>
-              {@subscription_status.acknowledgments_sent || 0}
+              {@ack_sender_status.acknowledgments_sent || 0}
             </div>
             <div>
-              <span class="text-base-content/70">Messages:</span>
-              {@subscription_status.total_messages_processed || 0}
+              <span class="text-base-content/70">Messages processed:</span>
+              {@ack_sender_status.total_messages_processed || 0}
             </div>
           </div>
         </div>
@@ -139,6 +137,12 @@ defmodule CorroPortWeb.AcknowledgmentCard do
   end
 
   defp ack_progress_bar_class(_ack_count, _expected_count), do: "bg-base-content/20"
+
+  defp calculate_progress_percentage(ack_count, expected_count) when expected_count > 0 do
+    (ack_count / expected_count * 100) |> Float.round(1)
+  end
+
+  defp calculate_progress_percentage(_ack_count, _expected_count), do: 0
 
   defp format_timestamp(nil), do: "Unknown"
 

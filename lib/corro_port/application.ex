@@ -23,10 +23,10 @@ defmodule CorroPort.Application do
            pools: %{
              default: [conn_opts: [transport_opts: [inet6: true]]]
            }},
-          # CorroPort.CorroStartup,
           # Add the CorroSubscriber to subscribe to Corrosion changes
           CorroPort.CorroSubscriber,
           CorroPort.AckTracker,
+          CorroPort.AckSender,
           # Start a worker by calling: CorroPort.Worker.start_link(arg)
           # {CorroPort.Worker, arg},
           # Start to serve requests, typically the last entry
