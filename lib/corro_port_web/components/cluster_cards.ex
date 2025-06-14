@@ -4,10 +4,10 @@ defmodule CorroPortWeb.ClusterCards do
 
   @moduledoc """
   Function components to illustrate Corrosion cluster status.
-
+  Simplified version focused on cluster monitoring only.
   """
 
-  def cluster_header(assigns) do
+  def cluster_header_simple(assigns) do
     ~H"""
     <.header>
       Corrosion Cluster Status
@@ -19,9 +19,6 @@ defmodule CorroPortWeb.ClusterCards do
       <:actions>
         <.button phx-click="refresh" variant="primary">
           <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Refresh
-        </.button>
-        <.button phx-click="send_message" class="btn btn-secondary">
-          <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" /> Send Message
         </.button>
       </:actions>
     </.header>
@@ -41,7 +38,7 @@ defmodule CorroPortWeb.ClusterCards do
     """
   end
 
-  def status_cards(assigns) do
+  def status_cards_simple(assigns) do
     ~H"""
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       <.local_node_card
@@ -64,8 +61,6 @@ defmodule CorroPortWeb.ClusterCards do
         last_updated={@last_updated}
         refresh_interval={@refresh_interval}
       />
-
-      <.replication_status_card replication_status={@replication_status} />
     </div>
     """
   end
@@ -212,46 +207,6 @@ defmodule CorroPortWeb.ClusterCards do
           </div>
         </div>
         <div :if={!@local_info && !@error} class="loading loading-spinner loading-sm"></div>
-      </div>
-    </div>
-    """
-  end
-
-  def replication_status_card(assigns) do
-    ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body">
-        <h3 class="card-title text-sm flex items-center">
-          Replication Status
-          <.button phx-click="check_replication" class="btn btn-xs btn-outline ml-2">
-            Check
-          </.button>
-        </h3>
-        <div class="space-y-2 text-sm">
-          <div :if={@replication_status}>
-            <div><strong>Last Check:</strong> {format_timestamp(@replication_status.last_check)}</div>
-            <div>
-              <strong>Message Count:</strong> {@replication_status.total_messages || "Unknown"}
-            </div>
-            <div>
-              <strong>Sequence Gaps:</strong>
-              <span class={if @replication_status.has_gaps, do: "text-warning", else: "text-success"}>
-                {if @replication_status.has_gaps, do: "⚠️ Found gaps", else: "✅ None"}
-              </span>
-            </div>
-            <div>
-              <strong>Conflicts:</strong>
-              <span class={
-                if @replication_status.conflicts > 0, do: "text-error", else: "text-success"
-              }>
-                {@replication_status.conflicts || 0}
-              </span>
-            </div>
-          </div>
-          <div :if={!@replication_status} class="text-base-content/70">
-            Click "Check" to analyze replication state
-          </div>
-        </div>
       </div>
     </div>
     """
