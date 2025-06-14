@@ -1,6 +1,11 @@
 defmodule CorroPortWeb.MembersTable do
   use Phoenix.Component
 
+  @max_idle 60
+
+  # TODO: Only include members that have been seen in the last @max_idle minutes
+  # TODO: Exclude local node, since __corro_members always shows that as down
+  #  (can we tell from corrosion which actor_id is currently the local node?)
   def cluster_members_table(assigns) do
     ~H"""
     <div :if={@cluster_info} class="card bg-base-100">
@@ -28,8 +33,13 @@ defmodule CorroPortWeb.MembersTable do
 
         <.tracked_peers_section cluster_info={@cluster_info} />
 
-        <div :if={Map.get(@cluster_info, "members", []) == [] && Map.get(@cluster_info, "tracked_peers", []) == []}>
-          <p class="text-base-content/70">No cluster members or peers found. This might be a single-node setup or the cluster is still forming.</p>
+        <div :if={
+          Map.get(@cluster_info, "members", []) == [] &&
+            Map.get(@cluster_info, "tracked_peers", []) == []
+        }>
+          <p class="text-base-content/70">
+            No cluster members or peers found. This might be a single-node setup or the cluster is still forming.
+          </p>
         </div>
       </div>
     </div>
@@ -40,7 +50,7 @@ defmodule CorroPortWeb.MembersTable do
     ~H"""
     <%= if Map.has_key?(@member, "parse_error") do %>
       <td colspan="5" class="text-error">
-        Parse Error: <%= Map.get(@member, "parse_error") %>
+        Parse Error: {Map.get(@member, "parse_error")}
         <details class="mt-1">
           <summary class="text-xs cursor-pointer">Raw data</summary>
           <pre class="text-xs mt-1"><%= inspect(@member, pretty: true) %></pre>
@@ -48,22 +58,22 @@ defmodule CorroPortWeb.MembersTable do
       </td>
     <% else %>
       <td class="font-mono text-xs">
-        <%= case Map.get(@member, "member_id") do
+        {case Map.get(@member, "member_id") do
           nil -> "Unknown"
           id -> String.slice(id, 0, 8) <> "..."
-        end %>
+        end}
       </td>
       <td class="font-mono text-sm">
-        <%= Map.get(@member, "member_addr", "Unknown") %>
+        {Map.get(@member, "member_addr", "Unknown")}
       </td>
       <td>
         <span class={member_state_badge_class(Map.get(@member, "member_state"))}>
-          <%= Map.get(@member, "member_state", "Unknown") %>
+          {Map.get(@member, "member_state", "Unknown")}
         </span>
       </td>
-      <td><%= Map.get(@member, "member_incarnation", "?") %></td>
+      <td>{Map.get(@member, "member_incarnation", "?")}</td>
       <td class="text-xs">
-        <%= CorroPort.ClusterAPI.format_corrosion_timestamp(Map.get(@member, "member_ts")) %>
+        {CorroPort.ClusterAPI.format_corrosion_timestamp(Map.get(@member, "member_ts"))}
       </td>
     <% end %>
     """
@@ -84,9 +94,9 @@ defmodule CorroPortWeb.MembersTable do
           <tbody>
             <tr :for={peer <- Map.get(@cluster_info, "tracked_peers", [])}>
               <td class="font-mono text-sm">
-                <%= inspect(peer) |> String.slice(0, 50) %>...
+                {inspect(peer) |> String.slice(0, 50)}...
               </td>
-              <td><%= inspect(peer) %></td>
+              <td>{inspect(peer)}</td>
             </tr>
           </tbody>
         </table>
@@ -97,7 +107,7 @@ defmodule CorroPortWeb.MembersTable do
 
   def debug_section(assigns) do
     ~H"""
-    <details class="collapse collapse-arrow bg-base-200" :if={@cluster_info || @local_info}>
+    <details :if={@cluster_info || @local_info} class="collapse collapse-arrow bg-base-200">
       <summary class="collapse-title text-sm font-medium">Raw API Response (Debug)</summary>
       <div class="collapse-content">
         <div :if={@cluster_info} class="mb-4">
@@ -122,15 +132,14 @@ defmodule CorroPortWeb.MembersTable do
   defp member_state_badge_class(state) do
     base_classes = "badge badge-sm"
 
-    state_class = case state do
-      "Alive" -> "badge-success"
-      "Suspect" -> "badge-warning"
-      "Down" -> "badge-error"
-      _ -> "badge-neutral"
-    end
+    state_class =
+      case state do
+        "Alive" -> "badge-success"
+        "Suspect" -> "badge-warning"
+        "Down" -> "badge-error"
+        _ -> "badge-neutral"
+      end
 
     "#{base_classes} #{state_class}"
   end
-
-
 end

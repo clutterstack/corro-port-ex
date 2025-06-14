@@ -18,7 +18,10 @@ defmodule CorroPortWeb.AcknowledgmentController do
         handle_acknowledgment(conn, ack_data)
 
       {:error, reason} ->
-        Logger.warning("AcknowledgmentController: Invalid acknowledgment request: #{inspect(reason)}")
+        Logger.warning(
+          "AcknowledgmentController: Invalid acknowledgment request: #{inspect(reason)}"
+        )
+
         conn
         |> put_status(:bad_request)
         |> json(%{error: "Invalid request: #{reason}"})
@@ -30,11 +33,13 @@ defmodule CorroPortWeb.AcknowledgmentController do
 
     case check_required_fields(params, required_fields) do
       :ok ->
-        {:ok, %{
-          message_pk: params["message_pk"],
-          ack_node_id: params["ack_node_id"],
-          message_timestamp: params["message_timestamp"]  # optional, for logging
-        }}
+        {:ok,
+         %{
+           message_pk: params["message_pk"],
+           ack_node_id: params["ack_node_id"],
+           # optional, for logging
+           message_timestamp: params["message_timestamp"]
+         }}
 
       {:error, missing_fields} ->
         {:error, "Missing required fields: #{Enum.join(missing_fields, ", ")}"}
@@ -42,9 +47,10 @@ defmodule CorroPortWeb.AcknowledgmentController do
   end
 
   defp check_required_fields(params, required_fields) do
-    missing_fields = Enum.filter(required_fields, fn field ->
-      is_nil(params[field]) or params[field] == ""
-    end)
+    missing_fields =
+      Enum.filter(required_fields, fn field ->
+        is_nil(params[field]) or params[field] == ""
+      end)
 
     case missing_fields do
       [] -> :ok
@@ -53,12 +59,16 @@ defmodule CorroPortWeb.AcknowledgmentController do
   end
 
   defp handle_acknowledgment(conn, ack_data) do
-    Logger.info("AcknowledgmentController: Received acknowledgment from #{ack_data.ack_node_id} for message #{ack_data.message_pk}")
+    Logger.info(
+      "AcknowledgmentController: Received acknowledgment from #{ack_data.ack_node_id} for message #{ack_data.message_pk}"
+    )
 
     # Add the acknowledgment to our tracker
     case CorroPort.AckTracker.add_acknowledgment(ack_data.ack_node_id) do
       :ok ->
-        Logger.info("AcknowledgmentController: Successfully recorded acknowledgment from #{ack_data.ack_node_id}")
+        Logger.info(
+          "AcknowledgmentController: Successfully recorded acknowledgment from #{ack_data.ack_node_id}"
+        )
 
         conn
         |> put_status(:ok)
@@ -70,7 +80,9 @@ defmodule CorroPortWeb.AcknowledgmentController do
         })
 
       {:error, :no_message_tracked} ->
-        Logger.warning("AcknowledgmentController: Received acknowledgment for #{ack_data.message_pk} but no message is currently being tracked")
+        Logger.warning(
+          "AcknowledgmentController: Received acknowledgment for #{ack_data.message_pk} but no message is currently being tracked"
+        )
 
         conn
         |> put_status(:not_found)
@@ -80,7 +92,9 @@ defmodule CorroPortWeb.AcknowledgmentController do
         })
 
       {:error, reason} ->
-        Logger.error("AcknowledgmentController: Failed to record acknowledgment: #{inspect(reason)}")
+        Logger.error(
+          "AcknowledgmentController: Failed to record acknowledgment: #{inspect(reason)}"
+        )
 
         conn
         |> put_status(:internal_server_error)

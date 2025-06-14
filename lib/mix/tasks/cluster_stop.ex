@@ -55,6 +55,7 @@ defmodule Mix.Tasks.Cluster.Stop do
       case Path.wildcard(pattern) do
         [] ->
           :ok
+
         files ->
           Mix.shell().info("Cleaning up: #{Enum.join(files, ", ")}")
           Enum.each(files, &File.rm/1)
@@ -66,6 +67,7 @@ defmodule Mix.Tasks.Cluster.Stop do
       {:ok, []} ->
         File.rmdir("/tmp/corrosion")
         Mix.shell().info("Removed empty /tmp/corrosion directory")
+
       _ ->
         :ok
     end

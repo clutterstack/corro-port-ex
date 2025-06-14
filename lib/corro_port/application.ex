@@ -9,7 +9,8 @@ defmodule CorroPort.Application do
   def start(_type, _args) do
     # Start Corrosion before our stuff. Let it do its own stdin/stout
     {:ok, config_file} = CorroPort.NodeConfig.write_corrosion_config()
-    corrosion_cmd = "corrosion/corrosion-mac agent -c #{config_file}"
+    corro_binary = Application.get_env(:corro_port, :node_config)[:corrosion_binary]
+    corrosion_cmd = "#{corro_binary} agent -c #{config_file}"
 
     case :exec.run_link(corrosion_cmd, []) do
       {:ok, _exec_pid, _os_pid} ->
@@ -18,13 +19,13 @@ defmodule CorroPort.Application do
           {DNSCluster, query: Application.get_env(:corro_port, :dns_cluster_query) || :ignore},
           {Phoenix.PubSub, name: CorroPort.PubSub},
           {Finch,
-          name: WhereCorro.Finch,
-          pools: %{
-            default: [conn_opts: [transport_opts: [inet6: true]]]
-          }},
+           name: WhereCorro.Finch,
+           pools: %{
+             default: [conn_opts: [transport_opts: [inet6: true]]]
+           }},
           # CorroPort.CorroStartup,
           # Add the CorroSubscriber to subscribe to Corrosion changes
-          # CorroPort.CorroSubscriber,
+          CorroPort.CorroSubscriber,
           # CorroPort.AckTracker,
           # Start a worker by calling: CorroPort.Worker.start_link(arg)
           # {CorroPort.Worker, arg},

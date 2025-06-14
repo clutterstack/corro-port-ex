@@ -11,7 +11,7 @@ defmodule CorroPort.CorroStartup do
   https://tonyc.github.io/posts/managing-external-commands-in-elixir-with-ports/.
   """
 
-  @command "corrosion/corrosion-mac"
+  @command Application.get_env(:corro_port, :node_config)[:corrosion_binary]
   @wrapper "corrosion/wrapper.sh"
 
   # GenServer API
@@ -50,19 +50,26 @@ defmodule CorroPort.CorroStartup do
     # )
 
     # If no wrapper:
-    port = Port.open({:spawn_executable, @command}, [:binary, :exit_status, args: ["agent", "-c", config_path]])
+    port =
+      Port.open({:spawn_executable, @command}, [
+        :binary,
+        :exit_status,
+        args: ["agent", "-c", config_path]
+      ])
+
     # or with spawn
     # port = Port.open({:spawn, "#{@command} agent -c #{config_path}"}, [:binary, :exit_status])
 
     Port.monitor(port)
 
-    {:ok, %{
-      port: port,
-      latest_output: nil,
-      exit_status: nil,
-      node_id: node_id,
-      config_path: config_path
-    }}
+    {:ok,
+     %{
+       port: port,
+       latest_output: nil,
+       exit_status: nil,
+       node_id: node_id,
+       config_path: config_path
+     }}
   end
 
   def terminate(reason, %{port: port, node_id: node_id} = state) do
@@ -73,6 +80,7 @@ defmodule CorroPort.CorroStartup do
     case Port.info(port) do
       nil ->
         Logger.info("Port already closed for #{node_id}")
+
       port_info ->
         os_pid = port_info[:os_pid]
         Logger.warning("Cleaning up orphaned OS process for #{node_id}: #{os_pid}")
@@ -80,7 +88,8 @@ defmodule CorroPort.CorroStartup do
         # Send TERM signal first, then KILL if needed
         try do
           System.cmd("kill", ["-TERM", "#{os_pid}"])
-          Process.sleep(1000)  # Give it a moment to terminate gracefully
+          # Give it a moment to terminate gracefully
+          Process.sleep(1000)
           System.cmd("kill", ["-KILL", "#{os_pid}"])
         catch
           _ -> Logger.info("Process #{os_pid} already terminated")
@@ -92,17 +101,19 @@ defmodule CorroPort.CorroStartup do
 
   # This callback handles data incoming from Corrosion's STDOUT
   # With :binary option, data should now be a proper string
-  def handle_info({port, {:data, text_line}}, %{port: port, node_id: node_id} = state) when is_binary(text_line) do
+  def handle_info({port, {:data, text_line}}, %{port: port, node_id: node_id} = state)
+      when is_binary(text_line) do
     Logger.warning("[#{node_id}] #{text_line}")
     {:noreply, %{state | latest_output: text_line}}
   end
 
   # Fallback for any remaining char list data (shouldn't happen with :binary)
   def handle_info({port, {:data, data}}, %{port: port, node_id: node_id} = state) do
-    text_line = case data do
-      bytes when is_list(bytes) -> List.to_string(bytes)
-      other -> inspect(other)
-    end
+    text_line =
+      case data do
+        bytes when is_list(bytes) -> List.to_string(bytes)
+        other -> inspect(other)
+      end
 
     Logger.warning("[#{node_id}] #{text_line}")
     {:noreply, %{state | latest_output: text_line}}
@@ -141,8 +152,9 @@ defmodule CorroPort.CorroStartup do
       config_path: state.config_path,
       latest_output: state.latest_output,
       exit_status: state.exit_status,
-      port_info: (if state.port, do: Port.info(state.port), else: nil)
+      port_info: if(state.port, do: Port.info(state.port), else: nil)
     }
+
     {:reply, status, state}
   end
 end

@@ -29,7 +29,7 @@ In the IEx session (node 1), you can:
 CorroPort.CorroStartup.get_status()
 
 # Check the node configuration
-CorroPort.NodeConfig.get_node_config()
+CorroPort.NodeConfig.app_node_config()
 
 # View the generated Corrosion config
 File.read!(CorroPort.NodeConfig.get_config_path()) |> IO.puts()

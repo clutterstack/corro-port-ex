@@ -82,12 +82,13 @@ defmodule CorroPort.AckTracker do
     Logger.info("AckTracker starting...")
 
     # Create ETS table
-    table = :ets.new(@table_name, [
-      :set,
-      :named_table,
-      :public,
-      read_concurrency: true
-    ])
+    table =
+      :ets.new(@table_name, [
+        :set,
+        :named_table,
+        :public,
+        read_concurrency: true
+      ])
 
     Logger.info("AckTracker ETS table created: #{@table_name}")
 
@@ -122,7 +123,10 @@ defmodule CorroPort.AckTracker do
         ack_key = {:ack, ack_node_id}
         ack_value = %{timestamp: current_time, node_id: ack_node_id}
 
-        Logger.info("AckTracker: Inserting ETS entry: #{inspect(ack_key)} -> #{inspect(ack_value)}")
+        Logger.info(
+          "AckTracker: Inserting ETS entry: #{inspect(ack_key)} -> #{inspect(ack_value)}"
+        )
+
         :ets.insert(@table_name, {ack_key, ack_value})
 
         # Debug: Show all current acknowledgments in ETS
@@ -135,7 +139,10 @@ defmodule CorroPort.AckTracker do
         {:reply, :ok, state}
 
       [] ->
-        Logger.warning("AckTracker: Received acknowledgment from #{ack_node_id} but no latest message is being tracked")
+        Logger.warning(
+          "AckTracker: Received acknowledgment from #{ack_node_id} but no latest message is being tracked"
+        )
+
         {:reply, {:error, :no_message_tracked}, state}
     end
   end
@@ -171,10 +178,11 @@ defmodule CorroPort.AckTracker do
 
   defp build_status do
     # Get latest message
-    latest_message = case :ets.lookup(@table_name, :latest_message) do
-      [{:latest_message, message_data}] -> message_data
-      [] -> nil
-    end
+    latest_message =
+      case :ets.lookup(@table_name, :latest_message) do
+        [{:latest_message, message_data}] -> message_data
+        [] -> nil
+      end
 
     # Get all acknowledgments - now using the corrected pattern
     ack_pattern = {{:ack, :"$1"}, :"$2"}
@@ -182,17 +190,20 @@ defmodule CorroPort.AckTracker do
 
     Logger.debug("AckTracker: Raw ETS matches: #{inspect(ack_matches)}")
 
-    acknowledgments = Enum.map(ack_matches, fn [node_id, ack_data] ->
-      %{
-        node_id: node_id,
-        timestamp: ack_data.timestamp
-      }
-    end)
-    |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
+    acknowledgments =
+      Enum.map(ack_matches, fn [node_id, ack_data] ->
+        %{
+          node_id: node_id,
+          timestamp: ack_data.timestamp
+        }
+      end)
+      |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
 
     expected_nodes = calculate_expected_nodes()
 
-    Logger.info("AckTracker: Found #{length(acknowledgments)} acknowledgments from #{inspect(Enum.map(acknowledgments, & &1.node_id))}")
+    Logger.info(
+      "AckTracker: Found #{length(acknowledgments)} acknowledgments from #{inspect(Enum.map(acknowledgments, & &1.node_id))}"
+    )
 
     %{
       latest_message: latest_message,
@@ -227,9 +238,13 @@ defmodule CorroPort.AckTracker do
                       {port, _} -> port
                       _ -> nil
                     end
-                  _ -> nil
+
+                  _ ->
+                    nil
                 end
-              _ -> nil
+
+              _ ->
+                nil
             end
           end)
           |> Enum.reject(&is_nil/1)
@@ -238,16 +253,24 @@ defmodule CorroPort.AckTracker do
         expected_node_ids =
           active_ports
           |> Enum.map(fn port -> "node#{port - 8786}" end)
-          |> Enum.reject(fn node_id -> node_id == local_node_string end)  # Exclude ourselves
+          # Exclude ourselves
+          |> Enum.reject(fn node_id -> node_id == local_node_string end)
           |> Enum.sort()
 
-        Logger.debug("AckTracker: Calculated expected nodes from cluster: #{inspect(expected_node_ids)}")
+        Logger.debug(
+          "AckTracker: Calculated expected nodes from cluster: #{inspect(expected_node_ids)}"
+        )
+
         expected_node_ids
 
       {:error, reason} ->
-        Logger.warning("AckTracker: Could not get cluster members (#{inspect(reason)}), falling back to static list")
+        Logger.warning(
+          "AckTracker: Could not get cluster members (#{inspect(reason)}), falling back to static list"
+        )
+
         # Fallback to the old hardcoded approach
-        all_node_ids = [1, 2, 3, 4]  # Include node 4 in fallback
+        # Include node 4 in fallback
+        all_node_ids = [1, 2, 3, 4]
         expected_node_ids = Enum.reject(all_node_ids, fn id -> id == local_node_id end)
         Enum.map(expected_node_ids, fn id -> "node#{id}" end)
     end
@@ -255,6 +278,7 @@ defmodule CorroPort.AckTracker do
 
   defp broadcast_update do
     status = build_status()
+
     Phoenix.PubSub.broadcast(
       CorroPort.PubSub,
       @pubsub_topic,

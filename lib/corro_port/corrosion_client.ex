@@ -27,22 +27,29 @@ defmodule CorroPort.CorrosionClient do
       {:ok, response_body}
   """
   def execute_query(query, port \\ nil) do
+    # TODO: set base_url using application environment vars, for both local and prod
     port = port || get_api_port()
-    base_url = "http://127.0.0.1:#{port}"
+    base_url = "http://127.0.0.1:#{port}" |> dbg
 
     # Logger.debug("Executing query on port #{port}: #{query}")
 
     case Req.post("#{base_url}/v1/queries",
-                  json: query,
-                  headers: [{"content-type", "application/json"}],
-                  receive_timeout: 5000) do
+           json: query,
+           headers: [{"content-type", "application/json"}],
+           receive_timeout: 5000
+         ) do
       {:ok, %{status: 200, body: body}} ->
         {:ok, body}
+
       {:ok, %{status: status, body: body}} ->
         Logger.warning("Query failed with status #{status}: #{inspect(body)}")
         {:error, "HTTP #{status}: #{inspect(body)}"}
+
       {:error, exception} ->
-        Logger.warning("Failed to connect to Corrosion API on port #{port}: #{inspect(exception)}")
+        Logger.warning(
+          "Failed to connect to Corrosion API on port #{port}: #{inspect(exception)}"
+        )
+
         {:error, "Connection failed: #{inspect(exception)}"}
     end
   end
@@ -69,16 +76,22 @@ defmodule CorroPort.CorrosionClient do
     Logger.debug("Executing transaction on port #{port}: #{inspect(transactions)}")
 
     case Req.post("#{base_url}/v1/transactions",
-                  json: transactions,
-                  headers: [{"content-type", "application/json"}],
-                  receive_timeout: 5000) do
+           json: transactions,
+           headers: [{"content-type", "application/json"}],
+           receive_timeout: 5000
+         ) do
       {:ok, %{status: 200, body: body}} ->
         {:ok, body}
+
       {:ok, %{status: status, body: body}} ->
         Logger.warning("Transaction failed with status #{status}: #{inspect(body)}")
         {:error, "HTTP #{status}: #{inspect(body)}"}
+
       {:error, exception} ->
-        Logger.warning("Failed to connect to Corrosion API on port #{port}: #{inspect(exception)}")
+        Logger.warning(
+          "Failed to connect to Corrosion API on port #{port}: #{inspect(exception)}"
+        )
+
         {:error, "Connection failed: #{inspect(exception)}"}
     end
   end
@@ -105,23 +118,29 @@ defmodule CorroPort.CorrosionClient do
   def parse_query_response(response) when is_binary(response) do
     lines = String.split(response, "\n")
 
-    {_columns, rows} = Enum.reduce(lines, {nil, []}, fn line, {cols, rows_acc} ->
-      case String.trim(line) do
-        "" -> {cols, rows_acc}
-        json_line ->
-          case Jason.decode(json_line) do
-            {:ok, %{"columns" => columns}} ->
-              {columns, rows_acc}
-            {:ok, %{"row" => [_row_num, values]}} when not is_nil(cols) ->
-              row_map = Enum.zip(cols, values) |> Enum.into(%{})
-              {cols, [row_map | rows_acc]}
-            {:ok, %{"eoq" => _}} ->
-              {cols, rows_acc}
-            _ ->
-              {cols, rows_acc}
-          end
-      end
-    end)
+    {_columns, rows} =
+      Enum.reduce(lines, {nil, []}, fn line, {cols, rows_acc} ->
+        case String.trim(line) do
+          "" ->
+            {cols, rows_acc}
+
+          json_line ->
+            case Jason.decode(json_line) do
+              {:ok, %{"columns" => columns}} ->
+                {columns, rows_acc}
+
+              {:ok, %{"row" => [_row_num, values]}} when not is_nil(cols) ->
+                row_map = Enum.zip(cols, values) |> Enum.into(%{})
+                {cols, [row_map | rows_acc]}
+
+              {:ok, %{"eoq" => _}} ->
+                {cols, rows_acc}
+
+              _ ->
+                {cols, rows_acc}
+            end
+        end
+      end)
 
     Enum.reverse(rows)
   end
@@ -140,42 +159,7 @@ defmodule CorroPort.CorrosionClient do
   Falls back to port 8081 if not configured.
   """
   def get_api_port do
-    config = Application.get_env(:corro_port, :node_config, [])
-    Keyword.get(config, :corrosion_api_port, 8081)
-  end
-
-  @doc """
-  Attempt to detect a working Corrosion API port by testing common ports.
-
-  First tries the configured port, then falls back to testing ports 8081-8085.
-  This is useful for development environments where port assignments may vary.
-
-  ## Returns
-  Integer port number of the first working port found, or the configured port as fallback.
-  """
-  def detect_api_port do
-    configured_port = get_api_port()
-
-    case execute_query("SELECT 1", configured_port) do
-      {:ok, _} ->
-        Logger.debug("Using configured Corrosion API port #{configured_port}")
-        configured_port
-
-      _ ->
-        Logger.debug("Configured port #{configured_port} not working, trying alternatives...")
-
-        candidate_ports = [8081, 8082, 8083, 8084, 8085]
-
-        Enum.find(candidate_ports, fn port ->
-          case execute_query("SELECT 1", port) do
-            {:ok, _} ->
-              Logger.info("Found working Corrosion API on port #{port}")
-              true
-            _ ->
-              false
-          end
-        end) || configured_port
-    end
+    Application.get_env(:corro_port, :node_config)[:corrosion_api_port]
   end
 
   @doc """
@@ -189,9 +173,15 @@ defmodule CorroPort.CorrosionClient do
   - `{:error, reason}` if connection failed
   """
   def test_connection(port \\ nil) do
+    api_port = port || get_api_port()
+
     case execute_query("SELECT 1", port) do
-      {:ok, _} -> :ok
-      error -> error
+      {:ok, message} ->
+        Logger.info(message)
+        :ok
+
+      error ->
+        error
     end
   end
 end

@@ -1,15 +1,14 @@
 import Config
 
-# Get node ID from environment, default to 1
-node_id = String.to_integer(System.get_env("NODE_ID") || "1")
+# Get node ID from environment, default to 0
+node_id = String.to_integer(System.get_env("NODE_ID") || "0")
+# Dev config path:
+config_path = "corrosion/config-node#{node_id}.toml"
 
 # Calculate ports based on node ID
 phoenix_port = 4000 + node_id
 corrosion_api_port = 8080 + node_id
 corrosion_gossip_port = 8786 + node_id
-
-# For development, we disable any cache and enable
-# debugging and code reloading.
 #
 # The watchers configuration can be used to run external
 # watchers to your application. For example, we can use it
@@ -31,7 +30,9 @@ config :corro_port, CorroPortWeb.Endpoint,
 config :corro_port, :node_config,
   node_id: node_id,
   corrosion_api_port: corrosion_api_port,
-  corrosion_gossip_port: corrosion_gossip_port
+  corrosion_gossip_port: corrosion_gossip_port,
+  corro_config_path: config_path,
+  corrosion_binary: "corrosion/corrosion-mac"
 
 ## SSL Support
 #

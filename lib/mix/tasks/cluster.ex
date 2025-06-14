@@ -24,10 +24,11 @@ defmodule Mix.Tasks.Cluster.Start do
   @shortdoc "Manages local Corrosion clusters"
 
   def run(args) do
-    {parsed, _, _} = OptionParser.parse(args,
-      switches: [nodes: :integer, prefix: :string, help: :boolean],
-      aliases: [n: :nodes, p: :prefix, h: :help]
-    )
+    {parsed, _, _} =
+      OptionParser.parse(args,
+        switches: [nodes: :integer, prefix: :string, help: :boolean],
+        aliases: [n: :nodes, p: :prefix, h: :help]
+      )
 
     cond do
       parsed[:help] ->
@@ -55,9 +56,10 @@ defmodule Mix.Tasks.Cluster.Start do
       start_foreground_node(1, prefix)
     else
       # Start nodes 2..N in the background
-      background_pids = for node_id <- 2..num_nodes do
-        start_background_node(node_id, prefix)
-      end
+      background_pids =
+        for node_id <- 2..num_nodes do
+          start_background_node(node_id, prefix)
+        end
 
       # Give background nodes a moment to start
       Process.sleep(2000)
@@ -72,6 +74,7 @@ defmodule Mix.Tasks.Cluster.Start do
       after
         # Clean up background processes when we exit
         Mix.shell().info("Stopping background nodes...")
+
         Enum.each(background_pids, fn pid ->
           try do
             Process.exit(pid, :kill)
@@ -98,6 +101,7 @@ defmodule Mix.Tasks.Cluster.Start do
 
         {output, exit_code} ->
           Mix.shell().error("Node #{node_name} exited with code #{exit_code}")
+
           if String.length(output) > 0 do
             Mix.shell().error("Output: #{output}")
           end
@@ -124,9 +128,9 @@ defmodule Mix.Tasks.Cluster.Start do
 
         # Use System.cmd with stdio inheritance for interactive session
         case System.cmd(iex_path, args,
-          into: IO.stream(:stdio, :line),
-          stderr_to_stdout: true
-        ) do
+               into: IO.stream(:stdio, :line),
+               stderr_to_stdout: true
+             ) do
           {_, 0} ->
             Mix.shell().info("Node #{node_name} exited normally")
 
@@ -154,10 +158,12 @@ defmodule Mix.Tasks.Cluster.Start do
     end
 
     Mix.shell().info("Connect to other nodes from IEx:")
+
     for node_id <- node_range, node_id != 1 do
       node_name = "#{prefix}#{node_id}"
       Mix.shell().info("  Node.connect(:\"#{node_name}@#{get_hostname()}\")")
     end
+
     Mix.shell().info("")
   end
 

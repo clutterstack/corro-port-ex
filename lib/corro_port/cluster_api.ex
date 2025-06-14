@@ -31,6 +31,7 @@ defmodule CorroPort.ClusterAPI do
         members = CorrosionClient.parse_query_response(response)
         parsed_members = Enum.map(members, &parse_member_foca_state/1)
         {:ok, parsed_members}
+
       error ->
         error
     end
@@ -79,16 +80,14 @@ defmodule CorroPort.ClusterAPI do
   end
 
   @doc """
-  Checks if the local Corrosion node considers itself active.
-
-  This does a simple connectivity test to the local API as a proxy
-  for the node being up and responsive.
+  Checks if the local Corrosion node API responds to a trivial query.
   """
   def check_local_node_active(port \\ nil) do
     case CorrosionClient.execute_query("SELECT 1 as alive", port) do
       {:ok, _} ->
         Logger.debug("Local Corrosion node is responding")
         true
+
       {:error, reason} ->
         Logger.debug("Local Corrosion node not responding: #{inspect(reason)}")
         false
@@ -103,30 +102,41 @@ defmodule CorroPort.ClusterAPI do
   def get_local_member_status(port \\ nil) do
     case get_cluster_members(port) do
       {:ok, members} ->
-        local_gossip_port = get_local_gossip_port()
+        local_gossip_port =
+          case Application.get_env(:corro_port, :node_config) do
+            %{corrosion_gossip_port: port} -> port
+            # or some default value
+            _ -> "error"
+          end
 
         # Find member whose gossip address matches our local gossip port
-        local_member = Enum.find(members, fn member ->
-          case Map.get(member, "member_addr") do
-            addr when is_binary(addr) ->
-              case String.split(addr, ":") do
-                [_ip, port_str] ->
-                  case Integer.parse(port_str) do
-                    {port, _} -> port == local_gossip_port
-                    _ -> false
-                  end
-                _ -> false
-              end
-            _ -> false
-          end
-        end)
+        local_member =
+          Enum.find(members, fn member ->
+            case Map.get(member, "member_addr") do
+              addr when is_binary(addr) ->
+                case String.split(addr, ":") do
+                  [_ip, port_str] ->
+                    case Integer.parse(port_str) do
+                      {port, _} -> port == local_gossip_port
+                      _ -> false
+                    end
+
+                  _ ->
+                    false
+                end
+
+              _ ->
+                false
+            end
+          end)
 
         case local_member do
           nil -> {:error, :not_found_in_members}
           member -> {:ok, member}
         end
 
-      error -> error
+      error ->
+        error
     end
   end
 
@@ -134,10 +144,11 @@ defmodule CorroPort.ClusterAPI do
     case get_cluster_members(port) do
       {:ok, members} ->
         # Count active members (not "Down" state)
-        active_members = Enum.filter(members, fn member ->
-          member_state = Map.get(member, "member_state", "Unknown")
-          member_state != "Down"
-        end)
+        active_members =
+          Enum.filter(members, fn member ->
+            member_state = Map.get(member, "member_state", "Unknown")
+            member_state != "Down"
+          end)
 
         Logger.debug("Found #{length(members)} total members, #{length(active_members)} active")
 
@@ -146,6 +157,7 @@ defmodule CorroPort.ClusterAPI do
           "member_count" => length(members),
           "active_member_count" => length(active_members)
         })
+
       {:error, reason} ->
         Logger.debug("Could not fetch cluster members: #{inspect(reason)}")
         cluster_data
@@ -156,6 +168,7 @@ defmodule CorroPort.ClusterAPI do
     case get_tracked_peers(port) do
       {:ok, peers} ->
         Map.merge(cluster_data, %{"tracked_peers" => peers, "peer_count" => length(peers)})
+
       {:error, _} ->
         Logger.debug("Could not fetch tracked peers (table may not exist)")
         cluster_data
@@ -171,13 +184,6 @@ defmodule CorroPort.ClusterAPI do
     Map.put(cluster_data, "total_active_nodes", total_active)
   end
 
-  defp get_local_gossip_port do
-    config = Application.get_env(:corro_port, :node_config, %{
-      corrosion_gossip_port: 8787
-    })
-    config[:corrosion_gossip_port] || 8787
-  end
-
   @doc """
   Gets tracked peers from the crsql_tracked_peers table.
   """
@@ -187,6 +193,7 @@ defmodule CorroPort.ClusterAPI do
     case CorrosionClient.execute_query(query, port) do
       {:ok, response} ->
         {:ok, CorrosionClient.parse_query_response(response)}
+
       error ->
         error
     end
@@ -200,14 +207,36 @@ defmodule CorroPort.ClusterAPI do
   Returns the node identification from the application configuration
   instead of querying Corrosion database tables.
   """
-  def get_info(port \\ nil) do
+  def get_info() do
     node_id = CorroPort.NodeConfig.get_corrosion_node_id()
-    local_active = check_local_node_active(port)
+    local_active = check_local_node_active()
 
-    {:ok, %{
-      "node_id" => node_id,
-      "local_active" => local_active
-    }}
+    {:ok,
+     %{
+       "node_id" => node_id,
+       "local_active" => local_active
+     }}
+  end
+
+  def get_database_info() do
+    # Use only SELECT queries that are guaranteed to be read-only
+    queries = [
+      {"Tables", "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"},
+      {"Table Count", "SELECT COUNT(*) as count FROM sqlite_master WHERE type='table'"},
+      {"Node Messages Count", "SELECT COUNT(*) as count FROM node_messages"}
+      # Remove PRAGMA statements that might be considered write operations
+    ]
+
+    Enum.reduce(queries, %{}, fn {key, query}, acc ->
+      case CorrosionClient.execute_query(query) do
+        {:ok, response} ->
+          result = CorrosionClient.parse_query_response(response)
+          Map.put(acc, key, result)
+
+        {:error, reason} ->
+          Map.put(acc, key, %{error: reason})
+      end
+    end)
   end
 
   ## Data Parsing and Formatting
@@ -249,15 +278,18 @@ defmodule CorroPort.ClusterAPI do
       "2022-01-01 00:00:00 UTC"
   """
   def format_corrosion_timestamp(nil), do: "Unknown"
+
   def format_corrosion_timestamp(ts) when is_integer(ts) do
     seconds = div(ts, 1_000_000_000)
 
     case DateTime.from_unix(seconds) do
       {:ok, datetime} ->
         Calendar.strftime(datetime, "%Y-%m-%d %H:%M:%S UTC")
+
       {:error, _} ->
         "Invalid timestamp"
     end
   end
+
   def format_corrosion_timestamp(_), do: "Invalid timestamp"
 end

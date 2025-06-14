@@ -3,7 +3,7 @@ defmodule CorroPortWeb.DebugSection do
 
   def debug_section(assigns) do
     ~H"""
-    <details class="collapse collapse-arrow bg-base-200" :if={@cluster_info || @local_info}>
+    <details :if={@cluster_info || @local_info} class="collapse collapse-arrow bg-base-200">
       <summary class="collapse-title text-sm font-medium">Raw API Response (Debug)</summary>
       <div class="collapse-content">
         <div :if={@cluster_info} class="mb-4">
@@ -22,5 +22,4 @@ defmodule CorroPortWeb.DebugSection do
     </details>
     """
   end
-
 end
