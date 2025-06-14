@@ -12,7 +12,7 @@ defmodule CorroPort.Application do
     corro_binary = Application.get_env(:corro_port, :node_config)[:corrosion_binary]
     corrosion_cmd = "#{corro_binary} agent -c #{config_file}"
 
-    case :exec.run_link(corrosion_cmd, []) do
+    case :exec.run_link(corrosion_cmd, [{:stdout, :print}, {:stderr, :print}]) do
       {:ok, _exec_pid, _os_pid} ->
         children = [
           CorroPortWeb.Telemetry,
@@ -26,7 +26,7 @@ defmodule CorroPort.Application do
           # CorroPort.CorroStartup,
           # Add the CorroSubscriber to subscribe to Corrosion changes
           CorroPort.CorroSubscriber,
-          # CorroPort.AckTracker,
+          CorroPort.AckTracker,
           # Start a worker by calling: CorroPort.Worker.start_link(arg)
           # {CorroPort.Worker, arg},
           # Start to serve requests, typically the last entry

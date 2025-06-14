@@ -105,8 +105,8 @@ defmodule CorroPortWeb.NodeInfoLive do
   end
 
   defp get_config_info do
-    node_config = NodeConfig.app_node_config() |> dbg
-    config_path = NodeConfig.get_config_path() |> dbg
+    node_config = NodeConfig.app_node_config()
+    config_path = NodeConfig.get_config_path()
 
     # Read the actual config file content
     config_content =

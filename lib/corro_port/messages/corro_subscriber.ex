@@ -19,7 +19,6 @@ defmodule CorroPort.CorroSubscriber do
   end
 
   def init(_opts) do
-    Logger.warning("CorroSubscriber starting up...")
     # Start the subscription after a short delay to ensure Corrosion is ready
     Process.send_after(self(), :start_subscription, 1000)
 
@@ -36,15 +35,13 @@ defmodule CorroPort.CorroSubscriber do
        initial_state_received: false,
        # Track acknowledgments sent
        acknowledgments_sent: 0,
-       last_ack_sent: nil
+       last_ack_sent: nil,
+       # Add watch_id tracking like CorroWatch
+       watch_id: nil
      }}
   end
 
   def handle_info(:start_subscription, state) do
-    Logger.warning(
-      "CorroSubscriber: Attempting to start subscription (attempt #{state.reconnect_attempts + 1})"
-    )
-
     # Kill any existing stream process
     if state.stream_pid do
       Process.exit(state.stream_pid, :kill)
@@ -60,7 +57,8 @@ defmodule CorroPort.CorroSubscriber do
         status: :connecting,
         reconnect_attempts: state.reconnect_attempts + 1,
         columns: nil,
-        initial_state_received: false
+        initial_state_received: false,
+        watch_id: nil
     }
 
     {:noreply, new_state}
@@ -68,10 +66,6 @@ defmodule CorroPort.CorroSubscriber do
 
   def handle_info(:reconnect, state) do
     if state.reconnect_attempts < state.max_reconnect_attempts do
-      Logger.warning(
-        "CorroSubscriber: Attempting to reconnect (attempt #{state.reconnect_attempts + 1})"
-      )
-
       send(self(), :start_subscription)
       {:noreply, state}
     else
@@ -81,44 +75,41 @@ defmodule CorroPort.CorroSubscriber do
   end
 
   # Handle messages from the streaming process
-  def handle_info({:subscription_connected}, state) do
-    Logger.warning("CorroSubscriber: ✅ Subscription stream connected")
+  def handle_info({:subscription_connected, watch_id}, state) do
+    Logger.info("CorroSubscriber: ✅ Subscription stream connected with watch_id: #{watch_id}")
 
     {:noreply,
      %{
        state
        | status: :connected,
          reconnect_attempts: 0,
-         connection_established_at: DateTime.utc_now()
+         connection_established_at: DateTime.utc_now(),
+         watch_id: watch_id
      }}
   end
 
   def handle_info({:subscription_data, data}, state) do
-    Logger.warning("CorroSubscriber: 📨 Received stream data (#{byte_size(data)} bytes)")
-
     updated_state = process_streaming_data(data, state)
-
     new_state = %{updated_state | last_data_received: DateTime.utc_now()}
-
     {:noreply, new_state}
   end
 
   def handle_info({:subscription_error, error}, state) do
     Logger.warning("CorroSubscriber: ❌ Subscription error: #{inspect(error)}")
-    new_state = %{state | status: :error, stream_pid: nil}
+    new_state = %{state | status: :error, stream_pid: nil, watch_id: nil}
     schedule_reconnect(new_state)
   end
 
   def handle_info({:subscription_closed, reason}, state) do
     Logger.warning("CorroSubscriber: 🔌 Subscription closed: #{inspect(reason)}")
-    new_state = %{state | status: :disconnected, stream_pid: nil}
+    new_state = %{state | status: :disconnected, stream_pid: nil, watch_id: nil}
     schedule_reconnect(new_state)
   end
 
   # Handle process exits from the stream process
   def handle_info({:EXIT, pid, reason}, %{stream_pid: pid} = state) do
     Logger.warning("CorroSubscriber: ❌ Stream process crashed: #{inspect(reason)}")
-    new_state = %{state | status: :error, stream_pid: nil}
+    new_state = %{state | status: :error, stream_pid: nil, watch_id: nil}
     schedule_reconnect(new_state)
   end
 
@@ -128,8 +119,6 @@ defmodule CorroPort.CorroSubscriber do
   end
 
   def handle_info({:new_message, message_map}, socket) do
-    Logger.info("CorroSubscriber received new message: #{inspect(message_map)}")
-
     local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
     originating_node_id = message_map["node_id"]
 
@@ -137,21 +126,14 @@ defmodule CorroPort.CorroSubscriber do
     cond do
       # Message is from another node - send acknowledgment
       originating_node_id != local_node_id ->
-        Logger.info(
-          "CorroSubscriber: Received message from #{originating_node_id}, sending acknowledgment"
-        )
-
         send_ack_async(originating_node_id, message_map)
 
       # Message is from our local node - track it for acknowledgment monitoring
       originating_node_id == local_node_id ->
-        Logger.info("CorroSubscriber: Our message propagated back, tracking for acknowledgments")
         track_our_message(message_map)
 
       true ->
-        Logger.warning(
-          "CorroSubscriber: Could not determine message origin: #{inspect(message_map)}"
-        )
+        Logger.warning("CorroSubscriber: Could not determine message origin: #{inspect(message_map)}")
     end
 
     # Broadcast to LiveView (existing logic)
@@ -166,7 +148,7 @@ defmodule CorroPort.CorroSubscriber do
   end
 
   def handle_call(:restart_subscription, _from, state) do
-    Logger.warning("CorroSubscriber: 🔄 Manual restart requested")
+    Logger.info("CorroSubscriber: 🔄 Manual restart requested")
 
     # Kill existing stream if any
     if state.stream_pid do
@@ -175,7 +157,7 @@ defmodule CorroPort.CorroSubscriber do
 
     send(self(), :start_subscription)
 
-    new_state = %{state | stream_pid: nil, status: :restarting, reconnect_attempts: 0}
+    new_state = %{state | stream_pid: nil, status: :restarting, reconnect_attempts: 0, watch_id: nil}
 
     {:reply, :ok, new_state}
   end
@@ -192,6 +174,7 @@ defmodule CorroPort.CorroSubscriber do
       columns: state.columns,
       initial_state_received: state.initial_state_received,
       stream_pid: state.stream_pid,
+      watch_id: state.watch_id,
       # New acknowledgment stats
       acknowledgments_sent: state.acknowledgments_sent,
       last_ack_sent: state.last_ack_sent
@@ -220,103 +203,80 @@ defmodule CorroPort.CorroSubscriber do
 
   def subscription_topic, do: @subscription_topic
 
-  # Private functions
+  # Private functions - REWRITTEN to follow CorroWatch pattern
 
   defp run_subscription_stream(parent_pid) do
     api_port = CorroPort.CorrosionClient.get_api_port()
     url = "http://127.0.0.1:#{api_port}/v1/subscriptions"
     query = "SELECT * FROM node_messages ORDER BY timestamp DESC"
 
-    Logger.warning("CorroSubscriber: 🚀 Starting subscription stream to #{url}")
+    # Encode query as JSON string like CorroWatch does
+    json_query = Jason.encode!(query)
 
-    # Function to handle streaming data chunks
-    stream_fun = fn
-      {:data, data}, acc ->
-        send(parent_pid, {:subscription_data, data})
-        {:cont, acc}
+    Logger.info("CorroSubscriber: 🚀 Starting subscription stream to #{url}")
 
-      {:status, 200}, acc ->
-        send(parent_pid, {:subscription_connected})
-        {:cont, acc}
+    # Use the proven CorroWatch streaming pattern
+    finch_fun = fn request, finch_req, finch_name, finch_opts ->
+      finch_acc = fn
+        {:status, status}, response ->
+          if status == 200 do
+            # Don't send connected until we get the watch_id
+            %Req.Response{response | status: status}
+          else
+            send(parent_pid, {:subscription_error, {:http_status, status}})
+            %Req.Response{response | status: status}
+          end
 
-      {:status, status}, acc ->
-        Logger.error("CorroSubscriber: ❌ HTTP status #{status}")
-        send(parent_pid, {:subscription_error, {:http_status, status}})
-        {:halt, acc}
+        {:headers, headers}, response ->
+          # Extract watch_id like CorroWatch does
+          case Enum.find(headers, fn {key, _} -> key == "corro-query-id" end) do
+            {"corro-query-id", watch_id} ->
+              send(parent_pid, {:subscription_connected, watch_id})
+              %Req.Response{response | headers: headers}
+            _ ->
+              Logger.warning("CorroSubscriber: No corro-query-id found in headers")
+              %Req.Response{response | headers: headers}
+          end
 
-      {:headers, headers}, acc ->
-        Logger.warning("CorroSubscriber: 📋 Got headers: #{inspect(headers)}")
-        {:cont, acc}
+        {:data, data}, response ->
+          # Process data like CorroWatch does
+          send(parent_pid, {:subscription_data, data})
+          response
+      end
 
-      {:error, error}, acc ->
-        Logger.error("CorroSubscriber: ❌ Stream error: #{inspect(error)}")
-        send(parent_pid, {:subscription_error, error})
-        {:halt, acc}
+      case Finch.stream(finch_req, finch_name, Req.Response.new(), finch_acc, [finch_opts, receive_timeout: :infinity]) do
+        {:ok, response} ->
+          Logger.info("CorroSubscriber: ✅ Finch.stream completed successfully")
+          send(parent_pid, {:subscription_closed, :normal})
+          {request, response}
 
-      {:done, reason}, acc ->
-        Logger.warning("CorroSubscriber: 🔌 Stream done: #{inspect(reason)}")
-        send(parent_pid, {:subscription_closed, reason})
-        {:halt, acc}
-
-      other, acc ->
-        Logger.warning("CorroSubscriber: ❓ Unhandled stream event: #{inspect(other)}")
-        {:cont, acc}
+        {:error, exception} ->
+          Logger.error("CorroSubscriber: ❌ Finch.stream error: #{inspect(exception)}")
+          send(parent_pid, {:subscription_error, {:finch_error, exception}})
+          {request, exception}
+      end
     end
 
     try do
-      Logger.warning("CorroSubscriber: 📡 Making subscription request...")
-
-      result =
-        Req.post(url,
-          json: query,
-          headers: [
-            {"content-type", "application/json"},
-            {"connection", "keep-alive"},
-            {"cache-control", "no-cache"}
-          ],
-          into: stream_fun,
-          receive_timeout: :infinity,
-          connect_options: [
-            timeout: 10_000,
-            protocols: [:http1]
-          ],
-          pool_timeout: 10_000,
-          retry: false
-        )
-
-      Logger.warning("CorroSubscriber: 📡 Subscription request result: #{inspect(result)}")
-
-      case result do
-        {:ok, %Req.Response{status: 200}} ->
-          Logger.warning("CorroSubscriber: ✅ Subscription completed normally")
-
-        {:ok, %Req.Response{status: status, body: body}} ->
-          Logger.error(
-            "CorroSubscriber: ❌ Subscription failed with HTTP #{status}: #{inspect(body)}"
-          )
-
-          send(parent_pid, {:subscription_error, {:http_error, status, body}})
-
-        {:error, reason} ->
-          Logger.error("CorroSubscriber: ❌ Subscription request failed: #{inspect(reason)}")
-          send(parent_pid, {:subscription_error, reason})
-      end
+      # Use Req.post! with custom finch_request like CorroWatch
+      Req.post!(
+        url,
+        headers: [{"content-type", "application/json"}],
+        body: json_query,
+        connect_options: [transport_opts: [inet6: true]],
+        finch_request: finch_fun
+      )
     rescue
       e ->
         Logger.error("CorroSubscriber: ❌ Exception in subscription: #{inspect(e)}")
-
-        Logger.error(
-          "CorroSubscriber: ❌ Exception stacktrace: #{Exception.format_stacktrace(__STACKTRACE__)}"
-        )
-
+        Logger.error("CorroSubscriber: ❌ Exception stacktrace: #{Exception.format_stacktrace(__STACKTRACE__)}")
         send(parent_pid, {:subscription_error, {:exception, e}})
     end
   end
 
   defp process_streaming_data(data, state) do
-    # Split by newlines and process each JSON object
+    # Split by newlines and process each JSON object like CorroWatch
     lines = String.split(data, "\n", trim: true)
-    Logger.warning("CorroSubscriber: 🔍 Processing #{length(lines)} JSON lines")
 
     # Process lines sequentially, maintaining state across them
     final_state =
@@ -328,13 +288,12 @@ defmodule CorroPort.CorroSubscriber do
         else
           case Jason.decode(trimmed_line) do
             {:ok, json_data} ->
-              handle_message_event(json_data, acc_state)
+              # Add watch_id to the data like CorroWatch does
+              json_with_watch_id = Map.put(json_data, "watch_id", state.watch_id)
+              handle_message_event(json_with_watch_id, acc_state)
 
             {:error, reason} ->
-              Logger.warning(
-                "CorroSubscriber: ❌ Failed to decode JSON: #{String.slice(trimmed_line, 0, 100)}..., error: #{inspect(reason)}"
-              )
-
+              Logger.warning("CorroSubscriber: ❌ Failed to decode JSON: #{String.slice(trimmed_line, 0, 100)}..., error: #{inspect(reason)}")
               acc_state
           end
         end
@@ -346,34 +305,28 @@ defmodule CorroPort.CorroSubscriber do
   defp handle_message_event(data, state) do
     case data do
       %{"eoq" => _time} ->
-        Logger.warning("CorroSubscriber: 🏁 End of initial query - subscription is now live")
+        Logger.info("CorroSubscriber: 🏁 End of initial query - subscription is now live")
         broadcast_event({:subscription_ready})
 
-        # FIX: When we receive eoq, that means the subscription is successfully established
         %{
           state
           | initial_state_received: true,
-            # ← Set to connected when we get eoq
             status: :connected,
-            # ← Track when subscription became active
             connection_established_at: DateTime.utc_now(),
-            # ← Reset reconnect counter on successful connection
             reconnect_attempts: 0
         }
 
       %{"columns" => columns} ->
-        Logger.warning("CorroSubscriber: 📊 Got column names: #{inspect(columns)}")
+        Logger.info("CorroSubscriber: 📊 Got column names: #{inspect(columns)}")
         broadcast_event({:columns_received, columns})
         %{state | columns: columns}
 
       %{"row" => [_row_id, values]} when not is_nil(state.columns) ->
         message_map = build_message_map(values, state.columns)
-        Logger.warning("CorroSubscriber: 📨 Row: #{inspect(message_map)}")
 
         if state.initial_state_received do
           # This is a new row after initial state was loaded
           broadcast_event({:new_message, message_map})
-          # NEW: Handle acknowledgment for new messages
           handle_new_message_acknowledgment(message_map, state)
         else
           # This is part of the initial state dump
@@ -383,12 +336,10 @@ defmodule CorroPort.CorroSubscriber do
 
       %{"change" => [change_type, _change_id, values, _version]} when not is_nil(state.columns) ->
         message_map = build_message_map(values, state.columns)
-        Logger.warning("CorroSubscriber: 🔄 Change #{change_type}: #{inspect(message_map)}")
         broadcast_event({:message_change, String.upcase(change_type), message_map})
 
         new_state = %{state | total_messages_processed: state.total_messages_processed + 1}
 
-        # NEW: Handle acknowledgment for INSERT changes (new messages)
         if String.upcase(change_type) == "INSERT" do
           handle_new_message_acknowledgment(message_map, new_state)
         else
@@ -413,13 +364,10 @@ defmodule CorroPort.CorroSubscriber do
     end
   end
 
-  # NEW: Handle acknowledgment logic for new messages
+  # [Rest of the functions remain the same...]
+
   defp handle_new_message_acknowledgment(message_map, state) do
     if map_size(message_map) == 0 do
-      Logger.warning(
-        "CorroSubscriber: ⚠️ Received empty message map, skipping acknowledgment handling"
-      )
-
       state
     else
       local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
@@ -428,50 +376,31 @@ defmodule CorroPort.CorroSubscriber do
 
       case {message_node_id, message_pk} do
         {nil, _} ->
-          Logger.warning("CorroSubscriber: ⚠️ Message missing node_id, skipping acknowledgment")
           state
 
         {_, nil} ->
-          Logger.warning("CorroSubscriber: ⚠️ Message missing pk, skipping acknowledgment")
           state
 
         {^local_node_id, _} ->
-          # This is from our own node - don't send acknowledgment to ourselves
-          Logger.debug(
-            "CorroSubscriber: 📝 Received our own message #{message_pk}, no acknowledgment needed"
-          )
-
           state
 
         {other_node_id, pk} ->
-          # This is from another node - send acknowledgment
-          Logger.info(
-            "CorroSubscriber: 🤝 Sending acknowledgment to #{other_node_id} for message #{pk}"
-          )
-
-          # Create message data for the acknowledgment sender
           message_data = %{
             pk: pk,
             timestamp: Map.get(message_map, "timestamp"),
             node_id: other_node_id
           }
 
-          # Send acknowledgment in a separate process to avoid blocking the CorroSubscriber
           spawn(fn ->
             case CorroPort.AcknowledgmentSender.send_acknowledgment(other_node_id, message_data) do
               :ok ->
-                Logger.info(
-                  "CorroSubscriber: ✅ Successfully sent acknowledgment to #{other_node_id}"
-                )
+                Logger.info("CorroSubscriber: ✅ Successfully sent acknowledgment to #{other_node_id}")
 
               {:error, reason} ->
-                Logger.warning(
-                  "CorroSubscriber: ❌ Failed to send acknowledgment to #{other_node_id}: #{inspect(reason)}"
-                )
+                Logger.warning("CorroSubscriber: ❌ Failed to send acknowledgment to #{other_node_id}: #{inspect(reason)}")
             end
           end)
 
-          # Update state with acknowledgment stats
           %{
             state
             | total_messages_processed: state.total_messages_processed + 1,
@@ -484,27 +413,19 @@ defmodule CorroPort.CorroSubscriber do
 
   defp build_message_map(values, columns) when is_list(values) and is_list(columns) do
     if length(values) == length(columns) do
-      result = Enum.zip(columns, values) |> Enum.into(%{})
-      result
+      Enum.zip(columns, values) |> Enum.into(%{})
     else
-      Logger.warning(
-        "CorroSubscriber: ⚠️ Mismatch: #{length(values)} values vs #{length(columns)} columns"
-      )
-
+      Logger.warning("CorroSubscriber: ⚠️ Mismatch: #{length(values)} values vs #{length(columns)} columns")
       %{}
     end
   end
 
   defp build_message_map(values, columns) do
-    Logger.warning(
-      "CorroSubscriber: ⚠️ Unable to build message map from values: #{inspect(values)} and columns: #{inspect(columns)}"
-    )
-
+    Logger.warning("CorroSubscriber: ⚠️ Unable to build message map from values: #{inspect(values)} and columns: #{inspect(columns)}")
     %{}
   end
 
   defp broadcast_event(event) do
-    Logger.warning("CorroSubscriber: 📢 Broadcasting: #{inspect(event)}")
     Phoenix.PubSub.broadcast(CorroPort.PubSub, @subscription_topic, event)
   end
 
@@ -526,7 +447,6 @@ defmodule CorroPort.CorroSubscriber do
   end
 
   defp send_ack_async(originating_node_id, message_map) do
-    # Send acknowledgment in a separate task to avoid blocking CorroSubscriber
     Task.start(fn ->
       message_data = %{
         pk: message_map["pk"],
@@ -536,37 +456,27 @@ defmodule CorroPort.CorroSubscriber do
 
       case CorroPort.AcknowledgmentSender.send_acknowledgment(originating_node_id, message_data) do
         :ok ->
-          Logger.info(
-            "CorroSubscriber: Successfully sent acknowledgment to #{originating_node_id}"
-          )
+          Logger.info("CorroSubscriber: Successfully sent acknowledgment to #{originating_node_id}")
 
         {:error, reason} ->
-          Logger.warning(
-            "CorroSubscriber: Failed to send acknowledgment to #{originating_node_id}: #{inspect(reason)}"
-          )
+          Logger.warning("CorroSubscriber: Failed to send acknowledgment to #{originating_node_id}: #{inspect(reason)}")
       end
     end)
   end
 
   defp track_our_message(message_map) do
-    # Check if we're already tracking this specific message
     current_status = CorroPort.AckTracker.get_status()
     message_pk = Map.get(message_map, "pk")
 
     case current_status.latest_message do
       %{pk: current_pk} ->
         if current_pk == message_pk do
-          # We're already tracking this exact message, don't re-track it
-          Logger.debug(
-            "CorroSubscriber: Already tracking message #{current_pk}, skipping re-track"
-          )
+          # Already tracking this message, skip
         else
-          # Different message, track this new one
           track_new_message(message_map)
         end
 
       _ ->
-        # No message being tracked, track this one
         track_new_message(message_map)
     end
   end
@@ -574,7 +484,6 @@ defmodule CorroPort.CorroSubscriber do
   defp track_new_message(message_map) do
     local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
-    # Check if this looks like a message we sent via the UI
     if is_our_ui_message?(message_map, local_node_id) do
       message_data = %{
         pk: message_map["pk"],
@@ -582,19 +491,11 @@ defmodule CorroPort.CorroSubscriber do
         node_id: message_map["node_id"]
       }
 
-      Logger.info(
-        "CorroSubscriber: Tracking our UI message #{message_data.pk} for acknowledgments"
-      )
-
       CorroPort.AckTracker.track_latest_message(message_data)
-    else
-      Logger.debug("CorroSubscriber: Skipping acknowledgment tracking for non-UI message")
     end
   end
 
   defp is_our_ui_message?(message_map, local_node_id) do
-    # Simple heuristic: messages from our UI contain our node_id and have the expected structure
-    # In the future, we could add a special marker to UI messages to distinguish them
     message_map["node_id"] == local_node_id and
       not is_nil(message_map["message"]) and
       not is_nil(message_map["pk"]) and

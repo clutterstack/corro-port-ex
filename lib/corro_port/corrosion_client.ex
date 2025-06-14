@@ -29,7 +29,7 @@ defmodule CorroPort.CorrosionClient do
   def execute_query(query, port \\ nil) do
     # TODO: set base_url using application environment vars, for both local and prod
     port = port || get_api_port()
-    base_url = "http://127.0.0.1:#{port}" |> dbg
+    base_url = "http://127.0.0.1:#{port}"
 
     # Logger.debug("Executing query on port #{port}: #{query}")
 
