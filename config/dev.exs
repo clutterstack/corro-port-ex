@@ -9,6 +9,15 @@ config_path = "corrosion/config-node#{node_id}.toml"
 phoenix_port = 4000 + node_id
 corrosion_api_port = 8080 + node_id
 corrosion_gossip_port = 8786 + node_id
+
+# Corrosion nodes don't like their own address in the bootstrap list.
+# They'll complain about another actor claiming to have the same ID.
+corrosion_bootstrap_list =
+  8787..8790
+  |> Enum.reject(&(&1 == 8786 + node_id)) # exclude current node
+  |> Enum.map(&"\"127.0.0.1:#{&1}\"")     # plain JSON-style quotes
+  |> Enum.join(", ")
+  |> then(&"[#{&1}]")
 #
 # The watchers configuration can be used to run external
 # watchers to your application. For example, we can use it
@@ -31,6 +40,7 @@ config :corro_port, :node_config,
   node_id: node_id,
   corrosion_api_port: corrosion_api_port,
   corrosion_gossip_port: corrosion_gossip_port,
+  corrosion_bootstrap_list: corrosion_bootstrap_list,
   corro_config_path: config_path,
   corrosion_binary: "corrosion/corrosion-mac"
 

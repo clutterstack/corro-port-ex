@@ -1,4 +1,4 @@
-defmodule CorroPortWeb.NodeInfoLive do
+defmodule CorroPortWeb.NodeLive do
   use CorroPortWeb, :live_view
   require Logger
 
@@ -34,7 +34,7 @@ defmodule CorroPortWeb.NodeInfoLive do
   end
 
   def handle_event("test_local_connection", _params, socket) do
-    Logger.debug("NodeInfoLive: Testing local Corrosion API connection...")
+    Logger.debug("NodeLive: Testing local Corrosion API connection...")
 
     # Run the test and update the socket with results
     test_result = perform_local_connectivity_test()
@@ -100,7 +100,7 @@ defmodule CorroPortWeb.NodeInfoLive do
   end
 
   defp fetch_node_data(socket) do
-    Logger.info("NodeInfoLive: Fetching comprehensive node data...")
+    Logger.info("NodeLive: Fetching comprehensive node data...")
 
     # Gather all the information
     node_info = get_node_info()

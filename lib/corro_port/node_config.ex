@@ -4,15 +4,11 @@ defmodule CorroPort.NodeConfig do
   Writes a config file for Corrosion based on application env vars (config values).
   """
 
-  @doc """
+   @doc """
   Gets the current node configuration from application config.
   """
   def app_node_config do
-    Application.get_env(:corro_port, :node_config, %{
-      node_id: "unknown",
-      corrosion_api_port: "unknown",
-      corrosion_gossip_port: "unknown"
-    })
+    Application.get_env(:corro_port, :node_config)
   end
 
   @doc """
@@ -23,15 +19,7 @@ defmodule CorroPort.NodeConfig do
     node_id = config[:node_id]
     api_port = config[:corrosion_api_port]
     gossip_port = config[:corrosion_gossip_port]
-
-    # For node 1, empty bootstrap list (it becomes the seed)
-    # For other nodes, bootstrap from node 1
-    bootstrap_config =
-      if node_id == 1 do
-        "bootstrap = [\"127.0.0.1:8788\"]"
-      else
-        "bootstrap = [\"127.0.0.1:8787\"]"
-      end
+    bootstrap_config = config[:corrosion_bootstrap_list]
 
     """
     # Generated config for node #{node_id}
@@ -41,7 +29,7 @@ defmodule CorroPort.NodeConfig do
 
     [gossip]
     addr = "127.0.0.1:#{gossip_port}"
-    #{bootstrap_config}
+    bootstrap = #{bootstrap_config}
     plaintext = true
 
     [api]
@@ -56,8 +44,6 @@ defmodule CorroPort.NodeConfig do
   Writes the Corrosion configuration to a node-specific file.
   """
   def write_corrosion_config do
-    config = app_node_config()
-    node_id = config[:node_id]
 
     config_content = generate_corrosion_config()
     config_path = Application.get_env(:corro_port, :node_config)[:corro_config_path]
@@ -79,17 +65,21 @@ defmodule CorroPort.NodeConfig do
   TODO: get from source of truth
   """
   def get_config_path do
-    config = app_node_config()
-    node_id = config[:node_id]
-    "corrosion/config-node#{node_id}.toml"
+    Application.get_env(:corro_port, :node_config)[:corro_config_path]
+  end
+
+  @doc """
+  Gets the path to this node's Corrosion binary.
+  """
+  def get_corro_binary_path do
+    Application.get_env(:corro_port, :node_config)[:corrosion_binary]
   end
 
   @doc """
   Gets the Corrosion node identifier (used in logs and for debugging).
   """
   def get_corrosion_node_id do
-    config = app_node_config()
-    "node#{config[:node_id]}"
+    "node#{Application.get_env(:corro_port, :node_config)[:node_id]}"
   end
 
   @doc """

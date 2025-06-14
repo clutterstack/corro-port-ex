@@ -111,37 +111,6 @@ defmodule CorroPortWeb.MessagesLive do
     {:noreply, socket}
   end
 
-  def handle_event("test_connectivity", _params, socket) do
-    Logger.debug("MessagesLive: 🔗 Testing acknowledgment connectivity...")
-
-    # Run connectivity test in background
-    parent_pid = self()
-
-    spawn(fn ->
-      results = CorroPort.AcknowledgmentSender.test_all_connectivity()
-      send(parent_pid, {:connectivity_test_complete, results})
-    end)
-
-    socket = put_flash(socket, :info, "Testing connectivity to other nodes...")
-    {:noreply, socket}
-  end
-
-  def handle_info({:connectivity_test_complete, results}, socket) do
-    # Count successful connections
-    successful = Enum.count(results, fn {_node, result} -> match?({:ok, _}, result) end)
-    total = length(Map.keys(results))
-
-    flash_message = "Connectivity test complete: #{successful}/#{total} nodes reachable"
-    flash_type = if successful == total, do: :info, else: :warning
-
-    socket =
-      socket
-      |> assign(:connectivity_test_results, results)
-      |> put_flash(flash_type, flash_message)
-
-    {:noreply, socket}
-  end
-
   # Private functions
   defp fetch_initial_data(socket) do
     socket
@@ -271,10 +240,6 @@ defmodule CorroPortWeb.MessagesLive do
           <.button phx-click="send_message" variant="primary">
             <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" />
             Send Message
-          </.button>
-          <.button phx-click="test_connectivity" class="btn btn-secondary">
-            <.icon name="hero-signal" class="w-4 h-4 mr-2" />
-            Test Connectivity
           </.button>
         </:actions>
       </.header>

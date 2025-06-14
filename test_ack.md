@@ -65,9 +65,6 @@ CorroPort.AcknowledgmentSender.test_connectivity("node3")
 CorroPort.AcknowledgmentSender.test_connectivity("invalid_node")
 CorroPort.AcknowledgmentSender.test_connectivity("node999")
 
-# 3. Test all connectivity (will show which nodes are reachable)
-CorroPort.AcknowledgmentSender.test_all_connectivity()
-
 # 4. Test sending an acknowledgment (this will fail if target node isn't running)
 message_data = %{pk: "node2_test123", timestamp: "2025-06-11T10:00:00Z", node_id: "node2"}
 CorroPort.AcknowledgmentSender.send_acknowledgment("node2", message_data)

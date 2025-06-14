@@ -10,7 +10,7 @@ defmodule CorroPort.Application do
     # Start Corrosion before our stuff. Let it do its own stdin/stout
     {:ok, config_file} = CorroPort.NodeConfig.write_corrosion_config()
     corro_binary = Application.get_env(:corro_port, :node_config)[:corrosion_binary]
-    corrosion_cmd = "#{corro_binary} agent -c #{config_file}"
+    corrosion_cmd = "#{corro_binary} agent -c #{config_file}" |> dbg
 
     case :exec.run_link(corrosion_cmd, [{:stdout, :print}, {:stderr, :print}]) do
       {:ok, _exec_pid, _os_pid} ->

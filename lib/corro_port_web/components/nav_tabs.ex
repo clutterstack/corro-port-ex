@@ -7,9 +7,9 @@ defmodule CorroPortWeb.NavTabs do
   Renders navigation tabs for the main application sections.
 
   ## Attributes
-  - `active` - The currently active tab (:cluster, :messages, :node_info)
+  - `active` - The currently active tab (:cluster, :messages, :node)
   """
-  attr :active, :atom, required: true, values: [:cluster, :messages, :node_info]
+  attr :active, :atom, required: true, values: [:cluster, :messages, :node]
 
   def nav_tabs(assigns) do
     ~H"""
@@ -31,11 +31,11 @@ defmodule CorroPortWeb.NavTabs do
       </.link>
 
       <.link
-        navigate={~p"/node-info"}
-        class={["tab", if(@active == :node_info, do: "tab-active", else: "")]}
+        navigate={~p"/node"}
+        class={["tab", if(@active == :node, do: "tab-active", else: "")]}
       >
         <.icon name="hero-cog-6-tooth" class="w-4 h-4 mr-2" />
-        Node Info
+        Node
       </.link>
     </div>
     """
