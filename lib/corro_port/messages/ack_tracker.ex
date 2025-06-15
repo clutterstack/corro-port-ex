@@ -375,7 +375,7 @@ defmodule CorroPort.AckTracker do
 
     # Parse bootstrap list to estimate cluster size
     estimated_cluster_size = case extract_ports_from_bootstrap(bootstrap_list) do
-      ports when length(ports) > 0 ->
+      ports when ports != [] ->
         # Add 1 for the local node
         length(ports) + 1
       _ ->

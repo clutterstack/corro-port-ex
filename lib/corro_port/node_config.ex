@@ -36,7 +36,7 @@ defmodule CorroPort.NodeConfig do
   @doc """
   Gets the Corrosion node identifier (used in logs and for debugging).
   In production, uses the FLY_MACHINE_ID for readability.
-  In development, uses the pattern "node#{id}".
+  In development, uses the pattern "nodeN" where N is the node_id.
   """
   def get_corrosion_node_id do
     config = app_node_config()

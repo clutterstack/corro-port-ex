@@ -130,7 +130,7 @@ defmodule CorroPort.DiagnosticTools do
       {:ok, response} ->
         conflicts = CorrosionClient.parse_query_response(response)
 
-        if length(conflicts) > 0 do
+        if conflicts != [] do
           Logger.warning("⚠️ Found #{length(conflicts)} potential conflicts:")
 
           Enum.each(conflicts, fn conflict ->

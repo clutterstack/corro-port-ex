@@ -63,7 +63,7 @@ defmodule CorroPort.CorrosionParser do
     try do
       # Handle Corrosion's specific output format: concatenated pretty-printed JSON objects
       case parse_concatenated_json(ndjson_output, enhancer_fun) do
-        {:ok, objects} when length(objects) > 0 ->
+        {:ok, objects} when objects != [] > 0 ->
           {:ok, objects}
 
         {:ok, []} ->
@@ -122,7 +122,7 @@ defmodule CorroPort.CorrosionParser do
         # Separate successful parses from errors
         {successes, errors} = Enum.split_with(objects, &match?({:ok, _}, &1))
 
-        if length(errors) > 0 do
+        if errors != [] > 0 do
           Logger.warning("CorrosionParser: #{length(errors)} objects failed to parse: #{inspect(errors)}")
         end
 
@@ -148,7 +148,7 @@ defmodule CorroPort.CorrosionParser do
       |> Enum.map(enhancer_fun)
 
     # Log any parse errors but don't fail the whole operation
-    if length(errors) > 0 do
+    if errors != [] do
       Logger.warning("CorrosionParser: #{length(errors)} lines failed to parse: #{inspect(errors)}")
     end
 
@@ -208,7 +208,7 @@ defmodule CorroPort.CorrosionParser do
 
     # RTT stats (only avg and count since that's what we display)
     numeric_rtts = Enum.filter(rtts, &is_number/1)
-    rtt_avg = if length(numeric_rtts) > 0 do
+    rtt_avg = if numeric_rtts != [] do
       Float.round(Enum.sum(numeric_rtts) / length(numeric_rtts), 1)
     else
       0.0
