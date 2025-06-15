@@ -1,0 +1,2 @@
+corrosion: ./corrosion/corrosion-mac agent --config ./corrosion/config-node${NODE_ID:-1}.toml
+elixir: iex -S mix phx.server

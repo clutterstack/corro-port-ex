@@ -1,18 +1,62 @@
 # CorroPort
 
-To start your Phoenix server:
+## Development Setup
 
-* Run `mix setup` to install and setup dependencies
-* Start Phoenix endpoint with `mix phx.server` or inside IEx with `iex -S mix phx.server`
+### Prerequisites
 
-Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
+1. Elixir and Phoenix
+2. [Overmind](https://github.com/DarthSim/overmind) for process management
+3. Corrosion binary for your platform (place in `corrosion/corrosion-mac`)
 
-Ready to run in production? Please [check our deployment guides](https://hexdocs.pm/phoenix/deployment.html).
+### Quick Start
 
-## Learn more
+```bash
+# Setup development environment
+./scripts/setup.sh
 
-* Official website: https://www.phoenixframework.org/
-* Guides: https://hexdocs.pm/phoenix/overview.html
-* Docs: https://hexdocs.pm/phoenix
-* Forum: https://elixirforum.com/c/phoenix-forum
-* Source: https://github.com/phoenixframework/phoenix
+# Start a single node
+./scripts/dev-start.sh
+
+# Start a 3-node cluster
+./scripts/dev-cluster.sh
+
+# Start a custom cluster
+./scripts/dev-cluster.sh --nodes 5
+
+# Alternative using Mix tasks
+mix cluster.start
+mix cluster.start --nodes 5
+```
+
+### Manual Development
+
+If you prefer more control:
+
+```bash
+# Terminal 1 - Node 1
+NODE_ID=1 ./scripts/dev-start.sh
+
+# Terminal 2 - Node 2  
+NODE_ID=2 ./scripts/dev-start.sh
+
+# Terminal 3 - Node 3
+NODE_ID=3 ./scripts/dev-start.sh
+```
+
+### Access Points
+
+- **Node 1**: http://localhost:4001/cluster
+- **Node 2**: http://localhost:4002/cluster  
+- **Node 3**: http://localhost:4003/cluster
+
+### Cleanup
+
+```bash
+# Stop all nodes and clean up
+mix cluster.stop
+
+# Or manually
+pkill -f "corrosion.*agent"
+rm corrosion/node*.db*
+rm corrosion/config-node*.toml
+```

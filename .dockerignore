@@ -63,5 +63,6 @@ priv/static/uploads/
 # Development scripts (keep deploy script)
 scripts/
 
-
 erl_crash.dump
+
+*-macos-arm64

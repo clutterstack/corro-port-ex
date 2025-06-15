@@ -43,6 +43,12 @@ corrosion/*
 !corrosion/schemas/**
 !corrosion/wrapper.sh
 
+# Local Mac Overmind
+*-macos-arm64
+
+# Actually don't upload any overmind ha
+overmind-*
+
 rel/
 .DS_Store
 

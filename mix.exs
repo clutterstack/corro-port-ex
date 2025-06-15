@@ -56,8 +56,7 @@ defmodule CorroPort.MixProject do
       {:bandit, "~> 1.5"},
       {:req, "~> 0.5.10"},
       {:finch, "~> 0.19.0"},
-      {:ex_doc, "~> 0.38.2"},
-      {:erlexec, "~> 2.2"}
+      {:ex_doc, "~> 0.38.2"}
     ]
   end
 
