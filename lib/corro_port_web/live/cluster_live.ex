@@ -253,8 +253,8 @@ defmodule CorroPortWeb.ClusterLive do
             </div>
           </div>
 
-          <!-- CLI Results -->
-          <div :if={@cli_members_data && !Map.has_key?(@cli_members_data, :parse_error)} class="space-y-4">
+<!-- CLI Results -->
+          <div :if={@cli_members_data && is_list(@cli_members_data)} class="space-y-4">
             <div :if={@cli_members_data == []} class="alert alert-info">
               <.icon name="hero-information-circle" class="w-5 h-5" />
               <span>No cluster members found - this appears to be a single node setup</span>
@@ -262,17 +262,52 @@ defmodule CorroPortWeb.ClusterLive do
 
             <div :if={@cli_members_data != []} class="alert alert-success">
               <.icon name="hero-check-circle" class="w-5 h-5" />
-              <span>Found {Enum.count(@cli_members_data)} cluster members via CLI</span>
+              <span>Found {length(@cli_members_data)} cluster members via CLI</span>
             </div>
 
             <div :if={@cli_members_data != []} class="overflow-x-auto">
               <table class="table table-zebra">
-                <!-- table content remains the same -->
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Address</th>
+                    <th>Status</th>
+                    <th>Cluster ID</th>
+                    <th>Ring</th>
+                    <th>RTT Stats</th>
+                    <th>Last Sync</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr :for={member <- @cli_members_data}>
+                    <td class="font-mono text-xs">
+                      {member["display_id"]}
+                    </td>
+                    <td class="font-mono text-sm">
+                      {member["display_addr"]}
+                    </td>
+                    <td>
+                      <span class={member["display_status_class"]}>
+                        {member["display_status"]}
+                      </span>
+                    </td>
+                    <td>{member["display_cluster_id"]}</td>
+                    <td>{member["display_ring"]}</td>
+                    <td class="text-xs">
+                      <div>Avg: {member["display_rtt_avg"]}ms</div>
+                      <div>Samples: {member["display_rtt_count"]}</div>
+                    </td>
+                    <td class="text-xs">
+                      {member["display_last_sync"]}
+                    </td>
+                  </tr>
+                </tbody>
               </table>
             </div>
           </div>
+
           <!-- Parse Error Display -->
-          <div :if={@cli_members_data && Map.has_key?(@cli_members_data, :parse_error)} class="space-y-4">
+          <div :if={@cli_members_data && is_map(@cli_members_data) && Map.has_key?(@cli_members_data, :parse_error)} class="space-y-4">
             <div class="alert alert-warning">
               <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
               <span>CLI command succeeded but failed to parse output</span>
@@ -284,7 +319,15 @@ defmodule CorroPortWeb.ClusterLive do
                 <pre class="bg-base-300 p-4 rounded text-xs overflow-auto">{@cli_members_data.raw_output}</pre>
               </div>
             </details>
+
+            <details class="collapse collapse-arrow bg-base-200">
+              <summary class="collapse-title">Parse Error Details</summary>
+              <div class="collapse-content">
+                <pre class="bg-base-300 p-4 rounded text-xs overflow-auto">{inspect(@cli_members_data.parse_error, pretty: true)}</pre>
+              </div>
+            </details>
           </div>
+
 
           <!-- Error Display -->
           <div :if={@cli_members_error} class="alert alert-error">

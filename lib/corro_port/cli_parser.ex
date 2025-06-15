@@ -61,32 +61,99 @@ defmodule CorroPort.CorrosionParser do
   """
   def parse_ndjson(ndjson_output, enhancer_fun \\ &Function.identity/1) when is_binary(ndjson_output) do
     try do
-      lines = String.split(ndjson_output, "\n", trim: true)
+      # Handle Corrosion's specific output format: concatenated pretty-printed JSON objects
+      case parse_concatenated_json(ndjson_output, enhancer_fun) do
+        {:ok, objects} when length(objects) > 0 ->
+          {:ok, objects}
 
-      {parsed_objects, errors} =
-        lines
-        |> Enum.map(&parse_json_line/1)
-        |> Enum.split_with(&match?({:ok, _}, &1))
+        {:ok, []} ->
+          # Empty result, try other formats
+          try_alternative_formats(ndjson_output, enhancer_fun)
 
-      # Extract successful results and apply enhancer
-      objects =
-        parsed_objects
-        |> Enum.map(fn {:ok, obj} -> obj end)
-        |> Enum.map(enhancer_fun)
-
-      # Log any parse errors but don't fail the whole operation
-      if length(errors) > 0 do
-        Logger.warning("CorrosionParser: #{length(errors)} lines failed to parse: #{inspect(errors)}")
+        {:error, _} ->
+          # Failed to parse as concatenated JSON, try other formats
+          try_alternative_formats(ndjson_output, enhancer_fun)
       end
-
-      # Logger.debug("CorrosionParser: Successfully parsed #{length(objects)} objects")
-      {:ok, objects}
 
     rescue
       error ->
-        Logger.error("CorrosionParser: Error parsing NDJSON: #{inspect(error)}")
+        Logger.error("CorrosionParser: Error parsing JSON/NDJSON: #{inspect(error)}")
         {:error, {:parse_error, error}}
     end
+  end
+
+  # Try to parse concatenated pretty-printed JSON objects (Corrosion's actual format)
+  defp parse_concatenated_json(output, enhancer_fun) do
+    # Split on "}\n{" pattern which separates concatenated JSON objects
+    # Then reconstruct each complete JSON object
+    parts = String.split(output, ~r/\}\s*\n\s*\{/)
+
+    case length(parts) do
+      1 ->
+        # Single object, try to parse directly
+        case Jason.decode(String.trim(output)) do
+          {:ok, object} when is_map(object) ->
+            {:ok, [enhancer_fun.(object)]}
+          {:ok, array} when is_list(array) ->
+            {:ok, Enum.map(array, enhancer_fun)}
+          {:error, reason} ->
+            {:error, reason}
+        end
+
+      _ ->
+        # Multiple objects, reconstruct and parse each
+        objects =
+          parts
+          |> Enum.with_index()
+          |> Enum.map(fn {part, index} ->
+            # Add back the braces that were removed by splitting
+            complete_json = cond do
+              index == 0 -> part <> "}"  # First part: add closing brace
+              index == length(parts) - 1 -> "{" <> part  # Last part: add opening brace
+              true -> "{" <> part <> "}"  # Middle parts: add both braces
+            end
+
+            case Jason.decode(String.trim(complete_json)) do
+              {:ok, object} when is_map(object) -> {:ok, enhancer_fun.(object)}
+              {:error, reason} -> {:error, {complete_json, reason}}
+            end
+          end)
+
+        # Separate successful parses from errors
+        {successes, errors} = Enum.split_with(objects, &match?({:ok, _}, &1))
+
+        if length(errors) > 0 do
+          Logger.warning("CorrosionParser: #{length(errors)} objects failed to parse: #{inspect(errors)}")
+        end
+
+        parsed_objects = Enum.map(successes, fn {:ok, obj} -> obj end)
+        {:ok, parsed_objects}
+    end
+  end
+
+  # Fallback to try other formats
+  defp try_alternative_formats(ndjson_output, enhancer_fun) do
+    # Try NDJSON format (one JSON object per line)
+    lines = String.split(ndjson_output, "\n", trim: true)
+
+    {parsed_objects, errors} =
+      lines
+      |> Enum.map(&parse_json_line/1)
+      |> Enum.split_with(&match?({:ok, _}, &1))
+
+    # Extract successful results and apply enhancer
+    objects =
+      parsed_objects
+      |> Enum.map(fn {:ok, obj} -> obj end)
+      |> Enum.map(enhancer_fun)
+
+    # Log any parse errors but don't fail the whole operation
+    if length(errors) > 0 do
+      Logger.warning("CorrosionParser: #{length(errors)} lines failed to parse: #{inspect(errors)}")
+    end
+
+    Logger.debug("CorrosionParser: Successfully parsed #{length(objects)} objects via NDJSON fallback")
+    {:ok, objects}
   end
 
   # Private functions
@@ -102,63 +169,86 @@ defmodule CorroPort.CorrosionParser do
 
   defp enhance_member(member) when is_map(member) do
     member
-    |> add_parsed_address()
-    |> add_member_status()
-    |> add_short_id()
+    |> add_display_fields()
+    |> add_status_badge_class()
   end
 
   defp enhance_cluster_info(info) when is_map(info) do
-    info
-    |> add_formatted_timestamps()
+    # For cluster info, we might not need much enhancement yet
+    # Add basic timestamp formatting if needed
+    add_basic_timestamps(info)
   end
 
   defp enhance_status(status) when is_map(status) do
     status
-    |> add_formatted_timestamps()
+    |> add_basic_timestamps()
     |> add_health_indicators()
   end
 
-  # Enhancement helper functions
+  # Streamlined enhancement - only compute what we actually display
+  defp add_display_fields(member) do
+    state = Map.get(member, "state", %{})
+    rtts = Map.get(member, "rtts", [])
 
-  defp add_parsed_address(member) do
-    addr = get_in(member, ["state", "addr"]) || "unknown"
-    Map.put(member, "parsed_addr", addr)
-  end
+    # Compute only the fields we actually use in the template
+    short_id = case Map.get(member, "id") do
+      id when is_binary(id) and byte_size(id) > 8 -> String.slice(id, 0, 8) <> "..."
+      id -> id || "unknown"
+    end
 
-  defp add_member_status(member) do
-    # Determine status based on available data
-    status = cond do
-      get_in(member, ["state", "last_sync_ts"]) != nil -> "active"
-      get_in(member, ["state", "ts"]) != nil -> "connected"
-      get_in(member, ["state", "addr"]) != nil -> "reachable"
+    parsed_addr = Map.get(state, "addr", "unknown")
+
+    # Status computation
+    computed_status = cond do
+      Map.get(state, "last_sync_ts") != nil -> "active"
+      Map.get(state, "ts") != nil -> "connected"
+      parsed_addr != "unknown" -> "reachable"
       true -> "unknown"
     end
 
-    Map.put(member, "computed_status", status)
-  end
-
-  defp add_short_id(member) do
-    case Map.get(member, "id") do
-      id when is_binary(id) and byte_size(id) > 8 ->
-        Map.put(member, "short_id", String.slice(id, 0, 8) <> "...")
-      id ->
-        Map.put(member, "short_id", id || "unknown")
+    # RTT stats (only avg and count since that's what we display)
+    numeric_rtts = Enum.filter(rtts, &is_number/1)
+    rtt_avg = if length(numeric_rtts) > 0 do
+      Float.round(Enum.sum(numeric_rtts) / length(numeric_rtts), 1)
+    else
+      0.0
     end
+
+    # Formatted timestamp
+    formatted_last_sync = case Map.get(state, "last_sync_ts") do
+      ts when is_integer(ts) ->
+        seconds = div(ts, 1_000_000_000)
+        case DateTime.from_unix(seconds) do
+          {:ok, dt} -> Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S UTC")
+          _ -> "Invalid"
+        end
+      _ -> "Never"
+    end
+
+    # Add all computed display fields
+    member
+    |> Map.put("display_id", short_id)
+    |> Map.put("display_addr", parsed_addr)
+    |> Map.put("display_status", computed_status)
+    |> Map.put("display_cluster_id", Map.get(state, "cluster_id", "?"))
+    |> Map.put("display_ring", Map.get(state, "ring", "?"))
+    |> Map.put("display_rtt_avg", rtt_avg)
+    |> Map.put("display_rtt_count", length(numeric_rtts))
+    |> Map.put("display_last_sync", formatted_last_sync)
   end
 
-  defp add_formatted_timestamps(object) when is_map(object) do
-    # Find all timestamp fields and add formatted versions
-    timestamp_fields = ["ts", "last_sync_ts", "created_at", "updated_at"]
 
-    Enum.reduce(timestamp_fields, object, fn field, acc ->
-      case get_in(acc, String.split(field, ".")) do
-        ts when is_integer(ts) ->
-          formatted_field = "formatted_#{field}"
-          Map.put(acc, formatted_field, format_corrosion_timestamp(ts))
-        _ ->
-          acc
-      end
-    end)
+  defp add_status_badge_class(member) do
+    status = Map.get(member, "display_status")
+
+    badge_class = case status do
+      "active" -> "badge badge-sm badge-success"
+      "connected" -> "badge badge-sm badge-info"
+      "reachable" -> "badge badge-sm badge-warning"
+      _ -> "badge badge-sm badge-neutral"
+    end
+
+    Map.put(member, "display_status_class", badge_class)
   end
 
   defp add_health_indicators(status) when is_map(status) do
@@ -177,6 +267,22 @@ defmodule CorroPort.CorrosionParser do
     end
   end
 
+  # Simple timestamp formatting for non-member objects
+  defp add_basic_timestamps(object) when is_map(object) do
+    # Add formatted timestamps for common fields if they exist
+    timestamp_fields = ["ts", "created_at", "updated_at"]
+
+    Enum.reduce(timestamp_fields, object, fn field, acc ->
+      case Map.get(acc, field) do
+        ts when is_integer(ts) ->
+          formatted_field = "formatted_#{field}"
+          Map.put(acc, formatted_field, format_corrosion_timestamp(ts))
+        _ ->
+          acc
+      end
+    end)
+  end
+
   defp format_corrosion_timestamp(ts) when is_integer(ts) do
     # Corrosion timestamps are often in nanoseconds
     seconds = div(ts, 1_000_000_000)
@@ -187,4 +293,58 @@ defmodule CorroPort.CorrosionParser do
   end
 
   defp format_corrosion_timestamp(_), do: "unknown"
+
+  defp add_health_indicators(status) when is_map(status) do
+    # Add computed health indicators based on status data
+    # This would depend on what fields are available in cluster status output
+    Map.put(status, "overall_health", compute_health(status))
+  end
+
+  defp compute_health(status) do
+    # Placeholder health computation
+    # You'd customize this based on actual corrosion status output
+    cond do
+      Map.get(status, "error") -> "unhealthy"
+      Map.get(status, "warning") -> "degraded"
+      true -> "healthy"
+    end
+  end
+
+  @doc """
+  Convenience function to get human-readable member summary.
+
+  Returns a map with key information about a cluster member.
+  """
+  def summarize_member(member) when is_map(member) do
+    %{
+      id: Map.get(member, "display_id", "unknown"),
+      address: Map.get(member, "display_addr", "unknown"),
+      status: Map.get(member, "display_status", "unknown"),
+      cluster_id: Map.get(member, "display_cluster_id"),
+      ring: Map.get(member, "display_ring"),
+      last_sync: Map.get(member, "display_last_sync", "never"),
+      avg_rtt: Map.get(member, "display_rtt_avg"),
+      rtt_samples: Map.get(member, "display_rtt_count", 0)
+    }
+  end
+
+  @doc """
+  Helper function to check if a member appears to be actively participating in the cluster.
+  """
+  def active_member?(member) when is_map(member) do
+    has_recent_sync = case get_in(member, ["state", "last_sync_ts"]) do
+      ts when is_integer(ts) ->
+        # Check if sync was within last 5 minutes
+        five_minutes_ago = (DateTime.utc_now() |> DateTime.to_unix(:nanosecond)) - (5 * 60 * 1_000_000_000)
+        ts > five_minutes_ago
+      _ -> false
+    end
+
+    has_address = case get_in(member, ["state", "addr"]) do
+      addr when is_binary(addr) -> String.length(addr) > 0
+      _ -> false
+    end
+
+    has_recent_sync and has_address
+  end
 end
