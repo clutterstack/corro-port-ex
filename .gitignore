@@ -43,3 +43,6 @@ corrosion/*
 !corrosion/schemas/**
 !corrosion/wrapper.sh
 
+rel/
+.DS_Store/
+
