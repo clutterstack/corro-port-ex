@@ -27,7 +27,6 @@ defmodule CorroPortWeb.Router do
     pipe_through :api
 
     post "/acknowledge", AcknowledgmentController, :acknowledge
-    get "/acknowledge/health", AcknowledgmentController, :health
   end
 
   # Enable LiveDashboard in development

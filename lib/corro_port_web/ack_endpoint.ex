@@ -19,5 +19,5 @@ defmodule CorroPortWeb.AckEndpoint do
 
   plug Plug.MethodOverride
   plug Plug.Head
-  plug CorroPortWeb.AckRouter
+  plug CorroPortWeb.Router
 end

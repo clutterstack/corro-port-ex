@@ -1,4 +1,4 @@
-defmodule CorroPort.AcknowledgmentSender do
+defmodule CorroPort.AckSender do
   @moduledoc """
   Sends HTTP acknowledgments to originating nodes when we receive their messages.
 
@@ -29,16 +29,16 @@ defmodule CorroPort.AcknowledgmentSender do
 
     # Don't send acknowledgments to ourselves
     if originating_node_id == local_node_id do
-      Logger.debug("AcknowledgmentSender: Skipping acknowledgment to self (#{originating_node_id})")
+      Logger.debug("AckSender: Skipping acknowledgment to self (#{originating_node_id})")
       :ok
     else
       case originating_ip do
         ip when is_binary(ip) and ip != "" ->
-          Logger.info("AcknowledgmentSender: Sending acknowledgment to #{originating_node_id} at #{ip}")
+          Logger.info("AckSender: Sending acknowledgment to #{originating_node_id} at #{ip}")
           send_http_acknowledgment(ip, originating_node_id, message_data, local_node_id)
 
         _ ->
-          Logger.warning("AcknowledgmentSender: No originating_ip found for message from #{originating_node_id}")
+          Logger.warning("AckSender: No originating_ip found for message from #{originating_node_id}")
           {:error, :no_originating_ip}
       end
     end
@@ -60,21 +60,21 @@ defmodule CorroPort.AcknowledgmentSender do
       {:ok, base_url} ->
         health_url = "#{base_url}/api/acknowledge"
 
-        Logger.info("AcknowledgmentSender: Testing connectivity to #{target_node_id} at #{health_url}")
+        Logger.info("AckSender: Testing connectivity to #{target_node_id} at #{health_url}")
 
         # Simple GET to the acknowledge endpoint (will return method not allowed, but proves connectivity)
         case Req.get(health_url, receive_timeout: @ack_timeout) do
           {:ok, %{status: status}} when status in [200, 405] ->
-            Logger.info("AcknowledgmentSender: Successfully connected to #{target_node_id} at #{target_ip}")
+            Logger.info("AckSender: Successfully connected to #{target_node_id} at #{target_ip}")
             {:ok, %{status: status}}
 
           {:ok, %{status: status, body: body}} ->
             error = "HTTP #{status}: #{inspect(body)}"
-            Logger.warning("AcknowledgmentSender: Connectivity test failed for #{target_node_id} at #{target_ip}: #{error}")
+            Logger.warning("AckSender: Connectivity test failed for #{target_node_id} at #{target_ip}: #{error}")
             {:error, error}
 
           {:error, reason} ->
-            Logger.warning("AcknowledgmentSender: Connection failed to #{target_node_id} at #{target_ip}: #{inspect(reason)}")
+            Logger.warning("AckSender: Connection failed to #{target_node_id} at #{target_ip}: #{inspect(reason)}")
             {:error, reason}
         end
 
@@ -102,7 +102,7 @@ defmodule CorroPort.AcknowledgmentSender do
           |> Enum.filter(fn {_node_id, ip} -> is_binary(ip) and ip != "" end)
           |> Enum.uniq()
 
-        Logger.info("AcknowledgmentSender: Testing connectivity to #{length(unique_endpoints)} known endpoints")
+        Logger.info("AckSender: Testing connectivity to #{length(unique_endpoints)} known endpoints")
 
         results = Enum.reduce(unique_endpoints, %{}, fn {node_id, ip}, acc ->
           result = test_connectivity_by_ip(ip, node_id)
@@ -113,12 +113,12 @@ defmodule CorroPort.AcknowledgmentSender do
         successful = Enum.count(results, fn {_node, result} -> match?({:ok, _}, result) end)
         total = length(unique_endpoints)
 
-        Logger.info("AcknowledgmentSender: Connectivity test complete: #{successful}/#{total} nodes reachable")
+        Logger.info("AckSender: Connectivity test complete: #{successful}/#{total} nodes reachable")
 
         results
 
       {:error, reason} ->
-        Logger.warning("AcknowledgmentSender: Could not get recent messages for connectivity test: #{inspect(reason)}")
+        Logger.warning("AckSender: Could not get recent messages for connectivity test: #{inspect(reason)}")
         %{}
     end
   end
@@ -137,7 +137,7 @@ defmodule CorroPort.AcknowledgmentSender do
 
     base_url = "http://#{originating_ip}:#{target_ack_port}"
 
-    Logger.debug("AcknowledgmentSender: Discovered ack endpoint: #{base_url}")
+    Logger.debug("AckSender: Discovered ack endpoint: #{base_url}")
     {:ok, base_url}
   end
 
@@ -147,7 +147,7 @@ defmodule CorroPort.AcknowledgmentSender do
         do_send_http_acknowledgment(base_url, originating_node_id, message_data, local_node_id)
 
       {:error, reason} ->
-        Logger.warning("AcknowledgmentSender: Could not discover ack endpoint for #{originating_ip}: #{reason}")
+        Logger.warning("AckSender: Could not discover ack endpoint for #{originating_ip}: #{reason}")
         {:error, reason}
     end
   end
@@ -161,7 +161,7 @@ defmodule CorroPort.AcknowledgmentSender do
       "message_timestamp" => Map.get(message_data, "timestamp")
     }
 
-    Logger.debug("AcknowledgmentSender: Sending POST to #{ack_url} with payload: #{inspect(payload)}")
+    Logger.debug("AckSender: Sending POST to #{ack_url} with payload: #{inspect(payload)}")
 
     case Req.post(ack_url,
            json: payload,
@@ -169,30 +169,30 @@ defmodule CorroPort.AcknowledgmentSender do
            receive_timeout: @ack_timeout) do
 
       {:ok, %{status: 200, body: body}} ->
-        Logger.info("AcknowledgmentSender: Successfully sent acknowledgment to #{originating_node_id}")
-        Logger.debug("AcknowledgmentSender: Response: #{inspect(body)}")
+        Logger.info("AckSender: Successfully sent acknowledgment to #{originating_node_id}")
+        Logger.debug("AckSender: Response: #{inspect(body)}")
         :ok
 
       {:ok, %{status: 404}} ->
         # The target node isn't tracking this message anymore - not necessarily an error
-        Logger.info("AcknowledgmentSender: Target node #{originating_node_id} is not tracking message anymore (404)")
+        Logger.info("AckSender: Target node #{originating_node_id} is not tracking message anymore (404)")
         :ok
 
       {:ok, %{status: status, body: body}} ->
         error = "HTTP #{status}: #{inspect(body)}"
-        Logger.warning("AcknowledgmentSender: Acknowledgment failed to #{originating_node_id}: #{error}")
+        Logger.warning("AckSender: Acknowledgment failed to #{originating_node_id}: #{error}")
         {:error, error}
 
       {:error, %{reason: :timeout}} ->
-        Logger.warning("AcknowledgmentSender: Acknowledgment timed out to #{originating_node_id} after #{@ack_timeout}ms")
+        Logger.warning("AckSender: Acknowledgment timed out to #{originating_node_id} after #{@ack_timeout}ms")
         {:error, :timeout}
 
       {:error, %{reason: :econnrefused}} ->
-        Logger.warning("AcknowledgmentSender: Connection refused to #{originating_node_id} at #{ack_url}")
+        Logger.warning("AckSender: Connection refused to #{originating_node_id} at #{ack_url}")
         {:error, :connection_refused}
 
       {:error, reason} ->
-        Logger.warning("AcknowledgmentSender: Acknowledgment failed to #{originating_node_id}: #{inspect(reason)}")
+        Logger.warning("AckSender: Acknowledgment failed to #{originating_node_id}: #{inspect(reason)}")
         {:error, reason}
     end
   end
