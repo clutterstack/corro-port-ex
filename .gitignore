@@ -44,5 +44,5 @@ corrosion/*
 !corrosion/wrapper.sh
 
 rel/
-.DS_Store/
+.DS_Store
 
