@@ -100,5 +100,8 @@ echo ""
 
 pwd
 
+OVERMIND_SOCKET_PATH="/tmp/overmind-task$NODE_ID.sock" 
+
+
 # Start both services with overmind
-exec ./overmind-v2.5.1-macos-arm64 start -f Procfile-dev
+OVERMIND_SOCKET=$OVERMIND_SOCKET_PATH exec ./overmind-v2.5.1-macos-arm64 start -f Procfile-dev
