@@ -21,7 +21,8 @@ defmodule CorroPort.Application do
       CorroPort.AckTracker,
       CorroPort.AckSender,
       # Start to serve requests, typically the last entry
-      CorroPortWeb.Endpoint
+      CorroPortWeb.Endpoint,
+      CorroPortWeb.AckEndpoint   # Acknowledgment API endpoint
     ]
 
     opts = [strategy: :one_for_one, name: CorroPort.Supervisor]

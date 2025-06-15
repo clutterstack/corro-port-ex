@@ -16,13 +16,12 @@ defmodule CorroPort.MessagesAPI do
   @doc """
   Gets all messages from the node_messages table, ordered by timestamp.
   """
-  def get_node_messages do
+  def get_node_messages(port \\ nil) do
     query = "SELECT * FROM node_messages ORDER BY timestamp DESC"
 
-    case CorrosionClient.execute_query(query) do
+    case CorrosionClient.execute_query(query, port) do
       {:ok, response} ->
         {:ok, CorrosionClient.parse_query_response(response)}
-
       error ->
         error
     end
@@ -31,9 +30,9 @@ defmodule CorroPort.MessagesAPI do
   @doc """
   Gets the latest message for each node from the node_messages table.
   """
-  def get_latest_node_messages() do
+  def get_latest_node_messages(port \\ nil) do
     query = """
-    SELECT message, node_id, timestamp, sequence
+    SELECT message, node_id, timestamp, sequence, originating_ip
     FROM node_messages
     WHERE (node_id, timestamp) IN (
       SELECT node_id, MAX(timestamp)
@@ -43,10 +42,9 @@ defmodule CorroPort.MessagesAPI do
     ORDER BY timestamp DESC
     """
 
-    case CorrosionClient.execute_query(query) do
+    case CorrosionClient.execute_query(query, port) do
       {:ok, response} ->
         {:ok, CorrosionClient.parse_query_response(response)}
-
       error ->
         error
     end
@@ -64,21 +62,27 @@ defmodule CorroPort.MessagesAPI do
   - `{:ok, message_data}` on success with inserted message details
   - `{:error, reason}` on failure
   """
-  def insert_message(node_id, message) do
+  def insert_message(node_id, message, port \\ nil) do
     sequence = System.system_time(:millisecond)
     timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
+    originating_ip = CorroPort.NodeConfig.get_originating_ip()
 
     sql = """
-    INSERT INTO node_messages (pk, node_id, message, sequence, timestamp)
-    VALUES ('#{node_id}_#{sequence}', '#{node_id}', '#{message}', #{sequence}, '#{timestamp}')
+    INSERT INTO node_messages (pk, node_id, message, sequence, timestamp, originating_ip)
+    VALUES ('#{node_id}_#{sequence}', '#{node_id}', '#{message}', #{sequence}, '#{timestamp}', '#{originating_ip}')
     """
 
-    Logger.debug("Inserting: node_id=#{node_id}, message=#{message}")
+    Logger.debug("Inserting: node_id=#{node_id}, message=#{message}, originating_ip=#{originating_ip}")
 
-    case CorrosionClient.execute_transaction([sql]) do
+    case CorrosionClient.execute_transaction([sql], port) do
       {:ok, _response} ->
-        {:ok, %{node_id: node_id, message: message, sequence: sequence, timestamp: timestamp}}
-
+        {:ok, %{
+          node_id: node_id,
+          message: message,
+          sequence: sequence,
+          timestamp: timestamp,
+          originating_ip: originating_ip
+        }}
       error ->
         error
     end
@@ -92,18 +96,16 @@ defmodule CorroPort.MessagesAPI do
   Specifically targets messages where the message field contains port numbers,
   which indicates a data corruption issue.
   """
-  def cleanup_bad_messages() do
-    # TODO: remove this or make it scrub the node_messages table
+  def cleanup_bad_messages(port \\ nil) do
     cleanup_sql = """
     DELETE FROM node_messages
     WHERE message IN ('8081', '8082', '8083', '8084', '8085')
     """
 
-    case CorrosionClient.execute_transaction([cleanup_sql]) do
+    case CorrosionClient.execute_transaction([cleanup_sql], port) do
       {:ok, _} ->
         Logger.info("Cleaned up malformed messages")
         {:ok, :cleaned}
-
       error ->
         Logger.warning("Failed to cleanup messages: #{inspect(error)}")
         error
