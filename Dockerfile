@@ -91,7 +91,7 @@ ENV ERL_AFLAGS "-proto_dist inet6_tcp"
 # Only copy the final Phoenix app release from the build stage
 COPY --from=builder --chown=corrosion:corrosion /app/_build/${MIX_ENV}/rel/corro_port ./
 
-COPY --from=builder /usr/local/bin/nperf /usr/local/bin/nperf
+# COPY --from=builder /usr/local/bin/nperf /usr/local/bin/nperf
 
 
 COPY --chmod=0755 overmind-v2.5.1-linux-amd64 /app/overmind

@@ -51,12 +51,16 @@ EOF
 echo "✅ Corrosion config generated at /app/corrosion.toml"
 
 # Ensure data directory exists
-mkdir -p /var/lib/corrosion
+# Don't have to do this since this is the mount point of the fly volume
+# mkdir -p /var/lib/corrosion
+
+# In case fly volumes put something there
+# rm -rf '/var/lib/corrosion/lost+found'
 
 # Set ownership
-chown -R corrosion:corrosion /var/lib/corrosion
+# chown -R corrosion:corrosion /var/lib/corrosion
 
 echo "🔧 Starting services with Overmind..."
 
 # Switch to corrosion user and start overmind
-exec su-exec corrosion "$@"
+exec "$@"
