@@ -4,6 +4,9 @@ defmodule CorroPort.AckSender do
 
   Listens to CorroSubscriber's message updates and sends HTTP acknowledgments
   to the originating node when we see a message from another node.
+
+  Supports both development (localhost with different ports) and production
+  (fly.io with machine discovery) environments.
   """
 
   use GenServer
@@ -58,14 +61,6 @@ defmodule CorroPort.AckSender do
     # For initial state, we probably don't want to send acks
     # But let's log and count for stats
     new_state = %{state | total_messages_processed: state.total_messages_processed + 1}
-
-    ## Don't need to see logs for initial subscription output.
-    # originating_node_id = Map.get(message_map, "node_id")
-    # local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
-    # if originating_node_id && originating_node_id != local_node_id do
-    #   Logger.debug("AckSender: Saw initial message from #{originating_node_id}, not sending ack")
-    # end
-
     {:noreply, new_state}
   end
 
@@ -152,13 +147,41 @@ defmodule CorroPort.AckSender do
   end
 
   defp discover_node_endpoint(node_id) do
+    if CorroPort.NodeConfig.production?() do
+      discover_production_endpoint(node_id)
+    else
+      discover_development_endpoint(node_id)
+    end
+  end
+
+  defp discover_production_endpoint(node_id) do
+    # In production on fly.io, all machines use the same Phoenix port (8080)
+    # and we can reach them via the app's internal DNS
+    fly_config = CorroPort.NodeConfig.get_fly_config()
+
+    case fly_config do
+      %{app_name: app_name} when is_binary(app_name) ->
+        # Use fly.io's internal DNS to reach other machines
+        # All machines expose Phoenix on port 8080
+        base_url = "http://#{app_name}.internal:8080"
+        Logger.debug("AckSender: Production endpoint for #{node_id}: #{base_url}")
+        {:ok, base_url}
+
+      _ ->
+        Logger.warning("AckSender: Missing fly.io configuration for production endpoint discovery")
+        {:error, "Missing fly.io configuration"}
+    end
+  end
+
+  defp discover_development_endpoint(node_id) do
+    # In development, use the existing logic with different ports per node
     case extract_node_number(node_id) do
       {:ok, node_number} ->
         # Calculate Phoenix port: base port 4000 + node_number
         phoenix_port = 4000 + node_number
         base_url = "http://127.0.0.1:#{phoenix_port}"
 
-        Logger.debug("AckSender: Discovered endpoint for #{node_id}: #{base_url}")
+        Logger.debug("AckSender: Development endpoint for #{node_id}: #{base_url}")
         {:ok, base_url}
 
       {:error, reason} ->

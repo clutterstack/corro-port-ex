@@ -34,7 +34,7 @@ if config_env() == :prod do
       """
 
   host = System.get_env("PHX_HOST") || "example.com"
-  port = String.to_integer(System.get_env("PORT") || "4000")
+  port = String.to_integer(System.get_env("PORT") || "8080")
 
   config :corro_port, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
@@ -49,6 +49,44 @@ if config_env() == :prod do
       port: port
     ],
     secret_key_base: secret_key_base
+
+  # Production Corrosion Configuration for fly.io
+  fly_app_name = System.get_env("FLY_APP_NAME")
+  fly_private_ip = System.get_env("FLY_PRIVATE_IP")
+  fly_machine_id = System.get_env("FLY_MACHINE_ID")
+
+  if fly_app_name && fly_private_ip && fly_machine_id do
+    # Production fly.io configuration
+    config :corro_port, :node_config,
+      # Use FLY_MACHINE_ID for readable node identification
+      node_id: fly_machine_id,
+      # All nodes use the same API port on fly.io
+      corrosion_api_port: 8081,
+      # Each node gets its own private IP for gossip
+      corrosion_gossip_port: 8787,
+      # Use fly.io DNS for bootstrap discovery
+      corrosion_bootstrap_list: "[\"#{fly_app_name}.internal:8787\"]",
+      # Production config path
+      corro_config_path: "/app/corrosion.toml",
+      # Production binary path
+      corrosion_binary: "/app/corrosion",
+      # Production environment flag
+      environment: :prod,
+      # Fly.io specific settings
+      fly_app_name: fly_app_name,
+      fly_private_ip: fly_private_ip,
+      fly_machine_id: fly_machine_id
+  else
+    # Fallback configuration if fly.io env vars are missing
+    config :corro_port, :node_config,
+      node_id: System.get_env("NODE_ID", "fallback"),
+      corrosion_api_port: 8081,
+      corrosion_gossip_port: 8787,
+      corrosion_bootstrap_list: "[]",
+      corro_config_path: "/app/corrosion.toml",
+      corrosion_binary: "/app/corrosion",
+      environment: :prod
+  end
 
   # ## SSL Support
   #

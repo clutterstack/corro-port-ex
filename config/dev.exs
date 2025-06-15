@@ -18,7 +18,7 @@ corrosion_bootstrap_list =
   |> Enum.map(&"\"127.0.0.1:#{&1}\"")     # plain JSON-style quotes
   |> Enum.join(", ")
   |> then(&"[#{&1}]")
-#
+
 # The watchers configuration can be used to run external
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
@@ -42,7 +42,8 @@ config :corro_port, :node_config,
   corrosion_gossip_port: corrosion_gossip_port,
   corrosion_bootstrap_list: corrosion_bootstrap_list,
   corro_config_path: config_path,
-  corrosion_binary: "corrosion/corrosion-mac"
+  corrosion_binary: "corrosion/corrosion-mac",
+  environment: :dev
 
 ## SSL Support
 #

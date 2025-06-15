@@ -1,0 +1,67 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+docs/
+doc/
+
+# Development files
+.env
+.env.*
+
+# Elixir
+_build/
+deps/
+*.ez
+
+# Node/NPM
+node_modules/
+npm-debug.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Development artifacts
+.elixir_ls/
+erl_crash.dump
+
+# Test files
+test/
+cover/
+
+# Development only corrosion binary
+corrosion/corrosion-mac
+
+# Development config files
+corrosion/config-node*.toml
+corrosion/node*.db*
+corrosion/config-local.toml
+
+# Temporary files
+tmp/
+/tmp/
+
+# Mix
+.fetch
+
+# Hex
+*.tar
+
+# Phoenix
+priv/static/uploads/
+
+# Development scripts (keep deploy script)
+scripts/
+
+
+erl_crash.dump

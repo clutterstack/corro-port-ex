@@ -4,6 +4,9 @@ defmodule CorroPort.AckTracker do
 
   Uses fast fallback node discovery for immediate responses, with async CLI-based
   discovery for more accurate cluster membership information.
+
+  Supports both development (localhost with different ports) and production
+  (fly.io with machine discovery) environments.
   """
 
   use GenServer
@@ -284,7 +287,38 @@ defmodule CorroPort.AckTracker do
   end
 
   defp member_to_node_id(member) when is_map(member) do
-    # Extract node ID from the member's gossip address
+    if CorroPort.NodeConfig.production?() do
+      production_member_to_node_id(member)
+    else
+      development_member_to_node_id(member)
+    end
+  end
+
+  defp production_member_to_node_id(member) do
+    # In production, we can't easily map gossip addresses back to machine IDs
+    # since machine IDs are UUIDs like "91851e13e45e58"
+    # For now, we'll use the gossip address IP as a unique identifier
+    case Map.get(member, "display_addr") || get_in(member, ["state", "addr"]) do
+      addr when is_binary(addr) ->
+        case String.split(addr, ":") do
+          [ip, _port] ->
+            # Use the last part of the IPv6 address as a readable identifier
+            case String.split(ip, ":") do
+              parts when length(parts) > 1 ->
+                # Take last 2 parts of IPv6 address
+                suffix = parts |> Enum.take(-2) |> Enum.join(":")
+                "machine-#{suffix}"
+              _ ->
+                "machine-#{ip}"
+            end
+          _ -> nil
+        end
+      _ -> nil
+    end
+  end
+
+  defp development_member_to_node_id(member) do
+    # In development, extract node ID from the member's gossip address
     case Map.get(member, "display_addr") || get_in(member, ["state", "addr"]) do
       addr when is_binary(addr) ->
         case String.split(addr, ":") do
@@ -299,7 +333,7 @@ defmodule CorroPort.AckTracker do
     end
   end
 
-  # Convert gossip port to node ID using our standard mapping
+  # Convert gossip port to node ID using our standard mapping (development only)
   defp gossip_port_to_node_id(port) do
     case port do
       8787 -> "node1"
@@ -316,6 +350,21 @@ defmodule CorroPort.AckTracker do
   defp fallback_node_discovery do
     Logger.debug("AckTracker: Using fallback node discovery")
 
+    if CorroPort.NodeConfig.production?() do
+      fallback_production_discovery()
+    else
+      fallback_development_discovery()
+    end
+  end
+
+  defp fallback_production_discovery do
+    # In production, we can't easily predict other machine IDs
+    # So we'll return an empty list and rely on CLI discovery
+    Logger.debug("AckTracker: Production fallback - empty list, relying on CLI discovery")
+    []
+  end
+
+  defp fallback_development_discovery do
     # Get our local node configuration
     local_node_config = Application.get_env(:corro_port, :node_config, %{node_id: 1})
     local_node_id = local_node_config[:node_id] || 1
