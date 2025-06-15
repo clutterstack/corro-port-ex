@@ -137,30 +137,11 @@ defmodule CorroPort.CorrosionCLI do
     Task.async(fn -> run_command(args, opts) end)
   end
 
-  @doc """
-  Test connectivity to the corrosion binary by running a simple command.
-  """
-  def test_connectivity(opts \\ []) do
-    case run_command(["--version"], opts) do
-      {:ok, output} ->
-        Logger.info("CorrosionCLI: Binary test successful")
-        Logger.debug("CorrosionCLI: Version output: #{String.trim(output)}")
-        {:ok, String.trim(output)}
-
-      {:error, reason} ->
-        Logger.warning("CorrosionCLI: Binary test failed: #{inspect(reason)}")
-        {:error, reason}
-    end
-  end
-
   # Private functions
 
   defp validate_prerequisites(binary_path, config_path) do
     abs_binary_path = Path.absname(binary_path)
     abs_config_path = Path.absname(config_path)
-
-    Logger.debug("CorrosionCLI: Validating binary: #{abs_binary_path}")
-    Logger.debug("CorrosionCLI: Validating config: #{abs_config_path}")
 
     cond do
       not File.exists?(abs_binary_path) ->
@@ -176,7 +157,7 @@ defmodule CorroPort.CorrosionCLI do
         {:error, "Corrosion config not found at: #{abs_config_path}"}
 
       true ->
-        Logger.debug("CorrosionCLI: Prerequisites validated successfully")
+        # Logger.debug("CorrosionCLI: Prerequisites validated successfully")
         :ok
     end
   end
@@ -199,7 +180,6 @@ defmodule CorroPort.CorrosionCLI do
     # Convert to absolute path to help with path resolution
     abs_binary_path = Path.absname(binary_path)
 
-    Logger.debug("CorrosionCLI: Absolute binary path: #{abs_binary_path}")
     Logger.debug("CorrosionCLI: Current working directory: #{File.cwd!()}")
     Logger.debug("CorrosionCLI: Full command: #{abs_binary_path} #{Enum.join(args, " ")}")
 
@@ -207,7 +187,7 @@ defmodule CorroPort.CorrosionCLI do
       # Use System.cmd with basic options (no timeout for now)
       case System.cmd(abs_binary_path, args, stderr_to_stdout: true) do
         {output, 0} ->
-          Logger.debug("CorrosionCLI: Command successful, output length: #{String.length(output)} chars")
+          output |> dbg
           Logger.info("CorrosionCLI: Raw output: #{inspect(output)}")
           {:ok, output}
 

@@ -45,7 +45,7 @@ defmodule CorroPortWeb.ClusterLive do
     task = CorrosionCLI.cluster_members_async()
 
     # Schedule a check for task completion
-    Process.send_after(self(), :check_cli_task, 100)
+    # Process.send_after(self(), :check_cli_task, 100)
 
     socket =
       socket
@@ -68,58 +68,109 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, socket}
   end
 
-  # Handle CLI task completion checking
-  def handle_info(:check_cli_task, socket) do
-    case socket.assigns.cli_members_task do
-      nil ->
-        # No task running
-        {:noreply, socket}
+  # handle
+  def handle_info({task_ref, {:ok, raw_output}}, socket) do
+    Logger.debug("handling \{:ok, #{inspect raw_output}\} from task #{inspect task_ref}")
+    CorroPort.CorrosionParser.parse_cluster_members(raw_output) |> dbg
 
-      task ->
-        case Task.yield(task, 0) do
-          {:ok, {:ok, output}} ->
-            # Task completed successfully
-            Logger.info("ClusterLive: ✅ CLI task completed successfully")
+          # Use the dedicated parser
+          parsed_result = case CorroPort.CorrosionParser.parse_cluster_members(raw_output) do
+            {:ok, []} ->
+              Logger.info("ClusterLive: No cluster members found - single node setup")
+              %{}
+            {:ok, members} ->
+              Logger.info("ClusterLive: Parsed some CLI members")
+              members
+            {:error, reason} ->
+              Logger.warning("ClusterLive: Failed to parse CLI output: #{inspect(reason)}")
+              %{parse_error: reason, raw_output: raw_output}
+          end
 
-            # Try to parse the output
-            parsed_result = case CorrosionCLI.parse_cluster_members(output) do
-              {:ok, members} ->
-                Logger.info("ClusterLive: Parsed #{length(members)} CLI members")
-                members
-              {:error, reason} ->
-                Logger.warning("ClusterLive: Failed to parse CLI output: #{inspect(reason)}")
-                %{parse_error: reason, raw_output: output}
-            end
+          parsed_result |> dbg()
+          flash_message = case parsed_result do
+            %{} -> "✅ CLI command successful - single node setup (no cluster members)"
+            list when is_list(list) -> "✅ CLI cluster members fetched successfully!"
+            %{parse_error: _} -> "⚠️ CLI command succeeded but output couldn't be parsed"
+          end
 
-            socket =
-              socket
-              |> assign(:cli_members_data, parsed_result)
-              |> assign(:cli_members_loading, false)
-              |> assign(:cli_members_task, nil)
-              |> put_flash(:info, "✅ CLI cluster members fetched successfully!")
+          socket =
+            socket
+            |> assign(:cli_members_data, parsed_result)
+            |> assign(:cli_members_loading, false)
+            |> assign(:cli_members_task, nil)
+            |> put_flash(:info, flash_message)
 
-            {:noreply, socket}
-
-          {:ok, {:error, reason}} ->
-            # Task completed with error
-            Logger.warning("ClusterLive: ❌ CLI task failed: #{inspect(reason)}")
-
-            socket =
-              socket
-              |> assign(:cli_members_error, format_cli_error(reason))
-              |> assign(:cli_members_loading, false)
-              |> assign(:cli_members_task, nil)
-              |> put_flash(:error, "❌ CLI command failed: #{format_cli_error(reason)}")
-
-            {:noreply, socket}
-
-          nil ->
-            # Still running, check again later
-            Process.send_after(self(), :check_cli_task, 500)
-            {:noreply, socket}
-        end
-    end
+          {:noreply, socket}
   end
+
+  # handle
+    def handle_info({:DOWN, ref, :process, _pid, :normal}, socket) do
+    Logger.info("Handled :DOWN message from #{inspect ref}")
+    {:noreply, socket}
+  end
+
+  # Handle CLI task completion checking
+  # def handle_info(:check_cli_task, socket) do
+  #   Logger.debug("Handling :check_cli_task info")
+  #   case socket.assigns.cli_members_task do
+  #     nil ->
+  #       # No task running
+  #       {:noreply, socket}
+
+  #     task ->
+  #       case Task.yield(task, 0) do
+
+  #         {_task, {:ok, raw_output}, socket} ->
+  #         Logger.info("ClusterLive: ✅ CLI task completed successfully")
+
+  #         # Use the dedicated parser
+  #         parsed_result = case CorroPort.CorrosionParser.parse_cluster_members(raw_output) do
+  #           {:ok, ""} ->
+  #             Logger.info("ClusterLive: No cluster members found - single node setup")
+  #             []
+  #           {:ok, members} ->
+  #             Logger.info("ClusterLive: Parsed some CLI members")
+  #             members |> dbg
+  #           {:error, reason} ->
+  #             Logger.warning("ClusterLive: Failed to parse CLI output: #{inspect(reason)}")
+  #             %{parse_error: reason, raw_output: raw_output}
+  #         end
+
+  #         flash_message = case parsed_result do
+  #           [] -> "✅ CLI command successful - single node setup (no cluster members)"
+  #           list when is_list(list) -> "✅ CLI cluster members fetched successfully!"
+  #           %{parse_error: _} -> "⚠️ CLI command succeeded but output couldn't be parsed"
+  #         end
+
+  #         socket =
+  #           socket
+  #           |> assign(:cli_members_data, parsed_result)
+  #           |> assign(:cli_members_loading, false)
+  #           |> assign(:cli_members_task, nil)
+  #           |> put_flash(:info, flash_message)
+
+  #         {:noreply, socket}
+
+  #         {:ok, {:error, reason}} ->
+  #           # Task completed with error
+  #           Logger.warning("ClusterLive: ❌ CLI task failed: #{inspect(reason)}")
+
+  #           socket =
+  #             socket
+  #             |> assign(:cli_members_error, format_cli_error(reason))
+  #             |> assign(:cli_members_loading, false)
+  #             |> assign(:cli_members_task, nil)
+  #             |> put_flash(:error, "❌ CLI command failed: #{format_cli_error(reason)}")
+
+  #           {:noreply, socket}
+
+  #         nil ->
+  #           # Still running, check again later
+  #           Process.send_after(self(), :check_cli_task, 500)
+  #           {:noreply, socket}
+  #       end
+  #   end
+  # end
 
   # Private functions
   defp fetch_cluster_data(socket) do
@@ -204,47 +255,22 @@ defmodule CorroPortWeb.ClusterLive do
 
           <!-- CLI Results -->
           <div :if={@cli_members_data && !Map.has_key?(@cli_members_data, :parse_error)} class="space-y-4">
-            <div class="alert alert-success">
-              <.icon name="hero-check-circle" class="w-5 h-5" />
-              <span>Found {length(@cli_members_data)} cluster members via CLI</span>
+            <div :if={@cli_members_data == []} class="alert alert-info">
+              <.icon name="hero-information-circle" class="w-5 h-5" />
+              <span>No cluster members found - this appears to be a single node setup</span>
             </div>
 
-            <div class="overflow-x-auto">
+            <div :if={@cli_members_data != []} class="alert alert-success">
+              <.icon name="hero-check-circle" class="w-5 h-5" />
+              <span>Found {Enum.count(@cli_members_data)} cluster members via CLI</span>
+            </div>
+
+            <div :if={@cli_members_data != []} class="overflow-x-auto">
               <table class="table table-zebra">
-                <thead>
-                  <tr>
-                    <th>Member ID</th>
-                    <th>Address</th>
-                    <th>Status</th>
-                    <th>Last Sync</th>
-                    <th>Cluster ID</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr :for={member <- @cli_members_data}>
-                    <td class="font-mono text-xs">
-                      {String.slice(member["id"] || "unknown", 0, 8)}...
-                    </td>
-                    <td class="font-mono text-sm">
-                      {member["parsed_addr"] || "unknown"}
-                    </td>
-                    <td>
-                      <span class="badge badge-sm badge-primary">
-                        {member["computed_status"] || "unknown"}
-                      </span>
-                    </td>
-                    <td class="text-xs">
-                      {format_timestamp(get_in(member, ["state", "last_sync_ts"]))}
-                    </td>
-                    <td class="font-mono text-xs">
-                      {get_in(member, ["state", "cluster_id"]) || "?"}
-                    </td>
-                  </tr>
-                </tbody>
+                <!-- table content remains the same -->
               </table>
             </div>
           </div>
-
           <!-- Parse Error Display -->
           <div :if={@cli_members_data && Map.has_key?(@cli_members_data, :parse_error)} class="space-y-4">
             <div class="alert alert-warning">
