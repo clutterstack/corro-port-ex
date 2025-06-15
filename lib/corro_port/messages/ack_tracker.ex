@@ -2,8 +2,8 @@ defmodule CorroPort.AckTracker do
   @moduledoc """
   Tracks acknowledgments for the latest message sent by this node.
 
-  Uses CLI-based node discovery via `corrosion cluster members` for more
-  accurate and up-to-date cluster membership information.
+  Uses fast fallback node discovery for immediate responses, with async CLI-based
+  discovery for more accurate cluster membership information.
   """
 
   use GenServer
@@ -21,7 +21,8 @@ defmodule CorroPort.AckTracker do
 
   @doc """
   Track a new message as the "latest" message expecting acknowledgments.
-  Clears any previous acknowledgments and refreshes expected nodes.
+  Clears any previous acknowledgments and immediately uses fallback nodes,
+  then refreshes expected nodes asynchronously.
   """
   def track_latest_message(message_data) do
     GenServer.call(__MODULE__, {:track_latest_message, message_data})
@@ -49,10 +50,10 @@ defmodule CorroPort.AckTracker do
   end
 
   @doc """
-  Force refresh of expected nodes from CLI.
+  Force refresh of expected nodes from CLI (async).
   """
   def refresh_expected_nodes do
-    GenServer.call(__MODULE__, :refresh_expected_nodes)
+    GenServer.cast(__MODULE__, :refresh_expected_nodes)
   end
 
   def get_pubsub_topic, do: @pubsub_topic
@@ -69,14 +70,17 @@ defmodule CorroPort.AckTracker do
       read_concurrency: true
     ])
 
-    # Cache expected nodes on startup
-    initial_expected_nodes = fetch_expected_nodes_via_cli()
+    # Use fast fallback for initial expected nodes
+    initial_expected_nodes = fallback_node_discovery()
     :ets.insert(@table_name, {:expected_nodes, initial_expected_nodes})
 
     Logger.info("AckTracker ETS table created: #{@table_name}")
-    Logger.info("AckTracker initial expected nodes: #{inspect(initial_expected_nodes)}")
+    Logger.info("AckTracker initial expected nodes (fallback): #{inspect(initial_expected_nodes)}")
 
-    {:ok, %{table: table, last_cli_fetch: DateTime.utc_now()}}
+    # Start background CLI refresh
+    schedule_cli_refresh()
+
+    {:ok, %{table: table, last_cli_fetch: nil}}
   end
 
   def handle_call({:track_latest_message, message_data}, _from, state) do
@@ -88,17 +92,23 @@ defmodule CorroPort.AckTracker do
     # Store the latest message
     :ets.insert(@table_name, {:latest_message, message_data})
 
-    # Refresh expected nodes when tracking a new message
-    expected_nodes = fetch_expected_nodes_via_cli()
-    :ets.insert(@table_name, {:expected_nodes, expected_nodes})
+    # Use fast fallback nodes for immediate response
+    fallback_nodes = fallback_node_discovery()
+    :ets.insert(@table_name, {:expected_nodes, fallback_nodes})
 
-    Logger.info("AckTracker: Updated expected nodes: #{inspect(expected_nodes)}")
+    Logger.info("AckTracker: Using fallback expected nodes: #{inspect(fallback_nodes)}")
 
-    # Broadcast the update
+    # Broadcast the immediate update
     broadcast_update()
 
-    new_state = %{state | last_cli_fetch: DateTime.utc_now()}
-    {:reply, :ok, new_state}
+    # Trigger async CLI refresh for more accurate nodes
+    spawn(fn ->
+      Logger.debug("AckTracker: Starting async CLI refresh...")
+      fresh_nodes = fetch_expected_nodes_via_cli()
+      GenServer.cast(__MODULE__, {:update_expected_nodes, fresh_nodes})
+    end)
+
+    {:reply, :ok, state}
   end
 
   def handle_call({:add_acknowledgment, ack_node_id}, _from, state) do
@@ -132,17 +142,45 @@ defmodule CorroPort.AckTracker do
     {:reply, expected_nodes, state}
   end
 
-  def handle_call(:refresh_expected_nodes, _from, state) do
+  def handle_cast(:refresh_expected_nodes, state) do
     Logger.info("AckTracker: Manual refresh of expected nodes requested")
 
-    expected_nodes = fetch_expected_nodes_via_cli()
-    :ets.insert(@table_name, {:expected_nodes, expected_nodes})
+    spawn(fn ->
+      expected_nodes = fetch_expected_nodes_via_cli()
+      GenServer.cast(__MODULE__, {:update_expected_nodes, expected_nodes})
+    end)
 
-    Logger.info("AckTracker: Refreshed expected nodes: #{inspect(expected_nodes)}")
+    {:noreply, state}
+  end
+
+  def handle_cast({:update_expected_nodes, fresh_nodes}, state) do
+    Logger.info("AckTracker: Updating expected nodes from CLI: #{inspect(fresh_nodes)}")
+
+    :ets.insert(@table_name, {:expected_nodes, fresh_nodes})
     broadcast_update()
 
     new_state = %{state | last_cli_fetch: DateTime.utc_now()}
-    {:reply, expected_nodes, new_state}
+    {:noreply, new_state}
+  end
+
+  def handle_info(:background_cli_refresh, state) do
+    # Only refresh if we haven't done it recently
+    should_refresh = case state.last_cli_fetch do
+      nil -> true
+      last_fetch ->
+        DateTime.diff(DateTime.utc_now(), last_fetch, :minute) >= 2
+    end
+
+    if should_refresh do
+      Logger.debug("AckTracker: Background CLI refresh triggered")
+      spawn(fn ->
+        fresh_nodes = fetch_expected_nodes_via_cli()
+        GenServer.cast(__MODULE__, {:update_expected_nodes, fresh_nodes})
+      end)
+    end
+
+    schedule_cli_refresh()
+    {:noreply, state}
   end
 
   def terminate(_reason, _state) do
@@ -151,6 +189,11 @@ defmodule CorroPort.AckTracker do
   end
 
   # Private Functions
+
+  defp schedule_cli_refresh do
+    # Refresh every 5 minutes in background
+    Process.send_after(self(), :background_cli_refresh, 5 * 60 * 1000)
+  end
 
   defp clear_acknowledgments do
     :ets.match_delete(@table_name, {{:ack, :_}, :_})
@@ -208,12 +251,14 @@ defmodule CorroPort.AckTracker do
 
           {:error, parse_error} ->
             Logger.warning("AckTracker: Failed to parse CLI output: #{inspect(parse_error)}")
-            fallback_node_discovery()
+            # Return cached fallback instead of calling fallback again
+            get_cached_expected_nodes()
         end
 
       {:error, cli_error} ->
         Logger.warning("AckTracker: CLI command failed: #{inspect(cli_error)}")
-        fallback_node_discovery()
+        # Return cached fallback instead of calling fallback again
+        get_cached_expected_nodes()
     end
   end
 
@@ -269,7 +314,7 @@ defmodule CorroPort.AckTracker do
   end
 
   defp fallback_node_discovery do
-    Logger.info("AckTracker: Using fallback node discovery")
+    Logger.debug("AckTracker: Using fallback node discovery")
 
     # Get our local node configuration
     local_node_config = Application.get_env(:corro_port, :node_config, %{node_id: 1})
@@ -295,7 +340,7 @@ defmodule CorroPort.AckTracker do
     all_node_ids = 1..estimated_cluster_size |> Enum.map(fn id -> "node#{id}" end)
     expected_nodes = Enum.reject(all_node_ids, fn id -> id == local_node_string end)
 
-    Logger.info("AckTracker: Fallback generated expected nodes: #{inspect(expected_nodes)}")
+    Logger.debug("AckTracker: Fallback generated expected nodes: #{inspect(expected_nodes)}")
     expected_nodes
   end
 
