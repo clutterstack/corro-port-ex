@@ -91,17 +91,30 @@ ENV ERL_AFLAGS "-proto_dist inet6_tcp"
 # Only copy the final Phoenix app release from the build stage
 COPY --from=builder --chown=corrosion:corrosion /app/_build/${MIX_ENV}/rel/corro_port ./
 
+COPY --from=builder /usr/local/bin/nperf /usr/local/bin/nperf
+
+
+COPY --chmod=0755 overmind-v2.5.1-linux-amd64 /app/overmind
+ADD Procfile /app/
+
+
+COPY --chmod=0755 /entrypoint.sh /entrypoint
+
 #=======Corrosion===========
 
 # Get compiled binary
 COPY --chown=corrosion:corrosion --chmod=0755 corrosion/corrosion /app/corrosion
 
 # need a config.toml and schemas file prepped in root of project
-# (this version generates corrosion config)
-#COPY --chown=corrosion:corrosion --chmod=0755 corrosion/corrosion.toml /app/corrosion.toml
+COPY --chown=corrosion:corrosion --chmod=0755 corrosion/corrosion.toml /app/corrosion.toml
 COPY --chown=corrosion:corrosion --chmod=0755 corrosion/schemas /app/schemas
 
-CMD ["/app/bin/server"]
+
+ENV OVERMIND_NO_PORT="1"
+ENV OVERMIND_ANY_CAN_DIE="1"
+ENTRYPOINT ["/entrypoint"]
+CMD ["/app/overmind", "start"]
+#CMD ["/app/bin/server"]
 #CMD ["sleep", "infinity"]
 #CMD ["/app/corrosion", "agent"]
 
