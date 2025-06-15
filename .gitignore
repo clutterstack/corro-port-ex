@@ -49,6 +49,7 @@ corrosion/*
 # Actually don't upload any overmind ha
 overmind-*
 
-rel/
+/rel/**
+!/rel/env.sh.eex
 .DS_Store
 

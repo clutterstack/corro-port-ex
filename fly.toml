@@ -7,6 +7,11 @@ app = "where-corro"
 primary_region = "ewr"
 kill_signal = "SIGTERM"
 
+[[vm]]
+  memory = "1gb"
+  cpus = 4
+  cpu_kind = "shared"
+
 [mounts]
 source = "corro_data"
 destination = "/var/lib/corrosion"
