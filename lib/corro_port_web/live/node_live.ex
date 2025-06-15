@@ -445,56 +445,6 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
 
-        <!-- Corrosion Status -->
-        <div class="card bg-base-100">
-          <div class="card-body">
-            <h3 class="card-title text-lg">Corrosion Status</h3>
-            <div :if={@corrosion_status} class="space-y-3">
-              <!-- Connection Status -->
-              <div class="flex items-center justify-between">
-                <span><strong>API Connection:</strong></span>
-                <span class={
-                  case @corrosion_status.connection_status do
-                    {:ok, _} -> "badge badge-success"
-                    {:error, _} -> "badge badge-error"
-                  end
-                }>
-                  {case @corrosion_status.connection_status do
-                    {:ok, msg} -> msg
-                    {:error, reason} -> "Error: #{inspect(reason)}"
-                  end}
-                </span>
-              </div>
-
-              <!-- Local Node Active -->
-              <div :if={@corrosion_status.local_info} class="space-y-2">
-                <div class="flex items-center justify-between">
-                  <span><strong>Node Active:</strong></span>
-                  <span class={
-                    if Map.get(@corrosion_status.local_info, "local_active"),
-                      do: "badge badge-success",
-                      else: "badge badge-warning"
-                  }>
-                    {if Map.get(@corrosion_status.local_info, "local_active"), do: "Yes", else: "No"}
-                  </span>
-                </div>
-              </div>
-
-              <!-- Cluster Info -->
-              <div
-                :if={
-                  @corrosion_status.cluster_info && !Map.has_key?(@corrosion_status.cluster_info, :error)
-                }
-                class="space-y-2"
-              >
-                <div class="flex items-center justify-between">
-                  <span><strong>Cluster Members:</strong></span>
-                  <span>{@corrosion_status.cluster_info.member_count}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- Process Information -->
