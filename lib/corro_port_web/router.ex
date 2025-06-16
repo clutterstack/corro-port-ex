@@ -10,10 +10,6 @@ defmodule CorroPortWeb.Router do
     plug :put_secure_browser_headers
   end
 
-  pipeline :api do
-    plug :accepts, ["json"]
-  end
-
   scope "/", CorroPortWeb do
     pipe_through :browser
 
@@ -21,13 +17,6 @@ defmodule CorroPortWeb.Router do
     live "/cluster", ClusterLive
     live "/node", NodeLive
     live "/messages", MessagesLive
-  end
-
-  scope "/api", CorroPortWeb do
-    pipe_through :api
-
-    post "/acknowledge", AcknowledgmentController, :acknowledge
-    get "/acknowledge/health", AcknowledgmentController, :health
   end
 
   # Enable LiveDashboard in development

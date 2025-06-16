@@ -187,8 +187,7 @@ defmodule CorroPort.CorrosionCLI do
       # Use System.cmd with basic options (no timeout for now)
       case System.cmd(abs_binary_path, args, stderr_to_stdout: true) do
         {output, 0} ->
-          output |> dbg
-          Logger.info("CorrosionCLI: Raw output: #{inspect(output)}")
+          # Logger.debug("CorrosionCLI: Raw output: #{inspect(output)}")
           {:ok, output}
 
         {error_output, exit_code} ->

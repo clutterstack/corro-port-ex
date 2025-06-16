@@ -1,8 +1,6 @@
 defmodule CorroPortWeb.MembersTable do
   use Phoenix.Component
 
-  @max_idle 60
-
   # TODO: Only include members that have been seen in the last @max_idle minutes
   # TODO: Exclude local node, since __corro_members always shows that as down
   #  (can we tell from corrosion which actor_id is currently the local node?)

@@ -89,8 +89,6 @@ defmodule CorroPortWeb.ClusterLive do
           %{parse_error: reason, raw_output: raw_output}
       end
 
-    parsed_result |> dbg()
-
     flash_message =
       case parsed_result do
         %{} -> "✅ CLI command successful - single node setup (no cluster members)"
@@ -190,21 +188,21 @@ defmodule CorroPortWeb.ClusterLive do
     })
   end
 
-  defp format_cli_error({:exit_code, code, message}) do
-    "Exit code #{code}: #{String.slice(message, 0, 100)}"
-  end
+  # defp format_cli_error({:exit_code, code, message}) do
+  #   "Exit code #{code}: #{String.slice(message, 0, 100)}"
+  # end
 
-  defp format_cli_error(:timeout) do
-    "Command timed out"
-  end
+  # defp format_cli_error(:timeout) do
+  #   "Command timed out"
+  # end
 
-  defp format_cli_error(reason) when is_binary(reason) do
-    reason
-  end
+  # defp format_cli_error(reason) when is_binary(reason) do
+  #   reason
+  # end
 
-  defp format_cli_error(reason) do
-    inspect(reason)
-  end
+  # defp format_cli_error(reason) do
+  #   inspect(reason)
+  # end
 
   def render(assigns) do
     ~H"""
@@ -224,7 +222,7 @@ defmodule CorroPortWeb.ClusterLive do
         refresh_interval={@refresh_interval}
         error={@error}
       />
-      
+
     <!-- CLI Members Section -->
       <div class="card bg-base-100">
         <div class="card-body">
@@ -255,7 +253,7 @@ defmodule CorroPortWeb.ClusterLive do
               <span class="text-sm text-base-content/70">Running CLI command...</span>
             </div>
           </div>
-          
+
     <!-- CLI Results -->
           <div :if={@cli_members_data && is_list(@cli_members_data)} class="space-y-4">
             <div :if={@cli_members_data == []} class="alert alert-info">
@@ -308,7 +306,7 @@ defmodule CorroPortWeb.ClusterLive do
               </table>
             </div>
           </div>
-          
+
     <!-- Parse Error Display -->
           <div
             :if={
@@ -336,7 +334,7 @@ defmodule CorroPortWeb.ClusterLive do
               </div>
             </details>
           </div>
-          
+
     <!-- Error Display -->
           <div :if={@cli_members_error} class="alert alert-error">
             <.icon name="hero-exclamation-circle" class="w-5 h-5" />
@@ -345,7 +343,7 @@ defmodule CorroPortWeb.ClusterLive do
               <div class="text-sm">{@cli_members_error}</div>
             </div>
           </div>
-          
+
     <!-- Help Text -->
           <div
             :if={!@cli_members_data && !@cli_members_error && !@cli_members_loading}
@@ -375,17 +373,17 @@ defmodule CorroPortWeb.ClusterLive do
   end
 
   # Helper function for timestamp formatting
-  defp format_timestamp(nil), do: "Never"
+  # defp format_timestamp(nil), do: "Never"
 
-  defp format_timestamp(ts) when is_integer(ts) do
-    # Corrosion timestamps are often in nanoseconds
-    seconds = div(ts, 1_000_000_000)
+  # defp format_timestamp(ts) when is_integer(ts) do
+  #   # Corrosion timestamps are often in nanoseconds
+  #   seconds = div(ts, 1_000_000_000)
 
-    case DateTime.from_unix(seconds) do
-      {:ok, dt} -> Calendar.strftime(dt, "%m-%d %H:%M:%S")
-      _ -> "Invalid"
-    end
-  end
+  #   case DateTime.from_unix(seconds) do
+  #     {:ok, dt} -> Calendar.strftime(dt, "%m-%d %H:%M:%S")
+  #     _ -> "Invalid"
+  #   end
+  # end
 
-  defp format_timestamp(_), do: "Unknown"
+  # defp format_timestamp(_), do: "Unknown"
 end

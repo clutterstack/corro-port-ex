@@ -173,7 +173,6 @@ defmodule CorroPort.CorrosionClient do
   - `{:error, reason}` if connection failed
   """
   def test_connection(port \\ nil) do
-    api_port = port || get_api_port()
 
     case execute_query("SELECT 1", port) do
       {:ok, message} ->

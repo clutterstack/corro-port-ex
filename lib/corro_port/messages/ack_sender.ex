@@ -57,7 +57,7 @@ defmodule CorroPort.AckSender do
     end
   end
 
-  def handle_info({:initial_row, message_map}, state) do
+  def handle_info({:initial_row, _message_map}, state) do
     # For initial state, we probably don't want to send acks
     new_state = %{state | total_messages_processed: state.total_messages_processed + 1}
     {:noreply, new_state}

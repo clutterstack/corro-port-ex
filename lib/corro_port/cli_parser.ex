@@ -272,12 +272,6 @@ defmodule CorroPort.CorrosionParser do
     Map.put(member, "display_status_class", badge_class)
   end
 
-  defp add_health_indicators(status) when is_map(status) do
-    # Add computed health indicators based on status data
-    # This would depend on what fields are available in cluster status output
-    Map.put(status, "overall_health", compute_health(status))
-  end
-
   defp compute_health(status) do
     # Placeholder health computation
     # You'd customize this based on actual corrosion status output
@@ -321,16 +315,6 @@ defmodule CorroPort.CorrosionParser do
     # Add computed health indicators based on status data
     # This would depend on what fields are available in cluster status output
     Map.put(status, "overall_health", compute_health(status))
-  end
-
-  defp compute_health(status) do
-    # Placeholder health computation
-    # You'd customize this based on actual corrosion status output
-    cond do
-      Map.get(status, "error") -> "unhealthy"
-      Map.get(status, "warning") -> "degraded"
-      true -> "healthy"
-    end
   end
 
   @doc """
