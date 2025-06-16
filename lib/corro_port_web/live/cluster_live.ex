@@ -212,6 +212,10 @@ defmodule CorroPortWeb.ClusterLive do
 
       <ClusterCards.cluster_header_simple />
       <ClusterCards.error_alerts error={@error} />
+
+      <div class="col-start-1 col-span-4 rounded-lg panel">
+          <%= RegionMap.world_map_svg(%{regions: active_regions(@umachines), our_regions: active_regions(@our_mach)}) %>
+        </div>
       <ClusterCards.status_cards_simple
         local_info={@local_info}
         cluster_info={@cluster_info}
