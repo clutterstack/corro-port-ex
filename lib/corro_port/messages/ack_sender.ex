@@ -194,7 +194,7 @@ defmodule CorroPort.AckSender do
          message_timestamp,
          local_node_id
        ) do
-    ack_url = "#{api_url}/api/v1/acknowledge"
+    ack_url = "#{api_url}/api/acknowledge"
 
     payload = %{
       "message_pk" => message_pk,

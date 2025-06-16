@@ -185,7 +185,6 @@ defmodule CorroPortWeb.NodeLive do
     local_info =
       case ClusterAPI.get_info() do
         {:ok, info} -> info
-        {:error, reason} -> %{error: reason}
       end
 
     # Try to get cluster members
@@ -320,7 +319,7 @@ defmodule CorroPortWeb.NodeLive do
     ~H"""
     <div class="space-y-6">
       <!-- Navigation Tabs -->
-      <NavTabs.nav_tabs active={:node_info} />
+      <NavTabs.nav_tabs active={:node} />
 
       <.header>
         Node Information
@@ -336,7 +335,7 @@ defmodule CorroPortWeb.NodeLive do
           </.button>
         </:actions>
       </.header>
-      
+
     <!-- Connectivity Test Results -->
       <div :if={@connectivity_test} class="card bg-base-200">
         <div class="card-body">
@@ -371,22 +370,22 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- Loading State -->
       <div :if={@loading} class="flex items-center justify-center py-8">
         <div class="loading loading-spinner loading-lg"></div>
         <span class="ml-4">Loading node information...</span>
       </div>
-      
+
     <!-- Error State -->
       <div :if={@error} class="alert alert-error">
         <.icon name="hero-exclamation-circle" class="w-5 h-5" />
         <span>{@error}</span>
       </div>
-      
+
     <!-- Node Information Cards -->
       <div :if={!@loading} class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
+
     <!-- The Elixir Application -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -417,7 +416,7 @@ defmodule CorroPortWeb.NodeLive do
             </div>
           </div>
         </div>
-        
+
     <!-- Config from Application Environment -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -430,7 +429,7 @@ defmodule CorroPortWeb.NodeLive do
             </div>
           </div>
         </div>
-        
+
     <!-- Corrosion Config File -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -446,7 +445,7 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- Process Information -->
       <div class="card bg-base-100">
         <div class="card-body">
@@ -459,7 +458,7 @@ defmodule CorroPortWeb.NodeLive do
               <div><strong>Memory Usage by :erlang.memory():</strong></div>
               <div>{format_memory(@process_info.memory_usage[:total])}</div>
             </div>
-            
+
     <!-- Supervisor Children -->
             <div :if={@process_info.supervisors != []} class="mt-4">
               <h4 class="font-semibold text-sm mb-2">Supervisor Children:</h4>
@@ -482,7 +481,7 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- Database Information -->
       <div :if={@corrosion_status && @corrosion_status.database_info} class="card bg-base-100">
         <div class="card-body">
@@ -512,7 +511,7 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- File Information -->
       <div :if={@file_info && !@loading} class="card bg-base-100">
         <div class="card-body">
@@ -553,7 +552,7 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- Last Updated -->
       <div :if={@last_updated} class="text-xs text-base-content/70 text-center">
         Last updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}

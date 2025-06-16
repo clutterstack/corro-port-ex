@@ -71,7 +71,7 @@ defmodule CorroPortWeb.ClusterLive do
   # handle
   def handle_info({task_ref, {:ok, raw_output}}, socket) do
     Logger.debug("handling \{:ok, #{inspect(raw_output)}\} from task #{inspect(task_ref)}")
-    CorroPort.CorrosionParser.parse_cluster_members(raw_output) |> dbg
+    # CorroPort.CorrosionParser.parse_cluster_members(raw_output) |> dbg
 
     # Use the dedicated parser
     parsed_result =
@@ -234,7 +234,6 @@ defmodule CorroPortWeb.ClusterLive do
             <.button
               phx-click="fetch_cli_members"
               class="btn btn-primary btn-sm"
-              disabled={@cli_members_loading}
             >
               <.icon name="hero-command-line" class="w-4 h-4 mr-2" />
               {if @cli_members_loading, do: "Fetching...", else: "Fetch CLI Members"}

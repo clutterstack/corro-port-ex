@@ -5,7 +5,7 @@ defmodule CorroPortWeb.ClusterLive.DataFetcher do
   def fetch_all_data() do
     # Fetch all the data
     cluster_result = ClusterAPI.get_cluster_info()
-    local_result = ClusterAPI.get_info()
+    {:ok, local_info} = ClusterAPI.get_info()  # This always succeeds
     messages_result = MessagesAPI.get_latest_node_messages()
 
     # Determine error state
@@ -26,15 +26,7 @@ defmodule CorroPortWeb.ClusterLive.DataFetcher do
             Logger.warning("Failed to fetch cluster info: #{error}")
             nil
         end,
-      local_info:
-        case local_result do
-          {:ok, info} ->
-            info
-
-          {:error, error} ->
-            Logger.warning("Failed to fetch local info: #{error}")
-            nil
-        end,
+      local_info: local_info,  # We know this is always {:ok, info}, so use the data directly
       node_messages:
         case messages_result do
           {:ok, messages} ->
