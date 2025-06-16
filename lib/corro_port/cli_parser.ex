@@ -59,11 +59,12 @@ defmodule CorroPort.CorrosionParser do
   - `{:ok, objects}` - List of parsed JSON objects
   - `{:error, reason}` - Parse error details
   """
-  def parse_ndjson(ndjson_output, enhancer_fun \\ &Function.identity/1) when is_binary(ndjson_output) do
+  def parse_ndjson(ndjson_output, enhancer_fun \\ &Function.identity/1)
+      when is_binary(ndjson_output) do
     try do
       # Handle Corrosion's specific output format: concatenated pretty-printed JSON objects
       case parse_concatenated_json(ndjson_output, enhancer_fun) do
-        {:ok, objects} when objects != [] > 0 ->
+        {:ok, objects} when objects != [] ->
           {:ok, objects}
 
         {:ok, []} ->
@@ -74,7 +75,6 @@ defmodule CorroPort.CorrosionParser do
           # Failed to parse as concatenated JSON, try other formats
           try_alternative_formats(ndjson_output, enhancer_fun)
       end
-
     rescue
       error ->
         Logger.error("CorrosionParser: Error parsing JSON/NDJSON: #{inspect(error)}")
@@ -94,8 +94,10 @@ defmodule CorroPort.CorrosionParser do
         case Jason.decode(String.trim(output)) do
           {:ok, object} when is_map(object) ->
             {:ok, [enhancer_fun.(object)]}
+
           {:ok, array} when is_list(array) ->
             {:ok, Enum.map(array, enhancer_fun)}
+
           {:error, reason} ->
             {:error, reason}
         end
@@ -107,11 +109,15 @@ defmodule CorroPort.CorrosionParser do
           |> Enum.with_index()
           |> Enum.map(fn {part, index} ->
             # Add back the braces that were removed by splitting
-            complete_json = cond do
-              index == 0 -> part <> "}"  # First part: add closing brace
-              index == length(parts) - 1 -> "{" <> part  # Last part: add opening brace
-              true -> "{" <> part <> "}"  # Middle parts: add both braces
-            end
+            complete_json =
+              cond do
+                # First part: add closing brace
+                index == 0 -> part <> "}"
+                # Last part: add opening brace
+                index == length(parts) - 1 -> "{" <> part
+                # Middle parts: add both braces
+                true -> "{" <> part <> "}"
+              end
 
             case Jason.decode(String.trim(complete_json)) do
               {:ok, object} when is_map(object) -> {:ok, enhancer_fun.(object)}
@@ -122,8 +128,10 @@ defmodule CorroPort.CorrosionParser do
         # Separate successful parses from errors
         {successes, errors} = Enum.split_with(objects, &match?({:ok, _}, &1))
 
-        if errors != [] > 0 do
-          Logger.warning("CorrosionParser: #{length(errors)} objects failed to parse: #{inspect(errors)}")
+        if errors != [] do
+          Logger.warning(
+            "CorrosionParser: #{length(errors)} objects failed to parse: #{inspect(errors)}"
+          )
         end
 
         parsed_objects = Enum.map(successes, fn {:ok, obj} -> obj end)
@@ -149,10 +157,15 @@ defmodule CorroPort.CorrosionParser do
 
     # Log any parse errors but don't fail the whole operation
     if errors != [] do
-      Logger.warning("CorrosionParser: #{length(errors)} lines failed to parse: #{inspect(errors)}")
+      Logger.warning(
+        "CorrosionParser: #{length(errors)} lines failed to parse: #{inspect(errors)}"
+      )
     end
 
-    Logger.debug("CorrosionParser: Successfully parsed #{length(objects)} objects via NDJSON fallback")
+    Logger.debug(
+      "CorrosionParser: Successfully parsed #{length(objects)} objects via NDJSON fallback"
+    )
+
     {:ok, objects}
   end
 
@@ -191,39 +204,47 @@ defmodule CorroPort.CorrosionParser do
     rtts = Map.get(member, "rtts", [])
 
     # Compute only the fields we actually use in the template
-    short_id = case Map.get(member, "id") do
-      id when is_binary(id) and byte_size(id) > 8 -> String.slice(id, 0, 8) <> "..."
-      id -> id || "unknown"
-    end
+    short_id =
+      case Map.get(member, "id") do
+        id when is_binary(id) and byte_size(id) > 8 -> String.slice(id, 0, 8) <> "..."
+        id -> id || "unknown"
+      end
 
     parsed_addr = Map.get(state, "addr", "unknown")
 
     # Status computation
-    computed_status = cond do
-      Map.get(state, "last_sync_ts") != nil -> "active"
-      Map.get(state, "ts") != nil -> "connected"
-      parsed_addr != "unknown" -> "reachable"
-      true -> "unknown"
-    end
+    computed_status =
+      cond do
+        Map.get(state, "last_sync_ts") != nil -> "active"
+        Map.get(state, "ts") != nil -> "connected"
+        parsed_addr != "unknown" -> "reachable"
+        true -> "unknown"
+      end
 
     # RTT stats (only avg and count since that's what we display)
     numeric_rtts = Enum.filter(rtts, &is_number/1)
-    rtt_avg = if numeric_rtts != [] do
-      Float.round(Enum.sum(numeric_rtts) / length(numeric_rtts), 1)
-    else
-      0.0
-    end
+
+    rtt_avg =
+      if numeric_rtts != [] do
+        Float.round(Enum.sum(numeric_rtts) / length(numeric_rtts), 1)
+      else
+        0.0
+      end
 
     # Formatted timestamp
-    formatted_last_sync = case Map.get(state, "last_sync_ts") do
-      ts when is_integer(ts) ->
-        seconds = div(ts, 1_000_000_000)
-        case DateTime.from_unix(seconds) do
-          {:ok, dt} -> Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S UTC")
-          _ -> "Invalid"
-        end
-      _ -> "Never"
-    end
+    formatted_last_sync =
+      case Map.get(state, "last_sync_ts") do
+        ts when is_integer(ts) ->
+          seconds = div(ts, 1_000_000_000)
+
+          case DateTime.from_unix(seconds) do
+            {:ok, dt} -> Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S UTC")
+            _ -> "Invalid"
+          end
+
+        _ ->
+          "Never"
+      end
 
     # Add all computed display fields
     member
@@ -237,16 +258,16 @@ defmodule CorroPort.CorrosionParser do
     |> Map.put("display_last_sync", formatted_last_sync)
   end
 
-
   defp add_status_badge_class(member) do
     status = Map.get(member, "display_status")
 
-    badge_class = case status do
-      "active" -> "badge badge-sm badge-success"
-      "connected" -> "badge badge-sm badge-info"
-      "reachable" -> "badge badge-sm badge-warning"
-      _ -> "badge badge-sm badge-neutral"
-    end
+    badge_class =
+      case status do
+        "active" -> "badge badge-sm badge-success"
+        "connected" -> "badge badge-sm badge-info"
+        "reachable" -> "badge badge-sm badge-warning"
+        _ -> "badge badge-sm badge-neutral"
+      end
 
     Map.put(member, "display_status_class", badge_class)
   end
@@ -277,6 +298,7 @@ defmodule CorroPort.CorrosionParser do
         ts when is_integer(ts) ->
           formatted_field = "formatted_#{field}"
           Map.put(acc, formatted_field, format_corrosion_timestamp(ts))
+
         _ ->
           acc
       end
@@ -286,6 +308,7 @@ defmodule CorroPort.CorrosionParser do
   defp format_corrosion_timestamp(ts) when is_integer(ts) do
     # Corrosion timestamps are often in nanoseconds
     seconds = div(ts, 1_000_000_000)
+
     case DateTime.from_unix(seconds) do
       {:ok, dt} -> Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S UTC")
       _ -> "invalid timestamp"
@@ -332,18 +355,24 @@ defmodule CorroPort.CorrosionParser do
   Helper function to check if a member appears to be actively participating in the cluster.
   """
   def active_member?(member) when is_map(member) do
-    has_recent_sync = case get_in(member, ["state", "last_sync_ts"]) do
-      ts when is_integer(ts) ->
-        # Check if sync was within last 5 minutes
-        five_minutes_ago = (DateTime.utc_now() |> DateTime.to_unix(:nanosecond)) - (5 * 60 * 1_000_000_000)
-        ts > five_minutes_ago
-      _ -> false
-    end
+    has_recent_sync =
+      case get_in(member, ["state", "last_sync_ts"]) do
+        ts when is_integer(ts) ->
+          # Check if sync was within last 5 minutes
+          five_minutes_ago =
+            (DateTime.utc_now() |> DateTime.to_unix(:nanosecond)) - 5 * 60 * 1_000_000_000
 
-    has_address = case get_in(member, ["state", "addr"]) do
-      addr when is_binary(addr) -> String.length(addr) > 0
-      _ -> false
-    end
+          ts > five_minutes_ago
+
+        _ ->
+          false
+      end
+
+    has_address =
+      case get_in(member, ["state", "addr"]) do
+        addr when is_binary(addr) -> String.length(addr) > 0
+        _ -> false
+      end
 
     has_recent_sync and has_address
   end

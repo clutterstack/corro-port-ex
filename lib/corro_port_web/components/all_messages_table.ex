@@ -8,13 +8,11 @@ defmodule CorroPortWeb.AllMessagesTable do
       <div class="card-body">
         <div class="flex items-center justify-between mb-4">
           <h3 class="card-title">
-            <.icon name="hero-chat-bubble-left-right" class="w-5 h-5 mr-2" />
-            All Messages
+            <.icon name="hero-chat-bubble-left-right" class="w-5 h-5 mr-2" /> All Messages
           </h3>
           <div class="flex items-center gap-2">
             <.button phx-click="refresh_messages" class="btn btn-xs btn-outline">
-              <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" />
-              Refresh
+              <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Refresh
             </.button>
             <span class="text-xs text-base-content/70">
               {length(@all_messages)} messages
@@ -38,7 +36,10 @@ defmodule CorroPortWeb.AllMessagesTable do
                 <td>
                   <div class="flex items-center gap-2">
                     <span class="font-mono text-sm">{Map.get(message, "node_id", "Unknown")}</span>
-                    <span :if={Map.get(message, "node_id") == @local_node_id} class="badge badge-primary badge-xs">
+                    <span
+                      :if={Map.get(message, "node_id") == @local_node_id}
+                      class="badge badge-primary badge-xs"
+                    >
                       Local
                     </span>
                   </div>
@@ -63,10 +64,13 @@ defmodule CorroPortWeb.AllMessagesTable do
             </tbody>
           </table>
         </div>
-
-        <!-- Empty state -->
+        
+    <!-- Empty state -->
         <div :if={@all_messages == []} class="text-center py-8">
-          <.icon name="hero-chat-bubble-left-right" class="w-12 h-12 mx-auto text-base-content/30 mb-4" />
+          <.icon
+            name="hero-chat-bubble-left-right"
+            class="w-12 h-12 mx-auto text-base-content/30 mb-4"
+          />
           <div class="text-base-content/70">
             No messages found in the database
           </div>
@@ -74,14 +78,14 @@ defmodule CorroPortWeb.AllMessagesTable do
             Click "Send Message" to create the first message
           </div>
         </div>
-
-        <!-- Loading state -->
+        
+    <!-- Loading state -->
         <div :if={@loading_messages} class="text-center py-8">
           <div class="loading loading-spinner loading-md mb-2"></div>
           <div class="text-sm text-base-content/70">Loading messages...</div>
         </div>
-
-        <!-- Error state -->
+        
+    <!-- Error state -->
         <div :if={@messages_error} class="alert alert-warning">
           <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
           <div>
@@ -99,7 +103,8 @@ defmodule CorroPortWeb.AllMessagesTable do
     base_class = ""
 
     if Map.get(message, "node_id") == local_node_id do
-      "#{base_class} bg-primary/5"  # Highlight local node messages
+      # Highlight local node messages
+      "#{base_class} bg-primary/5"
     else
       base_class
     end
@@ -112,6 +117,7 @@ defmodule CorroPortWeb.AllMessagesTable do
       {:ok, dt, _} ->
         # Show both date and time for full table
         Calendar.strftime(dt, "%m-%d %H:%M:%S")
+
       _ ->
         timestamp
     end

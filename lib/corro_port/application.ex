@@ -1,6 +1,4 @@
 defmodule CorroPort.Application do
-  # See https://hexdocs.pm/elixir/Application.html
-  # for more information on OTP Applications
   @moduledoc false
 
   use Application
@@ -16,23 +14,24 @@ defmodule CorroPort.Application do
        pools: %{
          default: [conn_opts: [transport_opts: [inet6: true]]]
        }},
-      # Add the CorroSubscriber to subscribe to Corrosion changes
+      # Corrosion integration
       CorroPort.CorroSubscriber,
       CorroPort.AckTracker,
       CorroPort.AckSender,
-      # Start to serve requests, typically the last entry
-      CorroPortWeb.Endpoint
+      # Main web endpoint
+      CorroPortWeb.Endpoint,
+      # API endpoint for node-to-node communication
+      CorroPortWeb.APIEndpoint
     ]
 
     opts = [strategy: :one_for_one, name: CorroPort.Supervisor]
     Supervisor.start_link(children, opts)
   end
 
-  # Tell Phoenix to update the endpoint configuration
-  # whenever the application is updated.
   @impl true
   def config_change(changed, _new, removed) do
     CorroPortWeb.Endpoint.config_change(changed, removed)
+    CorroPortWeb.APIEndpoint.config_change(changed, removed)
     :ok
   end
 end

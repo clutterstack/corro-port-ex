@@ -5,6 +5,8 @@ node_id = String.to_integer(System.get_env("NODE_ID") || "1")
 
 # Calculate ports based on node ID
 phoenix_port = 4000 + node_id
+# New API port
+api_port = 5000 + node_id
 corrosion_api_port = 8080 + node_id
 corrosion_gossip_port = 8786 + node_id
 
@@ -27,13 +29,21 @@ config :corro_port, CorroPortWeb.Endpoint,
     tailwind: {Tailwind, :install_and_run, [:corro_port, ~w(--watch)]}
   ]
 
+config :corro_port, CorroPortWeb.APIEndpoint,
+  http: [ip: {127, 0, 0, 1}, port: api_port],
+  secret_key_base: "IwAz1v+95qyPXhnNQPyoIMfl6xqAo6an4o3/JMPOPhCV6BLxISJ0bNup6nIsooE7",
+  server: true
+
 # Store the node configuration for use by the application
 # Note: Config file path and bootstrap list are now managed by startup scripts
 config :corro_port, :node_config,
   node_id: node_id,
+  phoenix_port: phoenix_port,
+  # New field
+  api_port: api_port,
   corrosion_api_port: corrosion_api_port,
   corrosion_gossip_port: corrosion_gossip_port,
-  corro_config_path: config_path,
+  corro_config_path: "corrosion/config-node#{node_id}.toml",
   corrosion_binary: "corrosion/corrosion-mac",
   environment: :dev
 

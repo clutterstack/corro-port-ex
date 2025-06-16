@@ -66,19 +66,23 @@ defmodule CorroPort.AckTracker do
   def init(_opts) do
     Logger.info("AckTracker starting...")
 
-    table = :ets.new(@table_name, [
-      :set,
-      :named_table,
-      :public,
-      read_concurrency: true
-    ])
+    table =
+      :ets.new(@table_name, [
+        :set,
+        :named_table,
+        :public,
+        read_concurrency: true
+      ])
 
     # Use fast fallback for initial expected nodes
     initial_expected_nodes = fallback_node_discovery()
     :ets.insert(@table_name, {:expected_nodes, initial_expected_nodes})
 
     Logger.info("AckTracker ETS table created: #{@table_name}")
-    Logger.info("AckTracker initial expected nodes (fallback): #{inspect(initial_expected_nodes)}")
+
+    Logger.info(
+      "AckTracker initial expected nodes (fallback): #{inspect(initial_expected_nodes)}"
+    )
 
     # Start background CLI refresh
     schedule_cli_refresh()
@@ -130,7 +134,10 @@ defmodule CorroPort.AckTracker do
         {:reply, :ok, state}
 
       [] ->
-        Logger.warning("AckTracker: Received acknowledgment from #{ack_node_id} but no latest message is being tracked")
+        Logger.warning(
+          "AckTracker: Received acknowledgment from #{ack_node_id} but no latest message is being tracked"
+        )
+
         {:reply, {:error, :no_message_tracked}, state}
     end
   end
@@ -168,14 +175,18 @@ defmodule CorroPort.AckTracker do
 
   def handle_info(:background_cli_refresh, state) do
     # Only refresh if we haven't done it recently
-    should_refresh = case state.last_cli_fetch do
-      nil -> true
-      last_fetch ->
-        DateTime.diff(DateTime.utc_now(), last_fetch, :minute) >= 2
-    end
+    should_refresh =
+      case state.last_cli_fetch do
+        nil ->
+          true
+
+        last_fetch ->
+          DateTime.diff(DateTime.utc_now(), last_fetch, :minute) >= 2
+      end
 
     if should_refresh do
       Logger.debug("AckTracker: Background CLI refresh triggered")
+
       spawn(fn ->
         fresh_nodes = fetch_expected_nodes_via_cli()
         GenServer.cast(__MODULE__, {:update_expected_nodes, fresh_nodes})
@@ -204,26 +215,30 @@ defmodule CorroPort.AckTracker do
 
   defp build_status do
     # Get latest message
-    latest_message = case :ets.lookup(@table_name, :latest_message) do
-      [{:latest_message, message_data}] -> message_data
-      [] -> nil
-    end
+    latest_message =
+      case :ets.lookup(@table_name, :latest_message) do
+        [{:latest_message, message_data}] -> message_data
+        [] -> nil
+      end
 
     # Get all acknowledgments
     ack_pattern = {{:ack, :"$1"}, :"$2"}
     ack_matches = :ets.match(@table_name, ack_pattern)
 
-    acknowledgments = Enum.map(ack_matches, fn [node_id, ack_data] ->
-      %{
-        node_id: node_id,
-        timestamp: ack_data.timestamp
-      }
-    end)
-    |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
+    acknowledgments =
+      Enum.map(ack_matches, fn [node_id, ack_data] ->
+        %{
+          node_id: node_id,
+          timestamp: ack_data.timestamp
+        }
+      end)
+      |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
 
     expected_nodes = get_cached_expected_nodes()
 
-    Logger.debug("AckTracker: Found #{length(acknowledgments)} acknowledgments from #{inspect(Enum.map(acknowledgments, & &1.node_id))}")
+    Logger.debug(
+      "AckTracker: Found #{length(acknowledgments)} acknowledgments from #{inspect(Enum.map(acknowledgments, & &1.node_id))}"
+    )
 
     %{
       latest_message: latest_message,
@@ -249,7 +264,11 @@ defmodule CorroPort.AckTracker do
         case CorroPort.CorrosionParser.parse_cluster_members(raw_output) do
           {:ok, members} ->
             active_nodes = extract_active_node_ids(members)
-            Logger.debug("AckTracker: CLI returned #{length(members)} members, #{length(active_nodes)} active")
+
+            Logger.debug(
+              "AckTracker: CLI returned #{length(members)} members, #{length(active_nodes)} active"
+            )
+
             active_nodes
 
           {:error, parse_error} ->
@@ -268,14 +287,18 @@ defmodule CorroPort.AckTracker do
   defp extract_active_node_ids(members) when is_list(members) do
     local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
-    active_node_ids = members
-    |> Enum.filter(&is_active_member?/1)
-    |> Enum.map(&member_to_node_id/1)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.reject(fn node_id -> node_id == local_node_id end)
-    |> Enum.sort()
+    active_node_ids =
+      members
+      |> Enum.filter(&is_active_member?/1)
+      |> Enum.map(&member_to_node_id/1)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.reject(fn node_id -> node_id == local_node_id end)
+      |> Enum.sort()
 
-    Logger.debug("AckTracker: Extracted active node IDs: #{inspect(active_node_ids)} (excluding local: #{local_node_id})")
+    Logger.debug(
+      "AckTracker: Extracted active node IDs: #{inspect(active_node_ids)} (excluding local: #{local_node_id})"
+    )
+
     active_node_ids
   end
 
@@ -308,12 +331,17 @@ defmodule CorroPort.AckTracker do
                 # Take last 2 parts of IPv6 address
                 suffix = parts |> Enum.take(-2) |> Enum.join(":")
                 "machine-#{suffix}"
+
               _ ->
                 "machine-#{ip}"
             end
-          _ -> nil
+
+          _ ->
+            nil
         end
-      _ -> nil
+
+      _ ->
+        nil
     end
   end
 
@@ -327,9 +355,13 @@ defmodule CorroPort.AckTracker do
               {port, _} -> gossip_port_to_node_id(port)
               _ -> nil
             end
-          _ -> nil
+
+          _ ->
+            nil
         end
-      _ -> nil
+
+      _ ->
+        nil
     end
   end
 
@@ -374,14 +406,16 @@ defmodule CorroPort.AckTracker do
     bootstrap_list = local_node_config[:corrosion_bootstrap_list] || "[]"
 
     # Parse bootstrap list to estimate cluster size
-    estimated_cluster_size = case extract_ports_from_bootstrap(bootstrap_list) do
-      ports when ports != [] ->
-        # Add 1 for the local node
-        length(ports) + 1
-      _ ->
-        # Default fallback: assume 3-node cluster
-        3
-    end
+    estimated_cluster_size =
+      case extract_ports_from_bootstrap(bootstrap_list) do
+        ports when ports != [] ->
+          # Add 1 for the local node
+          length(ports) + 1
+
+        _ ->
+          # Default fallback: assume 3-node cluster
+          3
+      end
 
     Logger.debug("AckTracker: Estimated cluster size: #{estimated_cluster_size}")
 
@@ -397,7 +431,8 @@ defmodule CorroPort.AckTracker do
     # Extract port numbers from bootstrap list like ["127.0.0.1:8788", "127.0.0.1:8789"]
     try do
       bootstrap_str
-      |> String.replace(~r/[\[\]"]/, "")  # Remove brackets and quotes
+      # Remove brackets and quotes
+      |> String.replace(~r/[\[\]"]/, "")
       |> String.split(",")
       |> Enum.map(&String.trim/1)
       |> Enum.filter(fn addr -> String.contains?(addr, ":") end)
@@ -408,7 +443,9 @@ defmodule CorroPort.AckTracker do
               {port, _} -> port
               _ -> nil
             end
-          _ -> nil
+
+          _ ->
+            nil
         end
       end)
       |> Enum.reject(&is_nil/1)

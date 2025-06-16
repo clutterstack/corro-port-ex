@@ -32,7 +32,10 @@ defmodule CorroPortWeb.MessagesLive do
 
   # Handle acknowledgment updates
   def handle_info({:ack_update, ack_status}, socket) do
-    Logger.debug("MessagesLive: 🤝 Received acknowledgment update: #{ack_status.ack_count}/#{ack_status.expected_count}")
+    Logger.debug(
+      "MessagesLive: 🤝 Received acknowledgment update: #{ack_status.ack_count}/#{ack_status.expected_count}"
+    )
+
     socket = assign(socket, :ack_status, ack_status)
     {:noreply, socket}
   end
@@ -62,6 +65,7 @@ defmodule CorroPortWeb.MessagesLive do
           "INSERT" -> update_all_messages_with_new_message(socket, message_map)
           _ -> socket
         end
+
       {:noreply, socket}
     else
       {:noreply, socket}
@@ -124,6 +128,7 @@ defmodule CorroPortWeb.MessagesLive do
     case MessagesAPI.get_node_messages() do
       {:ok, messages} ->
         Logger.debug("MessagesLive: Fetched #{length(messages)} total messages")
+
         assign(socket, %{
           all_messages: messages,
           loading_messages: false,
@@ -133,6 +138,7 @@ defmodule CorroPortWeb.MessagesLive do
 
       {:error, error} ->
         Logger.warning("MessagesLive: Failed to fetch all messages: #{inspect(error)}")
+
         assign(socket, %{
           all_messages: [],
           loading_messages: false,
@@ -157,16 +163,17 @@ defmodule CorroPortWeb.MessagesLive do
     current_messages = socket.assigns.all_messages
 
     # Add new message at the beginning (most recent first)
-    updated_messages = [new_message | current_messages]
-    |> Enum.sort_by(
-      fn msg ->
-        case Map.get(msg, "timestamp") do
-          nil -> ""
-          ts -> ts
-        end
-      end,
-      :desc
-    )
+    updated_messages =
+      [new_message | current_messages]
+      |> Enum.sort_by(
+        fn msg ->
+          case Map.get(msg, "timestamp") do
+            nil -> ""
+            ts -> ts
+          end
+        end,
+        :desc
+      )
 
     assign(socket, :all_messages, updated_messages)
   end
@@ -229,8 +236,8 @@ defmodule CorroPortWeb.MessagesLive do
     <div class="space-y-6">
       <!-- Navigation Tabs -->
       <NavTabs.nav_tabs active={:messages} />
-
-      <!-- Page Header -->
+      
+    <!-- Page Header -->
       <.header>
         Message Operations
         <:subtitle>
@@ -238,19 +245,15 @@ defmodule CorroPortWeb.MessagesLive do
         </:subtitle>
         <:actions>
           <.button phx-click="send_message" variant="primary">
-            <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" />
-            Send Message
+            <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" /> Send Message
           </.button>
         </:actions>
       </.header>
-
-      <!-- Acknowledgment Status -->
-      <AckStatusCard.ack_status_card
-        ack_status={@ack_status}
-        ack_sender_status={@ack_sender_status}
-      />
-
-      <!-- Connectivity Test Results -->
+      
+    <!-- Acknowledgment Status -->
+      <AckStatusCard.ack_status_card ack_status={@ack_status} ack_sender_status={@ack_sender_status} />
+      
+    <!-- Connectivity Test Results -->
       <div :if={@connectivity_test_results} class="card bg-base-200">
         <div class="card-body">
           <h3 class="card-title text-sm">Connectivity Test Results</h3>
@@ -259,24 +262,24 @@ defmodule CorroPortWeb.MessagesLive do
               :for={{node_id, result} <- @connectivity_test_results}
               class="flex items-center justify-between text-sm"
             >
-              <span class="font-mono"><%= node_id %></span>
+              <span class="font-mono">{node_id}</span>
               <span class={connectivity_result_class(result)}>
-                <%= format_connectivity_result(result) %>
+                {format_connectivity_result(result)}
               </span>
             </div>
           </div>
         </div>
       </div>
-
-      <!-- All Messages Table -->
+      
+    <!-- All Messages Table -->
       <AllMessagesTable.all_messages_table
         all_messages={@all_messages}
         loading_messages={@loading_messages}
         messages_error={@messages_error}
         local_node_id={@local_node_id}
       />
-
-      <!-- Last Updated -->
+      
+    <!-- Last Updated -->
       <div :if={@last_updated} class="text-xs text-base-content/70 text-center">
         Last updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}
       </div>

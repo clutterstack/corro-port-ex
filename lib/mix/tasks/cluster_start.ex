@@ -54,7 +54,9 @@ defmodule Mix.Tasks.Cluster.Start do
 
     # Make script executable
     case System.cmd("chmod", ["+x", script_path]) do
-      {_, 0} -> :ok
+      {_, 0} ->
+        :ok
+
       {output, exit_code} ->
         Mix.shell().error("Failed to make script executable: #{output} (exit: #{exit_code})")
         exit(1)
@@ -130,7 +132,8 @@ defmodule Mix.Tasks.Cluster.Stop do
         Mix.shell().info("Stopped Overmind processes")
 
       {_output, 1} ->
-        :ok  # No overmind processes found
+        # No overmind processes found
+        :ok
 
       {output, exit_code} ->
         Mix.shell().info("pkill overmind exited with code #{exit_code}: #{output}")

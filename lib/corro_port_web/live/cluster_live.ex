@@ -70,42 +70,47 @@ defmodule CorroPortWeb.ClusterLive do
 
   # handle
   def handle_info({task_ref, {:ok, raw_output}}, socket) do
-    Logger.debug("handling \{:ok, #{inspect raw_output}\} from task #{inspect task_ref}")
+    Logger.debug("handling \{:ok, #{inspect(raw_output)}\} from task #{inspect(task_ref)}")
     CorroPort.CorrosionParser.parse_cluster_members(raw_output) |> dbg
 
-          # Use the dedicated parser
-          parsed_result = case CorroPort.CorrosionParser.parse_cluster_members(raw_output) do
-            {:ok, []} ->
-              Logger.info("ClusterLive: No cluster members found - single node setup")
-              %{}
-            {:ok, members} ->
-              Logger.info("ClusterLive: Parsed some CLI members")
-              members
-            {:error, reason} ->
-              Logger.warning("ClusterLive: Failed to parse CLI output: #{inspect(reason)}")
-              %{parse_error: reason, raw_output: raw_output}
-          end
+    # Use the dedicated parser
+    parsed_result =
+      case CorroPort.CorrosionParser.parse_cluster_members(raw_output) do
+        {:ok, []} ->
+          Logger.info("ClusterLive: No cluster members found - single node setup")
+          %{}
 
-          parsed_result |> dbg()
-          flash_message = case parsed_result do
-            %{} -> "✅ CLI command successful - single node setup (no cluster members)"
-            list when is_list(list) -> "✅ CLI cluster members fetched successfully!"
-            %{parse_error: _} -> "⚠️ CLI command succeeded but output couldn't be parsed"
-          end
+        {:ok, members} ->
+          Logger.info("ClusterLive: Parsed some CLI members")
+          members
 
-          socket =
-            socket
-            |> assign(:cli_members_data, parsed_result)
-            |> assign(:cli_members_loading, false)
-            |> assign(:cli_members_task, nil)
-            |> put_flash(:info, flash_message)
+        {:error, reason} ->
+          Logger.warning("ClusterLive: Failed to parse CLI output: #{inspect(reason)}")
+          %{parse_error: reason, raw_output: raw_output}
+      end
 
-          {:noreply, socket}
+    parsed_result |> dbg()
+
+    flash_message =
+      case parsed_result do
+        %{} -> "✅ CLI command successful - single node setup (no cluster members)"
+        list when is_list(list) -> "✅ CLI cluster members fetched successfully!"
+        %{parse_error: _} -> "⚠️ CLI command succeeded but output couldn't be parsed"
+      end
+
+    socket =
+      socket
+      |> assign(:cli_members_data, parsed_result)
+      |> assign(:cli_members_loading, false)
+      |> assign(:cli_members_task, nil)
+      |> put_flash(:info, flash_message)
+
+    {:noreply, socket}
   end
 
   # handle
-    def handle_info({:DOWN, ref, :process, _pid, :normal}, socket) do
-    Logger.info("Handled :DOWN message from #{inspect ref}")
+  def handle_info({:DOWN, ref, :process, _pid, :normal}, socket) do
+    Logger.info("Handled :DOWN message from #{inspect(ref)}")
     {:noreply, socket}
   end
 
@@ -219,13 +224,12 @@ defmodule CorroPortWeb.ClusterLive do
         refresh_interval={@refresh_interval}
         error={@error}
       />
-
-      <!-- CLI Members Section -->
+      
+    <!-- CLI Members Section -->
       <div class="card bg-base-100">
         <div class="card-body">
           <h3 class="card-title">
-            <.icon name="hero-command-line" class="w-5 h-5 mr-2" />
-            CLI Cluster Members
+            <.icon name="hero-command-line" class="w-5 h-5 mr-2" /> CLI Cluster Members
           </h3>
 
           <div class="flex items-center gap-3 mb-4">
@@ -235,7 +239,7 @@ defmodule CorroPortWeb.ClusterLive do
               disabled={@cli_members_loading}
             >
               <.icon name="hero-command-line" class="w-4 h-4 mr-2" />
-              <%= if @cli_members_loading, do: "Fetching...", else: "Fetch CLI Members" %>
+              {if @cli_members_loading, do: "Fetching...", else: "Fetch CLI Members"}
             </.button>
 
             <.button
@@ -243,8 +247,7 @@ defmodule CorroPortWeb.ClusterLive do
               phx-click="clear_cli_data"
               class="btn btn-ghost btn-sm"
             >
-              <.icon name="hero-x-mark" class="w-4 h-4 mr-2" />
-              Clear
+              <.icon name="hero-x-mark" class="w-4 h-4 mr-2" /> Clear
             </.button>
 
             <div :if={@cli_members_loading} class="flex items-center">
@@ -252,8 +255,8 @@ defmodule CorroPortWeb.ClusterLive do
               <span class="text-sm text-base-content/70">Running CLI command...</span>
             </div>
           </div>
-
-<!-- CLI Results -->
+          
+    <!-- CLI Results -->
           <div :if={@cli_members_data && is_list(@cli_members_data)} class="space-y-4">
             <div :if={@cli_members_data == []} class="alert alert-info">
               <.icon name="hero-information-circle" class="w-5 h-5" />
@@ -305,9 +308,15 @@ defmodule CorroPortWeb.ClusterLive do
               </table>
             </div>
           </div>
-
-          <!-- Parse Error Display -->
-          <div :if={@cli_members_data && is_map(@cli_members_data) && Map.has_key?(@cli_members_data, :parse_error)} class="space-y-4">
+          
+    <!-- Parse Error Display -->
+          <div
+            :if={
+              @cli_members_data && is_map(@cli_members_data) &&
+                Map.has_key?(@cli_members_data, :parse_error)
+            }
+            class="space-y-4"
+          >
             <div class="alert alert-warning">
               <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
               <span>CLI command succeeded but failed to parse output</span>
@@ -327,9 +336,8 @@ defmodule CorroPortWeb.ClusterLive do
               </div>
             </details>
           </div>
-
-
-          <!-- Error Display -->
+          
+    <!-- Error Display -->
           <div :if={@cli_members_error} class="alert alert-error">
             <.icon name="hero-exclamation-circle" class="w-5 h-5" />
             <div>
@@ -337,12 +345,16 @@ defmodule CorroPortWeb.ClusterLive do
               <div class="text-sm">{@cli_members_error}</div>
             </div>
           </div>
-
-          <!-- Help Text -->
-          <div :if={!@cli_members_data && !@cli_members_error && !@cli_members_loading} class="text-center py-4">
+          
+    <!-- Help Text -->
+          <div
+            :if={!@cli_members_data && !@cli_members_error && !@cli_members_loading}
+            class="text-center py-4"
+          >
             <.icon name="hero-command-line" class="w-8 h-8 mx-auto text-base-content/30 mb-2" />
             <div class="text-sm text-base-content/70">
-              Click "Fetch CLI Members" to run <code class="bg-base-300 px-1 rounded">corrosion cluster members</code>
+              Click "Fetch CLI Members" to run
+              <code class="bg-base-300 px-1 rounded">corrosion cluster members</code>
             </div>
             <div class="text-xs text-base-content/50 mt-1">
               This uses the CLI directly instead of the HTTP API
@@ -364,13 +376,16 @@ defmodule CorroPortWeb.ClusterLive do
 
   # Helper function for timestamp formatting
   defp format_timestamp(nil), do: "Never"
+
   defp format_timestamp(ts) when is_integer(ts) do
     # Corrosion timestamps are often in nanoseconds
     seconds = div(ts, 1_000_000_000)
+
     case DateTime.from_unix(seconds) do
       {:ok, dt} -> Calendar.strftime(dt, "%m-%d %H:%M:%S")
       _ -> "Invalid"
     end
   end
+
   defp format_timestamp(_), do: "Unknown"
 end

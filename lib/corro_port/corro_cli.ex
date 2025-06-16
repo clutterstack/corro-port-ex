@@ -196,11 +196,12 @@ defmodule CorroPort.CorrosionCLI do
           Logger.warning("CorrosionCLI: Error output: #{error_output}")
           {:error, {:exit_code, exit_code, error_output}}
       end
-
     catch
       :exit, {:enoent, _} ->
         Logger.error("CorrosionCLI: Binary not found at #{abs_binary_path}")
-        {:error, "Binary not found: #{abs_binary_path}. Check that the corrosion binary exists and is executable."}
+
+        {:error,
+         "Binary not found: #{abs_binary_path}. Check that the corrosion binary exists and is executable."}
 
       error ->
         Logger.error("CorrosionCLI: Unexpected error: #{inspect(error)}")
@@ -227,25 +228,25 @@ defmodule CorroPort.CorrosionCLI do
       # Let's split by lines and parse each JSON object
       lines = String.split(json_output, "\n", trim: true)
 
-      members = Enum.map(lines, fn line ->
-        case Jason.decode(line) do
-          {:ok, member_data} ->
-            # Add some parsed/computed fields for easier access
-            member_data
-            |> add_parsed_address()
-            |> add_member_status()
+      members =
+        Enum.map(lines, fn line ->
+          case Jason.decode(line) do
+            {:ok, member_data} ->
+              # Add some parsed/computed fields for easier access
+              member_data
+              |> add_parsed_address()
+              |> add_member_status()
 
-          {:error, _} ->
-            Logger.warning("CorrosionCLI: Failed to parse member line: #{line}")
-            %{"parse_error" => line}
-        end
-      end)
+            {:error, _} ->
+              Logger.warning("CorrosionCLI: Failed to parse member line: #{line}")
+              %{"parse_error" => line}
+          end
+        end)
 
       valid_members = Enum.reject(members, &Map.has_key?(&1, "parse_error"))
 
       Logger.info("CorrosionCLI: Parsed #{length(valid_members)} cluster members")
       {:ok, valid_members}
-
     rescue
       error ->
         Logger.error("CorrosionCLI: Error parsing cluster members: #{inspect(error)}")
@@ -266,11 +267,12 @@ defmodule CorroPort.CorrosionCLI do
   defp add_member_status(member) do
     # Add a computed status based on available data
     # This is a placeholder - we'll refine based on actual corrosion output
-    status = cond do
-      get_in(member, ["state", "last_sync_ts"]) != nil -> "active"
-      get_in(member, ["state", "ts"]) != nil -> "connected"
-      true -> "unknown"
-    end
+    status =
+      cond do
+        get_in(member, ["state", "last_sync_ts"]) != nil -> "active"
+        get_in(member, ["state", "ts"]) != nil -> "connected"
+        true -> "unknown"
+      end
 
     Map.put(member, "computed_status", status)
   end

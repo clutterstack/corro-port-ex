@@ -18,24 +18,18 @@ defmodule CorroPortWeb.NavTabs do
         navigate={~p"/cluster"}
         class={["tab", if(@active == :cluster, do: "tab-active", else: "")]}
       >
-        <.icon name="hero-server-stack" class="w-4 h-4 mr-2" />
-        Cluster
+        <.icon name="hero-server-stack" class="w-4 h-4 mr-2" /> Cluster
       </.link>
 
       <.link
         navigate={~p"/messages"}
         class={["tab", if(@active == :messages, do: "tab-active", else: "")]}
       >
-        <.icon name="hero-chat-bubble-left-right" class="w-4 h-4 mr-2" />
-        Messages
+        <.icon name="hero-chat-bubble-left-right" class="w-4 h-4 mr-2" /> Messages
       </.link>
 
-      <.link
-        navigate={~p"/node"}
-        class={["tab", if(@active == :node, do: "tab-active", else: "")]}
-      >
-        <.icon name="hero-cog-6-tooth" class="w-4 h-4 mr-2" />
-        Node
+      <.link navigate={~p"/node"} class={["tab", if(@active == :node, do: "tab-active", else: "")]}>
+        <.icon name="hero-cog-6-tooth" class="w-4 h-4 mr-2" /> Node
       </.link>
     </div>
     """

@@ -46,6 +46,7 @@ defmodule CorroPort.NodeConfig do
       :prod ->
         # In production, use the actual machine ID for readability
         config[:fly_machine_id] || config[:node_id] || "unknown"
+
       _ ->
         # In development, use the familiar nodeN pattern
         "node#{config[:node_id]}"

@@ -55,7 +55,10 @@ defmodule CorroPort.CorroSubscriber do
 
   def handle_info(:reconnect, state) do
     if state.reconnect_attempts < state.max_reconnect_attempts do
-      Logger.warning("CorroSubscriber: Attempting to reconnect (attempt #{state.reconnect_attempts + 1})")
+      Logger.warning(
+        "CorroSubscriber: Attempting to reconnect (attempt #{state.reconnect_attempts + 1})"
+      )
+
       send(self(), :start_subscription)
       {:noreply, state}
     else
@@ -120,7 +123,14 @@ defmodule CorroPort.CorroSubscriber do
     end
 
     send(self(), :start_subscription)
-    new_state = %{state | stream_pid: nil, status: :restarting, reconnect_attempts: 0, watch_id: nil}
+
+    new_state = %{
+      state
+      | stream_pid: nil,
+        status: :restarting,
+        reconnect_attempts: 0,
+        watch_id: nil
+    }
 
     {:reply, :ok, new_state}
   end
@@ -167,15 +177,18 @@ defmodule CorroPort.CorroSubscriber do
           if status != 200 do
             send(parent_pid, {:subscription_error, {:http_status, status}})
           end
+
           %Req.Response{response | status: status}
 
         {:headers, headers}, response ->
           case Enum.find(headers, fn {key, _} -> key == "corro-query-id" end) do
             {"corro-query-id", watch_id} ->
               send(parent_pid, {:subscription_connected, watch_id})
+
             _ ->
               Logger.warning("CorroSubscriber: No corro-query-id found in headers")
           end
+
           %Req.Response{response | headers: headers}
 
         {:data, data}, response ->
@@ -183,7 +196,10 @@ defmodule CorroPort.CorroSubscriber do
           response
       end
 
-      case Finch.stream(finch_req, finch_name, Req.Response.new(), finch_acc, [finch_opts, receive_timeout: :infinity]) do
+      case Finch.stream(finch_req, finch_name, Req.Response.new(), finch_acc, [
+             finch_opts,
+             receive_timeout: :infinity
+           ]) do
         {:ok, response} ->
           send(parent_pid, {:subscription_closed, :normal})
           {request, response}
@@ -282,13 +298,19 @@ defmodule CorroPort.CorroSubscriber do
     if length(values) == length(columns) do
       Enum.zip(columns, values) |> Enum.into(%{})
     else
-      Logger.warning("CorroSubscriber: Mismatch: #{length(values)} values vs #{length(columns)} columns")
+      Logger.warning(
+        "CorroSubscriber: Mismatch: #{length(values)} values vs #{length(columns)} columns"
+      )
+
       %{}
     end
   end
 
   defp build_message_map(values, columns) do
-    Logger.warning("CorroSubscriber: Unable to build message map from values: #{inspect(values)} and columns: #{inspect(columns)}")
+    Logger.warning(
+      "CorroSubscriber: Unable to build message map from values: #{inspect(values)} and columns: #{inspect(columns)}"
+    )
+
     %{}
   end
 
