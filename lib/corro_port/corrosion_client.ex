@@ -29,11 +29,11 @@ defmodule CorroPort.CorrosionClient do
   def execute_query(query, port \\ nil) do
     # TODO: set base_url using application environment vars, for both local and prod
     port = port || get_api_port()
-    base_url = "http://127.0.0.1:#{port}" |> dbg
+    base_url = "http://127.0.0.1:#{port}"
 
     # Logger.debug("Executing query on port #{port}: #{query}")
 
-    case Req.post("#{base_url}/queries",
+    case Req.post("#{base_url}/v1/queries",
            json: query,
            headers: [{"content-type", "application/json"}],
            receive_timeout: 5000
@@ -75,7 +75,7 @@ defmodule CorroPort.CorrosionClient do
 
     Logger.debug("Executing transaction on port #{port}: #{inspect(transactions)}")
 
-    case Req.post("#{base_url}/transactions",
+    case Req.post("#{base_url}/v1/transactions",
            json: transactions,
            headers: [{"content-type", "application/json"}],
            receive_timeout: 5000
