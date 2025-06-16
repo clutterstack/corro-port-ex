@@ -137,8 +137,8 @@ defmodule CorroPort.AckDiagnostics do
 
     # Test local API
     local_config = NodeConfig.app_node_config()
-    local_api_port = local_config[:api_port]
-    local_api_url = "http://127.0.0.1:#{local_api_port}"
+    local_ack_api_port = local_config[:ack_api_port]
+    local_api_url = "http://127.0.0.1:#{local_ack_api_port}"
 
     IO.puts("Testing local API endpoint: #{local_api_url}")
     case test_ack_endpoint("#{local_api_url}/api/acknowledge/health") do
@@ -247,8 +247,8 @@ defmodule CorroPort.AckDiagnostics do
   """
   def test_manual_ack(message_pk, from_node_id) do
     local_config = NodeConfig.app_node_config()
-    local_api_port = local_config[:api_port]
-    local_api_url = "http://127.0.0.1:#{local_api_port}"
+    local_ack_api_port = local_config[:ack_api_port]
+    local_api_url = "http://127.0.0.1:#{local_ack_api_port}"
 
     payload = %{
       "message_pk" => message_pk,

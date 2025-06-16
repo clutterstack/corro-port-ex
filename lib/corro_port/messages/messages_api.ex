@@ -112,20 +112,20 @@ defmodule CorroPort.MessagesAPI do
       :prod ->
         # In production, use the fly.io private IP with API port
         private_ip = node_config[:private_ip] || node_config[:fly_private_ip] || "127.0.0.1"
-        api_port = node_config[:api_port] || 8081
+        ack_api_port = node_config[:ack_api_port] || 8081
 
         if String.contains?(private_ip, ":") do
           # IPv6 address, wrap in brackets
-          "[#{private_ip}]:#{api_port}"
+          "[#{private_ip}]:#{ack_api_port}"
         else
           # IPv4 address
-          "#{private_ip}:#{api_port}"
+          "#{private_ip}:#{ack_api_port}"
         end
 
       _ ->
         # In development, use localhost with calculated API port
-        api_port = node_config[:api_port] || 5000 + (node_config[:node_id] || 1)
-        "127.0.0.1:#{api_port}"
+        ack_api_port = node_config[:ack_api_port] || 5000 + (node_config[:node_id] || 1)
+        "127.0.0.1:#{ack_api_port}"
     end
   end
 

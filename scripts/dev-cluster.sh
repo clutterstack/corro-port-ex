@@ -68,11 +68,11 @@ echo "📋 Cluster Information:"
 echo "======================="
 for i in $(seq 1 $NUM_NODES); do
     PHOENIX_PORT=$((4000 + i))
-    API_PORT=$((8080 + i))
+    CORRO_API_PORT=$((8080 + i))
     GOSSIP_PORT=$((8786 + i))
     echo "Node $i:"
     echo "  Phoenix:   http://localhost:$PHOENIX_PORT"
-    echo "  API:       http://127.0.0.1:$API_PORT"
+    echo "  Corrosion API:       http://127.0.0.1:$CORRO_API_PORT"
     echo "  Gossip:    127.0.0.1:$GOSSIP_PORT"
     echo ""
 done

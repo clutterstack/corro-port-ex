@@ -28,7 +28,7 @@ defmodule CorroPort.CorrosionClient do
   """
   def execute_query(query, port \\ nil) do
     # TODO: set base_url using application environment vars, for both local and prod
-    port = port || get_api_port()
+    port = port || get_corro_api_port()
     base_url = "http://127.0.0.1:#{port}"
 
     # Logger.debug("Executing query on port #{port}: #{query}")
@@ -70,7 +70,7 @@ defmodule CorroPort.CorrosionClient do
       {:ok, response_body}
   """
   def execute_transaction(transactions, port \\ nil) do
-    port = port || get_api_port()
+    port = port || get_corro_api_port()
     base_url = "http://127.0.0.1:#{port}"
 
     Logger.debug("Executing transaction on port #{port}: #{inspect(transactions)}")
@@ -158,7 +158,7 @@ defmodule CorroPort.CorrosionClient do
   Reads from application config under `:corro_port, :node_config`.
   Falls back to port 8081 if not configured.
   """
-  def get_api_port do
+  def get_corro_api_port do
     Application.get_env(:corro_port, :node_config)[:corrosion_api_port]
   end
 

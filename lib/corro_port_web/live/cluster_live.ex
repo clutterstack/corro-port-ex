@@ -19,7 +19,7 @@ defmodule CorroPortWeb.ClusterLive do
         node_messages: [],
         error: nil,
         last_updated: nil,
-        api_port: CorroPort.CorrosionClient.get_api_port(),
+        corro_api_port: CorroPort.CorrosionClient.get_corro_api_port(),
         phoenix_port: phoenix_port,
         refresh_interval: @refresh_interval,
         # CLI-related state
@@ -218,7 +218,7 @@ defmodule CorroPortWeb.ClusterLive do
         node_messages={@node_messages}
         last_updated={@last_updated}
         phoenix_port={@phoenix_port}
-        api_port={@api_port}
+        corro_api_port={@corro_api_port}
         refresh_interval={@refresh_interval}
         error={@error}
       />

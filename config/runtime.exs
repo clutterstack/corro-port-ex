@@ -30,7 +30,7 @@ if config_env() == :prod do
 
   host = System.get_env("PHX_HOST") || "example.com"
   port = String.to_integer(System.get_env("PORT") || "8080")
-  api_port = String.to_integer(System.get_env("API_PORT") || "8081")
+  ack_api_port = String.to_integer(System.get_env("API_PORT") || "8088")
 
   config :corro_port, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
@@ -50,7 +50,7 @@ if config_env() == :prod do
     case :inet.parse_address(String.to_charlist(fly_private_ip)) do
       {:ok, ipv6_tuple} ->
         config :corro_port, CorroPortWeb.APIEndpoint,
-          http: [ip: ipv6_tuple, port: api_port],
+          http: [ip: ipv6_tuple, port: ack_api_port],
           secret_key_base: secret_key_base,
           server: true
 
@@ -60,14 +60,14 @@ if config_env() == :prod do
         )
 
         config :corro_port, CorroPortWeb.APIEndpoint,
-          http: [ip: {0, 0, 0, 0, 0, 0, 0, 0}, port: api_port],
+          http: [ip: {0, 0, 0, 0, 0, 0, 0, 0}, port: ack_api_port],
           secret_key_base: secret_key_base,
           server: true
     end
   else
     # Fallback to all interfaces if no private IP
     config :corro_port, CorroPortWeb.APIEndpoint,
-      http: [ip: {0, 0, 0, 0, 0, 0, 0, 0}, port: api_port],
+      http: [ip: {0, 0, 0, 0, 0, 0, 0, 0}, port: ack_api_port],
       secret_key_base: secret_key_base,
       server: true
   end
@@ -76,7 +76,7 @@ if config_env() == :prod do
   if fly_app_name && fly_private_ip && fly_machine_id do
     config :corro_port, :node_config,
       node_id: fly_machine_id,
-      api_port: api_port,
+      ack_api_port: ack_api_port,
       corrosion_api_port: 8081,
       corrosion_gossip_port: 8787,
       corrosion_bootstrap_list: "[\"#{fly_app_name}.internal:8787\"]",
@@ -90,7 +90,7 @@ if config_env() == :prod do
     # Fallback configuration
     config :corro_port, :node_config,
       node_id: System.get_env("NODE_ID", "fallback"),
-      api_port: api_port,
+      ack_api_port: ack_api_port,
       corrosion_api_port: 8081,
       corrosion_gossip_port: 8787,
       corrosion_bootstrap_list: "[]",

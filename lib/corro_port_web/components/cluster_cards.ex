@@ -45,7 +45,7 @@ defmodule CorroPortWeb.ClusterCards do
         local_info={@local_info}
         cluster_info={@cluster_info}
         phoenix_port={@phoenix_port}
-        api_port={@api_port}
+        corro_api_port={@corro_api_port}
         error={@error}
       />
 
@@ -187,7 +187,7 @@ defmodule CorroPortWeb.ClusterCards do
             </span>
           </div>
           <div><strong>Phoenix Port:</strong> {@phoenix_port}</div>
-          <div><strong>API Port:</strong> {@api_port}</div>
+          <div><strong>Corro API Port:</strong> {@corro_api_port}</div>
           <div><strong>Gossip Address:</strong> {get_gossip_address()}</div>
 
           <div class="flex items-center justify-between">

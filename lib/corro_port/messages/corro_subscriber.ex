@@ -163,8 +163,8 @@ defmodule CorroPort.CorroSubscriber do
   # Private functions
 
   defp run_subscription_stream(parent_pid) do
-    api_port = CorroPort.CorrosionClient.get_api_port()
-    url = "http://127.0.0.1:#{api_port}/v1/subscriptions"
+    corro_api_port = CorroPort.CorrosionClient.get_corro_api_port()
+    url = "http://127.0.0.1:#{corro_api_port}/v1/subscriptions"
     query = "SELECT * FROM node_messages ORDER BY timestamp DESC"
     json_query = Jason.encode!(query)
 
