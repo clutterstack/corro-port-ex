@@ -10,7 +10,7 @@ import Config
 config :corro_port,
   generators: [timestamp_type: :utc_datetime]
 
-# Configures the endpoint
+# Configures the endpoints
 config :corro_port, CorroPortWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Bandit.PhoenixAdapter,
@@ -20,6 +20,15 @@ config :corro_port, CorroPortWeb.Endpoint,
   ],
   pubsub_server: CorroPort.PubSub,
   live_view: [signing_salt: "MBbqxJvI"]
+
+config :corro_port, CorroPortWeb.APIEndpoint,
+  url: [host: "localhost"],
+  adapter: Bandit.PhoenixAdapter,
+  render_errors: [
+    formats: [html: CorroPortWeb.ErrorHTML, json: CorroPortWeb.ErrorJSON],
+    layout: false
+  ],
+  pubsub_server: CorroPort.PubSub
 
 # Configure esbuild (the version is required)
 config :esbuild,
