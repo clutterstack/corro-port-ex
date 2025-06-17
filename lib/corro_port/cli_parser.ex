@@ -4,6 +4,8 @@ defmodule CorroPort.CorrosionParser do
 
   Handles the NDJSON (newline-delimited JSON) format that Corrosion uses
   for structured output from commands like `cluster members`, `cluster info`, etc.
+
+  Also properly handles single-node setups where CLI commands return empty results.
   """
 
   require Logger
@@ -22,9 +24,19 @@ defmodule CorroPort.CorrosionParser do
       iex> output = ~s({"id":"abc123","state":{"addr":"127.0.0.1:8787"}}\n{"id":"def456","state":{"addr":"127.0.0.1:8788"}})
       iex> CorroPort.CorrosionParser.parse_cluster_members(output)
       {:ok, [%{"id" => "abc123", "parsed_addr" => "127.0.0.1:8787", ...}, ...]}
+
+      # Single node case
+      iex> CorroPort.CorrosionParser.parse_cluster_members("")
+      {:ok, []}
   """
   def parse_cluster_members(ndjson_output) when is_binary(ndjson_output) do
     parse_ndjson(ndjson_output, &enhance_member/1)
+  end
+
+  # Handle nil input (can happen with some CLI error cases)
+  def parse_cluster_members(nil) do
+    Logger.debug("CorrosionParser: Received nil input for cluster members")
+    {:ok, []}
   end
 
   @doc """
@@ -41,11 +53,21 @@ defmodule CorroPort.CorrosionParser do
     parse_ndjson(ndjson_output, &enhance_cluster_info/1)
   end
 
+  def parse_cluster_info(nil) do
+    Logger.debug("CorrosionParser: Received nil input for cluster info")
+    {:ok, []}
+  end
+
   @doc """
   Parses cluster status NDJSON output.
   """
   def parse_cluster_status(ndjson_output) when is_binary(ndjson_output) do
     parse_ndjson(ndjson_output, &enhance_status/1)
+  end
+
+  def parse_cluster_status(nil) do
+    Logger.debug("CorrosionParser: Received nil input for cluster status")
+    {:ok, []}
   end
 
   @doc """
@@ -60,7 +82,33 @@ defmodule CorroPort.CorrosionParser do
   - `{:error, reason}` - Parse error details
   """
   def parse_ndjson(ndjson_output, enhancer_fun \\ &Function.identity/1)
-      when is_binary(ndjson_output) do
+
+  # Handle nil input
+  def parse_ndjson(nil, _enhancer_fun) do
+    Logger.debug("CorrosionParser: Received nil input for NDJSON parsing")
+    {:ok, []}
+  end
+
+  # Handle empty string (single node case)
+  def parse_ndjson("", _enhancer_fun) do
+    Logger.debug("CorrosionParser: Received empty string - likely single node setup")
+    {:ok, []}
+  end
+
+  # Handle whitespace-only strings
+  def parse_ndjson(ndjson_output, enhancer_fun) when is_binary(ndjson_output) do
+    trimmed = String.trim(ndjson_output)
+
+    if trimmed == "" do
+      Logger.debug("CorrosionParser: Received whitespace-only string - likely single node setup")
+      {:ok, []}
+    else
+      parse_non_empty_ndjson(trimmed, enhancer_fun)
+    end
+  end
+
+  # The actual parsing logic, extracted for clarity
+  defp parse_non_empty_ndjson(ndjson_output, enhancer_fun) do
     try do
       # Handle Corrosion's specific output format: concatenated pretty-printed JSON objects
       case parse_concatenated_json(ndjson_output, enhancer_fun) do

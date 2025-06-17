@@ -19,6 +19,8 @@ defmodule CorroPort.Application do
       CorroPort.DNSNodeDiscovery,
       CorroPort.AckTracker,
       CorroPort.AckSender,
+      # NEW: Centralized cluster member store
+      CorroPort.ClusterMemberStore,
       # Main web endpoint
       CorroPortWeb.Endpoint,
       # API endpoint for node-to-node communication

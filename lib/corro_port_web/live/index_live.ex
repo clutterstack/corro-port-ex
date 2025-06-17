@@ -2,30 +2,32 @@ defmodule CorroPortWeb.IndexLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPortWeb.{ClusterCards, RegionHelper}
-  alias CorroPort.{DNSNodeDiscovery, AckTracker}
+  alias CorroPortWeb.{ClusterCards, RegionHelper, NavTabs}
+  alias CorroPort.{DNSNodeDiscovery, AckTracker, ClusterMemberStore}
 
 def mount(_params, _session, socket) do
-  # Subscribe to acknowledgment updates
+  # Subscribe to acknowledgment updates and cluster member updates
   if connected?(socket) do
     Phoenix.PubSub.subscribe(CorroPort.PubSub, AckTracker.get_pubsub_topic())
+    ClusterMemberStore.subscribe()
   end
 
   socket =
     assign(socket, %{
       page_title: "Geographic Distribution",
 
-      # NEW: Clear node sets based on different sources
+      # Clear node sets based on different sources
       expected_nodes: [],        # From DNS
       expected_regions: [],      # Regions from DNS nodes
-      active_members: [],        # From CLI
+      active_members: [],        # From CLI store
       active_regions: [],        # Regions from CLI members
       our_regions: [],          # Our local region
       ack_regions: [],          # Regions that acknowledged latest message
 
-      # CLI state tracking
-      cli_error: nil,           # Error from CLI call
+      # CLI state tracking (now from centralized store)
+      cli_error: nil,           # Error from CLI store
       cli_members_stale: false, # Whether CLI data is old due to error
+      cli_member_data: nil,     # Data from centralized store
 
       # Keep basic cluster info for debugging
       cluster_info: nil,
@@ -110,6 +112,18 @@ end
     end
   end
 
+  # Handle cluster member updates from centralized store
+  def handle_info({:cluster_members_updated, cli_member_data}, socket) do
+    Logger.debug("IndexLive: 🔄 Received cluster members update from store")
+
+    socket =
+      socket
+      |> assign(:cli_member_data, cli_member_data)
+      |> update_regions_from_cli_data(cli_member_data)
+
+    {:noreply, socket}
+  end
+
   # Handle acknowledgment updates
   def handle_info({:ack_update, ack_status}, socket) do
     Logger.debug("IndexLive: 🤝 Received acknowledgment update")
@@ -132,6 +146,9 @@ end
     ack_status = AckTracker.get_status()
     ack_regions = RegionHelper.extract_ack_regions(ack_status)
 
+    # Get CLI member data from store
+    cli_member_data = ClusterMemberStore.get_members()
+
     # Determine if CLI data is stale
     cli_members_stale = !is_nil(updates.cli_error) && updates.active_members != []
 
@@ -147,14 +164,40 @@ end
       local_info: updates.local_info,
       cli_error: updates.cli_error,
       cli_members_stale: cli_members_stale,
+      cli_member_data: cli_member_data,
       error: updates.error,
       last_updated: updates.last_updated
+    })
+  end
+
+  defp update_regions_from_cli_data(socket, cli_member_data) do
+    # Recompute active regions when CLI data updates
+    active_regions =
+      cli_member_data.members
+      |> Enum.map(&CorroPort.AckTracker.member_to_node_id/1)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(&CorroPort.CorrosionParser.extract_region_from_node_id/1)
+      |> Enum.reject(&(&1 == "unknown"))
+      |> Enum.uniq()
+
+    # Remove our region from active regions
+    local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
+    our_region = CorroPort.CorrosionParser.extract_region_from_node_id(local_node_id)
+    active_regions = Enum.reject(active_regions, &(&1 == our_region))
+
+    assign(socket, %{
+      active_members: cli_member_data.members,
+      active_regions: active_regions,
+      cli_error: cli_member_data.last_error,
+      cli_members_stale: cli_member_data.status == :error && cli_member_data.members != []
     })
   end
 
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
+    <!-- Navigation Tabs -->
+      <NavTabs.nav_tabs active={:overview} />
       <ClusterCards.index_header ack_regions={@ack_regions} />
 
       <ClusterCards.error_alerts error={@error} />
@@ -167,11 +210,15 @@ end
           <div class="text-sm">
             <%= case @cli_error do %>
               <% {:cli_error, :timeout} -> %>
-                CLI command timed out after 10 seconds
+                CLI command timed out after 15 seconds
               <% {:cli_error, reason} -> %>
                 CLI command failed: #{inspect(reason)}
               <% {:parse_error, _reason} -> %>
                 CLI command succeeded but output couldn't be parsed
+              <% {:service_unavailable, msg} -> %>
+                {msg}
+              <% _ -> %>
+                CLI issue: #{inspect(@cli_error)}
             <% end %>
             <%= if @cli_members_stale do %>
               - Showing stale active member data

@@ -1,39 +1,25 @@
 defmodule CorroPortWeb.ClusterLive.DataFetcher do
   require Logger
-  alias CorroPort.{ClusterAPI, DNSNodeDiscovery, CorrosionCLI}
+  alias CorroPort.{ClusterAPI, DNSNodeDiscovery, ClusterMemberStore}
 
   def fetch_all_data() do
     # DNS-based expected nodes
     expected_nodes_result = DNSNodeDiscovery.get_expected_nodes()
 
-    # CLI-based active members (async with 10s timeout)
-    cli_members_task = CorrosionCLI.cluster_members_async()
+    # Get CLI members from centralized store
+    cli_member_data = ClusterMemberStore.get_members()
 
     # Basic cluster info (keep for debugging)
     cluster_result = ClusterAPI.get_cluster_info()
     # This always succeeds
     {:ok, local_info} = ClusterAPI.get_info()
 
-    # Wait for CLI with 10s timeout
-    cli_members_result =
-      try do
-        Task.await(cli_members_task, 10_000)
-      catch
-        :exit, _ -> {:error, :timeout}
-      end
-
-    # Parse CLI members if successful
-    {active_members, cli_error} = case cli_members_result do
-      {:ok, raw_output} ->
-        case CorroPort.CorrosionParser.parse_cluster_members(raw_output) do
-          {:ok, members} -> {members, nil}
-          {:error, reason} -> {[], {:parse_error, reason}}
-        end
-      {:error, reason} -> {[], {:cli_error, reason}}
-    end
+    # Extract active members and error from store
+    active_members = cli_member_data.members
+    cli_error = cli_member_data.last_error
 
     # Determine overall error state
-    error = determine_overall_error(expected_nodes_result, cli_members_result, cluster_result)
+    error = determine_overall_error(expected_nodes_result, cli_member_data, cluster_result)
 
     %{
       expected_nodes: case expected_nodes_result do
@@ -68,7 +54,7 @@ defmodule CorroPortWeb.ClusterLive.DataFetcher do
     Map.put(base_data, :node_messages, node_messages)
   end
 
-  defp determine_overall_error(expected_nodes_result, cli_members_result, cluster_result) do
+  defp determine_overall_error(expected_nodes_result, cli_member_data, cluster_result) do
     cond do
       # Critical: Can't reach Corrosion API at all
       match?({:error, _}, cluster_result) ->
@@ -78,9 +64,22 @@ defmodule CorroPortWeb.ClusterLive.DataFetcher do
       match?({:error, _}, expected_nodes_result) ->
         "DNS node discovery failed - cluster expectations may be incomplete"
 
-      # CLI failed but other things work
-      match?({:error, _}, cli_members_result) ->
-        "CLI cluster members query failed - active member list may be stale"
+      # CLI service unavailable
+      cli_member_data.status == :unavailable ->
+        "CLI member service unavailable"
+
+      # CLI failed but service is responding
+      cli_member_data.last_error != nil ->
+        case cli_member_data.last_error do
+          {:cli_error, :timeout} ->
+            "CLI cluster members query timed out - active member list may be stale"
+          {:parse_error, _} ->
+            "CLI command succeeded but output couldn't be parsed"
+          {:cli_error, _reason} ->
+            "CLI cluster members query failed - active member list may be stale"
+          _ ->
+            "CLI data issue - active member list may be unreliable"
+        end
 
       # All good
       true ->
