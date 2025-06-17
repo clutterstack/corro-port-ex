@@ -32,7 +32,7 @@ defmodule CorroPort.AckDiagnostics do
     # 5. Recent message flow
     check_recent_message_flow()
 
-    IO.puts("\n" <> "=" |> String.duplicate(60))
+    IO.puts(("\n" <> "=") |> String.duplicate(60))
     IO.puts("🏁 Diagnostics Complete\n")
   end
 
@@ -51,19 +51,20 @@ defmodule CorroPort.AckDiagnostics do
     ]
 
     Enum.each(processes, fn {name, module} ->
-      status = try do
-        if Process.whereis(module) do
-          case GenServer.call(module, :status, 1000) do
-            %{} = status -> "✅ Running - #{inspect(status)}"
-            other -> "⚠️  Unexpected status - #{inspect(other)}"
+      status =
+        try do
+          if Process.whereis(module) do
+            case GenServer.call(module, :status, 1000) do
+              %{} = status -> "✅ Running - #{inspect(status)}"
+              other -> "⚠️  Unexpected status - #{inspect(other)}"
+            end
+          else
+            "❌ Not running"
           end
-        else
-          "❌ Not running"
+        catch
+          :exit, _ -> "❌ Not responding"
+          error -> "❌ Error: #{inspect(error)}"
         end
-      catch
-        :exit, _ -> "❌ Not responding"
-        error -> "❌ Error: #{inspect(error)}"
-      end
 
       IO.puts("#{name}: #{status}")
     end)
@@ -84,17 +85,24 @@ defmodule CorroPort.AckDiagnostics do
           by_node = Enum.group_by(messages, &Map.get(&1, "node_id"))
 
           IO.puts("Messages by node:")
+
           Enum.each(by_node, fn {node_id, node_messages} ->
             latest = Enum.max_by(node_messages, &Map.get(&1, "timestamp", ""))
             endpoint = Map.get(latest, "originating_endpoint", "unknown")
-            IO.puts("  #{node_id}: #{length(node_messages)} messages, latest endpoint: #{endpoint}")
+
+            IO.puts(
+              "  #{node_id}: #{length(node_messages)} messages, latest endpoint: #{endpoint}"
+            )
           end)
 
           # Show recent messages
           recent = messages |> Enum.sort_by(&Map.get(&1, "timestamp", ""), :desc) |> Enum.take(3)
           IO.puts("\nRecent messages:")
+
           Enum.each(recent, fn msg ->
-            IO.puts("  #{Map.get(msg, "pk")} | #{Map.get(msg, "node_id")} | #{Map.get(msg, "originating_endpoint")}")
+            IO.puts(
+              "  #{Map.get(msg, "pk")} | #{Map.get(msg, "node_id")} | #{Map.get(msg, "originating_endpoint")}"
+            )
           end)
         end
 
@@ -111,19 +119,23 @@ defmodule CorroPort.AckDiagnostics do
 
     subscriber_status = CorroSubscriber.status()
     IO.puts("CorroSubscriber Status:")
+
     Enum.each(subscriber_status, fn {key, value} ->
-      icon = case {key, value} do
-        {:connected, true} -> "✅"
-        {:connected, false} -> "❌"
-        {:status, :connected} -> "✅"
-        {:status, _} -> "⚠️"
-        _ -> "ℹ️"
-      end
+      icon =
+        case {key, value} do
+          {:connected, true} -> "✅"
+          {:connected, false} -> "❌"
+          {:status, :connected} -> "✅"
+          {:status, _} -> "⚠️"
+          _ -> "ℹ️"
+        end
+
       IO.puts("  #{icon} #{key}: #{inspect(value)}")
     end)
 
     ack_sender_status = AckSender.get_status()
     IO.puts("\nAckSender Status:")
+
     Enum.each(ack_sender_status, fn {key, value} ->
       IO.puts("  ℹ️  #{key}: #{value}")
     end)
@@ -141,9 +153,11 @@ defmodule CorroPort.AckDiagnostics do
     local_api_url = "http://127.0.0.1:#{local_ack_api_port}"
 
     IO.puts("Testing local API endpoint: #{local_api_url}")
+
     case test_ack_endpoint("#{local_api_url}/api/acknowledge/health") do
       {:ok, response} ->
         IO.puts("✅ Local API responding: #{inspect(response)}")
+
       {:error, reason} ->
         IO.puts("❌ Local API failed: #{inspect(reason)}")
     end
@@ -151,18 +165,22 @@ defmodule CorroPort.AckDiagnostics do
     # Test endpoints from database
     case MessagesAPI.get_node_messages() do
       {:ok, messages} ->
-        endpoints = messages
-                   |> Enum.map(&Map.get(&1, "originating_endpoint"))
-                   |> Enum.uniq()
-                   |> Enum.reject(&is_nil/1)
+        endpoints =
+          messages
+          |> Enum.map(&Map.get(&1, "originating_endpoint"))
+          |> Enum.uniq()
+          |> Enum.reject(&is_nil/1)
 
         if endpoints != [] do
           IO.puts("\nTesting originating endpoints from database:")
+
           Enum.each(endpoints, fn endpoint ->
             health_url = parse_endpoint_to_health_url(endpoint)
+
             case test_ack_endpoint(health_url) do
               {:ok, response} ->
                 IO.puts("✅ #{endpoint} -> #{health_url}: #{inspect(response)}")
+
               {:error, reason} ->
                 IO.puts("❌ #{endpoint} -> #{health_url}: #{inspect(reason)}")
             end
@@ -199,6 +217,7 @@ defmodule CorroPort.AckDiagnostics do
 
         if status.acknowledgments != [] do
           IO.puts("  Recent acknowledgments:")
+
           Enum.each(status.acknowledgments, fn ack ->
             IO.puts("    ✅ #{ack.node_id} at #{ack.timestamp}")
           end)
@@ -219,8 +238,10 @@ defmodule CorroPort.AckDiagnostics do
       case Req.get(url, receive_timeout: 3000) do
         {:ok, %{status: 200, body: body}} ->
           {:ok, body}
+
         {:ok, %{status: status}} ->
           {:error, "HTTP #{status}"}
+
         {:error, reason} ->
           {:error, reason}
       end
@@ -231,9 +252,10 @@ defmodule CorroPort.AckDiagnostics do
 
   defp parse_endpoint_to_health_url(endpoint) do
     case endpoint do
-      "[" <> rest ->
+      "[" <> _rest ->
         # IPv6: [2001:db8::1]:8081 -> http://[2001:db8::1]:8081/api/acknowledge/health
         "http://#{endpoint}/api/acknowledge/health"
+
       _ ->
         # IPv4: 127.0.0.1:8081 -> http://127.0.0.1:8081/api/acknowledge/health
         "http://#{endpoint}/api/acknowledge/health"
@@ -261,8 +283,9 @@ defmodule CorroPort.AckDiagnostics do
     IO.puts("  Payload: #{inspect(payload)}")
 
     case Req.post("#{local_api_url}/api/acknowledge",
-                  json: payload,
-                  headers: [{"content-type", "application/json"}]) do
+           json: payload,
+           headers: [{"content-type", "application/json"}]
+         ) do
       {:ok, %{status: 200, body: body}} ->
         IO.puts("✅ Success: #{inspect(body)}")
 
@@ -293,7 +316,10 @@ defmodule CorroPort.AckDiagnostics do
   defp monitor_loop do
     receive do
       {:new_message, message_map} ->
-        IO.puts("📩 New message: #{Map.get(message_map, "pk")} from #{Map.get(message_map, "node_id")}")
+        IO.puts(
+          "📩 New message: #{Map.get(message_map, "pk")} from #{Map.get(message_map, "node_id")}"
+        )
+
         monitor_loop()
 
       {:ack_update, ack_status} ->

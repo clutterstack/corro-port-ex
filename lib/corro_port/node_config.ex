@@ -33,7 +33,7 @@ defmodule CorroPort.NodeConfig do
     config[:corrosion_binary]
   end
 
- @doc """
+  @doc """
   Gets the Corrosion node identifier (used in logs and for debugging).
   In production, uses the region-machine_id format for proper region identification.
   In development, uses the pattern "nodeN" where N is the node_id.

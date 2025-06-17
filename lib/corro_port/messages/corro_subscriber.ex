@@ -364,13 +364,21 @@ defmodule CorroPort.CorroSubscriber do
   defp schedule_reconnect(state) do
     # Calculate delay based on how many attempts have been made
     attempts_made = @max_reconnect_attempts - state.attempts_left
-    delay = case attempts_made do
-      0 -> 2_000   # First retry: 2 seconds
-      1 -> 5_000   # Second retry: 5 seconds
-      _ -> 10_000  # Subsequent retries: 10 seconds
-    end
 
-    Logger.warning("CorroSubscriber: Scheduling reconnect in #{delay}ms (#{state.attempts_left} attempts left)")
+    delay =
+      case attempts_made do
+        # First retry: 2 seconds
+        0 -> 2_000
+        # Second retry: 5 seconds
+        1 -> 5_000
+        # Subsequent retries: 10 seconds
+        _ -> 10_000
+      end
+
+    Logger.warning(
+      "CorroSubscriber: Scheduling reconnect in #{delay}ms (#{state.attempts_left} attempts left)"
+    )
+
     Process.send_after(self(), :reconnect, delay)
     {:noreply, %{state | status: :reconnecting}}
   end

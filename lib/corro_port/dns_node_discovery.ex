@@ -12,8 +12,10 @@ defmodule CorroPort.DNSNodeDiscovery do
   require Logger
   use GenServer
 
-  @cache_duration 60_000  # 1 minute cache
-  @dns_timeout 5_000      # 5 second DNS timeout
+  # 1 minute cache
+  @cache_duration 60_000
+  # 5 second DNS timeout
+  @dns_timeout 5_000
 
   # Client API
 
@@ -32,7 +34,9 @@ defmodule CorroPort.DNSNodeDiscovery do
   """
   def get_expected_nodes do
     case GenServer.call(__MODULE__, :get_expected_nodes, @dns_timeout + 1000) do
-      {:ok, nodes} -> {:ok, nodes}
+      {:ok, nodes} ->
+        {:ok, nodes}
+
       {:error, reason} ->
         Logger.warning("DNSNodeDiscovery: Failed to get expected nodes: #{inspect(reason)}")
         {:error, reason}
@@ -75,6 +79,7 @@ defmodule CorroPort.DNSNodeDiscovery do
     case get_cached_or_fetch_nodes(state) do
       {:ok, nodes, new_state} ->
         {:reply, {:ok, nodes}, new_state}
+
       {:error, reason, new_state} ->
         {:reply, {:error, reason}, new_state}
     end
@@ -88,6 +93,7 @@ defmodule CorroPort.DNSNodeDiscovery do
       is_cache_fresh: is_cache_fresh?(state.cache_timestamp),
       last_query_result: state.last_query_result
     }
+
     {:reply, status, state}
   end
 
@@ -97,11 +103,12 @@ defmodule CorroPort.DNSNodeDiscovery do
     case fetch_nodes_from_dns() do
       {:ok, nodes} ->
         new_state = %{
-          state |
-          cached_nodes: nodes,
-          cache_timestamp: System.monotonic_time(:millisecond),
-          last_query_result: {:ok, length(nodes)}
+          state
+          | cached_nodes: nodes,
+            cache_timestamp: System.monotonic_time(:millisecond),
+            last_query_result: {:ok, length(nodes)}
         }
+
         {:noreply, new_state}
 
       {:error, reason} ->
@@ -115,7 +122,10 @@ defmodule CorroPort.DNSNodeDiscovery do
 
   defp get_cached_or_fetch_nodes(state) do
     if is_cache_fresh?(state.cache_timestamp) do
-      Logger.debug("DNSNodeDiscovery: Using cached nodes (#{length(state.cached_nodes || [])} nodes)")
+      Logger.debug(
+        "DNSNodeDiscovery: Using cached nodes (#{length(state.cached_nodes || [])} nodes)"
+      )
+
       {:ok, state.cached_nodes || [], state}
     else
       Logger.debug("DNSNodeDiscovery: Cache expired or empty, fetching from DNS")
@@ -123,11 +133,12 @@ defmodule CorroPort.DNSNodeDiscovery do
       case fetch_nodes_from_dns() do
         {:ok, nodes} ->
           new_state = %{
-            state |
-            cached_nodes: nodes,
-            cache_timestamp: System.monotonic_time(:millisecond),
-            last_query_result: {:ok, length(nodes)}
+            state
+            | cached_nodes: nodes,
+              cache_timestamp: System.monotonic_time(:millisecond),
+              last_query_result: {:ok, length(nodes)}
           }
+
           {:ok, nodes, new_state}
 
         {:error, reason} ->
@@ -161,7 +172,10 @@ defmodule CorroPort.DNSNodeDiscovery do
             parse_txt_records(txt_records)
 
           {:error, reason} ->
-            Logger.warning("DNSNodeDiscovery: DNS query failed for #{dns_name}: #{inspect(reason)}")
+            Logger.warning(
+              "DNSNodeDiscovery: DNS query failed for #{dns_name}: #{inspect(reason)}"
+            )
+
             {:error, {:dns_query_failed, reason}}
         end
     end
@@ -185,9 +199,11 @@ defmodule CorroPort.DNSNodeDiscovery do
 
         txt_records when is_list(txt_records) ->
           # Convert charlists back to strings
-          string_records = Enum.map(txt_records, fn record ->
-            record |> List.flatten() |> List.to_string()
-          end)
+          string_records =
+            Enum.map(txt_records, fn record ->
+              record |> List.flatten() |> List.to_string()
+            end)
+
           {:ok, string_records}
 
         error ->
@@ -211,9 +227,11 @@ defmodule CorroPort.DNSNodeDiscovery do
         |> Enum.reject(fn node_id -> node_id == local_node_id end)
         |> Enum.sort()
 
-      Logger.info("DNSNodeDiscovery: Parsed #{length(all_nodes)} expected nodes (excluding local): #{inspect(all_nodes)}")
-      {:ok, all_nodes}
+      Logger.info(
+        "DNSNodeDiscovery: Parsed #{length(all_nodes)} expected nodes (excluding local): #{inspect(all_nodes)}"
+      )
 
+      {:ok, all_nodes}
     rescue
       e ->
         Logger.warning("DNSNodeDiscovery: Error parsing TXT records: #{inspect(e)}")
@@ -261,12 +279,14 @@ defmodule CorroPort.DNSNodeDiscovery do
   end
 
   defp is_cache_fresh?(nil), do: false
+
   defp is_cache_fresh?(timestamp) do
     age_ms = System.monotonic_time(:millisecond) - timestamp
     age_ms < @cache_duration
   end
 
   defp cache_age_ms(nil), do: nil
+
   defp cache_age_ms(timestamp) do
     System.monotonic_time(:millisecond) - timestamp
   end

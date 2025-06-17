@@ -24,6 +24,7 @@ defmodule CorroPortWeb.ClusterCards do
     </.header>
     """
   end
+
   def cluster_header_with_actions(assigns) do
     ~H"""
     <.header>
@@ -37,7 +38,8 @@ defmodule CorroPortWeb.ClusterCards do
         <.button
           :if={@ack_regions != []}
           phx-click="reset_tracking"
-          class="btn btn-warning btn-outline">
+          class="btn btn-warning btn-outline"
+        >
           <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Reset Tracking
         </.button>
         <.button phx-click="send_message" variant="primary">

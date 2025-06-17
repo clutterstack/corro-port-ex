@@ -29,6 +29,7 @@ defmodule CorroPort.AckTestHelper do
 
         if ack_status.acknowledgments != [] do
           IO.puts("  From nodes:")
+
           Enum.each(ack_status.acknowledgments, fn ack ->
             IO.puts("    ✅ #{ack.node_id}")
           end)
@@ -51,9 +52,10 @@ defmodule CorroPort.AckTestHelper do
     case CorroPort.MessagesAPI.get_node_messages() do
       {:ok, messages} ->
         # Look for our message
-        our_message = Enum.find(messages, fn msg ->
-          Map.get(msg, "pk") == message_data.pk
-        end)
+        our_message =
+          Enum.find(messages, fn msg ->
+            Map.get(msg, "pk") == message_data.pk
+          end)
 
         if our_message do
           IO.puts("✅ Message found in database")
@@ -65,6 +67,7 @@ defmodule CorroPort.AckTestHelper do
         # Check total message count by node
         by_node = Enum.group_by(messages, &Map.get(&1, "node_id"))
         IO.puts("\nMessages by node in database:")
+
         Enum.each(by_node, fn {node_id, node_messages} ->
           IO.puts("  #{node_id}: #{length(node_messages)} messages")
         end)
@@ -82,10 +85,11 @@ defmodule CorroPort.AckTestHelper do
   def test_endpoint_ack(endpoint, message_pk) do
     local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
-    url = case endpoint do
-      "[" <> _ -> "http://#{endpoint}/api/acknowledge"
-      _ -> "http://#{endpoint}/api/acknowledge"
-    end
+    url =
+      case endpoint do
+        "[" <> _ -> "http://#{endpoint}/api/acknowledge"
+        _ -> "http://#{endpoint}/api/acknowledge"
+      end
 
     payload = %{
       "message_pk" => message_pk,
@@ -98,9 +102,10 @@ defmodule CorroPort.AckTestHelper do
     IO.puts("  Payload: #{inspect(payload)}")
 
     case Req.post(url,
-                  json: payload,
-                  headers: [{"content-type", "application/json"}],
-                  receive_timeout: 5000) do
+           json: payload,
+           headers: [{"content-type", "application/json"}],
+           receive_timeout: 5000
+         ) do
       {:ok, %{status: 200, body: body}} ->
         IO.puts("✅ Success: #{inspect(body)}")
 
@@ -186,7 +191,8 @@ defmodule CorroPort.AckTestHelper do
       "node_id" => "test_node",
       "message" => "Test message for acknowledgment",
       "timestamp" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "originating_endpoint" => "127.0.0.1:5999"  # Fake endpoint
+      # Fake endpoint
+      "originating_endpoint" => "127.0.0.1:5999"
     }
 
     IO.puts("🧪 Simulating message for AckSender:")

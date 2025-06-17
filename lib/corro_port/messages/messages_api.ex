@@ -109,6 +109,7 @@ defmodule CorroPort.MessagesAPI do
           CorrosionClient.parse_query_response(response)
           |> Enum.map(&Map.get(&1, "region"))
           |> Enum.reject(&is_nil/1)
+
         {:ok, regions}
 
       error ->
@@ -132,36 +133,32 @@ defmodule CorroPort.MessagesAPI do
     end
   end
 
-
-
-
-
-
   # Private functions
 
   defp get_originating_endpoint_and_region do
     node_config = CorroPort.NodeConfig.app_node_config()
     region = get_current_region(node_config)
 
-    endpoint = case node_config[:environment] do
-      :prod ->
-        # In production, use the fly.io private IP with API port
-        private_ip = node_config[:private_ip] || node_config[:fly_private_ip] || "127.0.0.1"
-        ack_api_port = node_config[:ack_api_port] || 8081
+    endpoint =
+      case node_config[:environment] do
+        :prod ->
+          # In production, use the fly.io private IP with API port
+          private_ip = node_config[:private_ip] || node_config[:fly_private_ip] || "127.0.0.1"
+          ack_api_port = node_config[:ack_api_port] || 8081
 
-        if String.contains?(private_ip, ":") do
-          # IPv6 address, wrap in brackets
-          "[#{private_ip}]:#{ack_api_port}"
-        else
-          # IPv4 address
-          "#{private_ip}:#{ack_api_port}"
-        end
+          if String.contains?(private_ip, ":") do
+            # IPv6 address, wrap in brackets
+            "[#{private_ip}]:#{ack_api_port}"
+          else
+            # IPv4 address
+            "#{private_ip}:#{ack_api_port}"
+          end
 
-      _ ->
-        # In development, use localhost with calculated API port
-        ack_api_port = node_config[:ack_api_port] || 5000 + (node_config[:node_id] || 1)
-        "127.0.0.1:#{ack_api_port}"
-    end
+        _ ->
+          # In development, use localhost with calculated API port
+          ack_api_port = node_config[:ack_api_port] || 5000 + (node_config[:node_id] || 1)
+          "127.0.0.1:#{ack_api_port}"
+      end
 
     {endpoint, region}
   end
@@ -171,6 +168,7 @@ defmodule CorroPort.MessagesAPI do
       :prod ->
         # In production, get from config or environment
         node_config[:fly_region] || System.get_env("FLY_REGION") || "unknown"
+
       _ ->
         # In development
         "dev"

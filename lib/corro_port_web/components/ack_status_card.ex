@@ -3,7 +3,7 @@ defmodule CorroPortWeb.AckStatusCard do
   import CorroPortWeb.CoreComponents
 
   def ack_status_card(assigns) do
- ~H"""
+    ~H"""
     <div class="card bg-base-200">
       <div class="card-body">
         <div class="flex items-center justify-between mb-3">
@@ -13,7 +13,8 @@ defmodule CorroPortWeb.AckStatusCard do
           <.button
             :if={@ack_status && @ack_status.latest_message}
             phx-click="reset_tracking"
-            class="btn btn-xs btn-warning btn-outline">
+            class="btn btn-xs btn-warning btn-outline"
+          >
             <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Reset
           </.button>
         </div>
@@ -29,13 +30,13 @@ defmodule CorroPortWeb.AckStatusCard do
               Sent: {format_timestamp(@ack_status.latest_message.timestamp)}
             </div>
           </div>
-
-          <!-- No message being tracked -->
+          
+    <!-- No message being tracked -->
           <div :if={!@ack_status.latest_message} class="text-center text-base-content/70 py-2">
             No message currently being tracked
             <div class="text-xs mt-1">Click "Send Message" to start tracking</div>
           </div>
-
+          
     <!-- Acknowledgment Progress -->
           <div :if={@ack_status.latest_message} class="space-y-2">
             <div class="flex items-center justify-between text-sm">
@@ -44,7 +45,7 @@ defmodule CorroPortWeb.AckStatusCard do
                 {@ack_status.ack_count}/{@ack_status.expected_count}
               </span>
             </div>
-
+            
     <!-- Progress Bar -->
             <div class="w-full bg-base-300 rounded-full h-2">
               <div
@@ -56,7 +57,7 @@ defmodule CorroPortWeb.AckStatusCard do
               >
               </div>
             </div>
-
+            
     <!-- Expected Nodes -->
             <div class="space-y-1">
               <div class="text-xs font-semibold">Expected from:</div>
@@ -78,7 +79,7 @@ defmodule CorroPortWeb.AckStatusCard do
                 </span>
               </div>
             </div>
-
+            
     <!-- Recent Acknowledgments -->
             <div :if={@ack_status.acknowledgments != []} class="space-y-1">
               <div class="text-xs font-semibold">Recent acknowledgments:</div>
@@ -94,13 +95,13 @@ defmodule CorroPortWeb.AckStatusCard do
             </div>
           </div>
         </div>
-
+        
     <!-- Loading state -->
         <div :if={!@ack_status} class="flex items-center justify-center py-4">
           <div class="loading loading-spinner loading-sm"></div>
           <span class="ml-2 text-sm">Loading acknowledgment status...</span>
         </div>
-
+        
     <!-- AckSender Stats -->
         <div :if={@ack_sender_status} class="mt-4 pt-3 border-t border-base-300">
           <div class="text-xs font-semibold mb-2">AckSender Stats:</div>

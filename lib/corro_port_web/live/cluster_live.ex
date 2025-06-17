@@ -30,8 +30,10 @@ defmodule CorroPortWeb.ClusterLive do
         # Initialize region data
         active_regions: [],
         our_regions: [],
-        expected_regions: [],  # DNS-sourced expected nodes
-        ack_regions: [],       # Regions that have acknowledged latest message
+        # DNS-sourced expected nodes
+        expected_regions: [],
+        # Regions that have acknowledged latest message
+        ack_regions: [],
         # Initialize ack_status for the template conditions
         ack_status: nil,
         # CLI-related state
@@ -63,7 +65,8 @@ defmodule CorroPortWeb.ClusterLive do
 
         socket =
           socket
-          |> assign(:ack_regions, [])  # Reset ack regions since we're tracking a new message
+          # Reset ack regions since we're tracking a new message
+          |> assign(:ack_regions, [])
           |> put_flash(:info, success_message)
 
         {:noreply, socket}
@@ -119,15 +122,17 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, socket}
   end
 
-
   def handle_event("reset_tracking", _params, socket) do
     case CorroPort.AckTracker.reset_tracking() do
       :ok ->
         Logger.info("ClusterLive: ✅ Message tracking reset successfully")
+
         socket =
           socket
-          |> assign(:ack_regions, [])  # Clear the violet regions immediately
+          # Clear the violet regions immediately
+          |> assign(:ack_regions, [])
           |> put_flash(:info, "Message tracking reset - all nodes are now orange (expected)")
+
         {:noreply, socket}
 
       {:error, error} ->
@@ -174,7 +179,6 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, socket}
   end
 
-
   # Handle acknowledgment updates
   def handle_info({:ack_update, ack_status}, socket) do
     Logger.debug("ClusterLive: 🤝 Received acknowledgment update")
@@ -193,7 +197,7 @@ defmodule CorroPortWeb.ClusterLive do
 
   # Private functions
 
- defp fetch_cluster_data(socket) do
+  defp fetch_cluster_data(socket) do
     updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data()
 
     # Get region data from message activity
@@ -220,14 +224,15 @@ defmodule CorroPortWeb.ClusterLive do
     })
   end
 
-  defp extract_ack_regions_from_current_status do
-    case AckTracker.get_status() do
-      %{acknowledgments: acks} when is_list(acks) ->
-        extract_ack_regions(%{acknowledgments: acks})
-      _ ->
-        []
-    end
-  end
+  # defp extract_ack_regions_from_current_status do
+  #   case AckTracker.get_status() do
+  #     %{acknowledgments: acks} when is_list(acks) ->
+  #       extract_ack_regions(%{acknowledgments: acks})
+
+  #     _ ->
+  #       []
+  #   end
+  # end
 
   defp extract_ack_regions(ack_status) do
     ack_status
@@ -275,7 +280,9 @@ defmodule CorroPortWeb.ClusterLive do
     other_regions = Map.values(message_regions) |> Enum.reject(&(&1 == our_region)) |> Enum.uniq()
     our_regions = if our_region != "unknown", do: [our_region], else: []
 
-    Logger.debug("ClusterLive: Other regions: #{inspect(other_regions)}, Our regions: #{inspect(our_regions)}")
+    Logger.debug(
+      "ClusterLive: Other regions: #{inspect(other_regions)}, Our regions: #{inspect(our_regions)}"
+    )
 
     {other_regions, our_regions}
   end
@@ -285,7 +292,9 @@ defmodule CorroPortWeb.ClusterLive do
     |> Enum.map(fn msg ->
       node_id = Map.get(msg, "node_id")
       # First try the region field if it exists
-      region = Map.get(msg, "region") || CorroPort.CorrosionParser.extract_region_from_node_id(node_id)
+      region =
+        Map.get(msg, "region") || CorroPort.CorrosionParser.extract_region_from_node_id(node_id)
+
       {node_id, region}
     end)
     |> Enum.reject(fn {_node_id, region} -> region == "unknown" end)
@@ -304,7 +313,7 @@ defmodule CorroPortWeb.ClusterLive do
 
       <ClusterCards.error_alerts error={@error} />
 
-<!-- Enhanced World Map with Regions -->
+    <!-- Enhanced World Map with Regions -->
       <div class="card bg-base-100">
         <div class="card-body">
           <div class="flex items-center justify-between mb-4">
@@ -315,7 +324,8 @@ defmodule CorroPortWeb.ClusterLive do
               <.button
                 :if={@ack_regions != []}
                 phx-click="reset_tracking"
-                class="btn btn-xs btn-warning btn-outline">
+                class="btn btn-xs btn-warning btn-outline"
+              >
                 <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Reset
               </.button>
               <.button phx-click="refresh_dns_cache" class="btn btn-xs btn-outline">
@@ -333,7 +343,7 @@ defmodule CorroPortWeb.ClusterLive do
             />
           </div>
 
-          <!-- Real-time acknowledgment progress bar -->
+    <!-- Real-time acknowledgment progress bar -->
           <div :if={@ack_regions != [] or (@ack_status && @ack_status.latest_message)} class="mb-4">
             <div class="flex items-center justify-between text-sm mb-2">
               <span>Acknowledgment Progress:</span>
@@ -348,38 +358,42 @@ defmodule CorroPortWeb.ClusterLive do
             </div>
           </div>
 
-           <!-- Message Tracking Status -->
-      <div :if={@ack_regions != [] or (@ack_status && @ack_status.latest_message)} class="card bg-base-200 border-l-4 border-primary">
-        <div class="card-body py-3">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <.icon name="hero-radio" class="w-5 h-5 text-primary" />
-              <div>
-                <div class="font-semibold text-sm">Tracking Message Acknowledgments</div>
-                <div class="text-xs text-base-content/70">
-                  Watch the map as nodes acknowledge the message
+    <!-- Message Tracking Status -->
+          <div
+            :if={@ack_regions != [] or (@ack_status && @ack_status.latest_message)}
+            class="card bg-base-200 border-l-4 border-primary"
+          >
+            <div class="card-body py-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <.icon name="hero-radio" class="w-5 h-5 text-primary" />
+                  <div>
+                    <div class="font-semibold text-sm">Tracking Message Acknowledgments</div>
+                    <div class="text-xs text-base-content/70">
+                      Watch the map as nodes acknowledge the message
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 text-sm">
+                  <span class="badge badge-success badge-sm">
+                    {length(@ack_regions)} acknowledged
+                  </span>
+                  <span class="badge badge-warning badge-sm">
+                    {length(@expected_regions)} expected
+                  </span>
                 </div>
               </div>
             </div>
-            <div class="flex items-center gap-2 text-sm">
-              <span class="badge badge-success badge-sm">
-                {length(@ack_regions)} acknowledged
-              </span>
-              <span class="badge badge-warning badge-sm">
-                {length(@expected_regions)} expected
-              </span>
-            </div>
           </div>
-        </div>
-      </div>
 
           <div class="text-sm text-base-content/70 space-y-2">
             <div class="flex items-center">
               <!-- Our node (yellow) -->
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ffdc66;"></span>
+              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ffdc66;">
+              </span>
               Our node
               <%= if @our_regions != [] do %>
-                (<%= @our_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ") %>)
+                ({@our_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
               <% else %>
                 (region unknown)
               <% end %>
@@ -387,10 +401,11 @@ defmodule CorroPortWeb.ClusterLive do
 
             <div class="flex items-center">
               <!-- Active other nodes (blue) -->
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #77b5fe;"></span>
+              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #77b5fe;">
+              </span>
               Other active nodes
               <%= if @active_regions != [] do %>
-                (<%= @active_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ") %>)
+                ({@active_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
               <% else %>
                 (none active)
               <% end %>
@@ -398,10 +413,11 @@ defmodule CorroPortWeb.ClusterLive do
 
             <div class="flex items-center">
               <!-- Expected nodes from DNS (orange) -->
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ff8c42;"></span>
+              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ff8c42;">
+              </span>
               Expected nodes (DNS)
               <%= if @expected_regions != [] do %>
-                (<%= @expected_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ") %>)
+                ({@expected_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
               <% else %>
                 (none found)
               <% end %>
@@ -409,17 +425,21 @@ defmodule CorroPortWeb.ClusterLive do
 
             <div class="flex items-center">
               <!-- Acknowledged nodes (plasma violet) -->
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #9d4edd;"></span>
+              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #9d4edd;">
+              </span>
               Acknowledged latest message
               <%= if @ack_regions != [] do %>
-                (<%= @ack_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ") %>)
+                ({@ack_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
               <% else %>
                 (none yet)
               <% end %>
             </div>
 
-            <!-- Instructions when no message is being tracked -->
-            <div :if={@ack_regions == [] and (!@ack_status or !@ack_status.latest_message)} class="mt-3 p-3 bg-base-200 rounded-lg">
+    <!-- Instructions when no message is being tracked -->
+            <div
+              :if={@ack_regions == [] and (!@ack_status or !@ack_status.latest_message)}
+              class="mt-3 p-3 bg-base-200 rounded-lg"
+            >
               <div class="flex items-center gap-2 text-info">
                 <.icon name="hero-information-circle" class="w-4 h-4" />
                 <span class="font-semibold">Ready to track acknowledgments</span>
@@ -443,7 +463,7 @@ defmodule CorroPortWeb.ClusterLive do
         error={@error}
       />
 
-      <!-- CLI Members Section -->
+    <!-- CLI Members Section -->
       <div class="card bg-base-100">
         <div class="card-body">
           <h3 class="card-title">
@@ -451,10 +471,7 @@ defmodule CorroPortWeb.ClusterLive do
           </h3>
 
           <div class="flex items-center gap-3 mb-4">
-            <.button
-              phx-click="fetch_cli_members"
-              class="btn btn-primary btn-sm"
-            >
+            <.button phx-click="fetch_cli_members" class="btn btn-primary btn-sm">
               <.icon name="hero-command-line" class="w-4 h-4 mr-2" />
               {if @cli_members_loading, do: "Fetching...", else: "Fetch CLI Members"}
             </.button>
@@ -473,7 +490,7 @@ defmodule CorroPortWeb.ClusterLive do
             </div>
           </div>
 
-          <!-- CLI Results -->
+    <!-- CLI Results -->
           <div :if={@cli_members_data && is_list(@cli_members_data)} class="space-y-4">
             <div :if={@cli_members_data == []} class="alert alert-info">
               <.icon name="hero-information-circle" class="w-5 h-5" />
@@ -526,7 +543,7 @@ defmodule CorroPortWeb.ClusterLive do
             </div>
           </div>
 
-          <!-- Parse Error Display -->
+    <!-- Parse Error Display -->
           <div
             :if={
               @cli_members_data && is_map(@cli_members_data) &&
@@ -554,7 +571,7 @@ defmodule CorroPortWeb.ClusterLive do
             </details>
           </div>
 
-          <!-- Error Display -->
+    <!-- Error Display -->
           <div :if={@cli_members_error} class="alert alert-error">
             <.icon name="hero-exclamation-circle" class="w-5 h-5" />
             <div>
@@ -563,7 +580,7 @@ defmodule CorroPortWeb.ClusterLive do
             </div>
           </div>
 
-          <!-- Help Text -->
+    <!-- Help Text -->
           <div
             :if={!@cli_members_data && !@cli_members_error && !@cli_members_loading}
             class="text-center py-4"

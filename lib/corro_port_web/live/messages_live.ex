@@ -115,11 +115,18 @@ defmodule CorroPortWeb.MessagesLive do
     {:noreply, socket}
   end
 
-    def handle_event("reset_tracking", _params, socket) do
+  def handle_event("reset_tracking", _params, socket) do
     case CorroPort.AckTracker.reset_tracking() do
       :ok ->
         Logger.info("MessagesLive: ✅ Message tracking reset successfully")
-        socket = put_flash(socket, :info, "Message tracking reset - nodes will show as expected (orange) again")
+
+        socket =
+          put_flash(
+            socket,
+            :info,
+            "Message tracking reset - nodes will show as expected (orange) again"
+          )
+
         {:noreply, socket}
 
       {:error, error} ->
@@ -128,8 +135,6 @@ defmodule CorroPortWeb.MessagesLive do
         {:noreply, socket}
     end
   end
-
-
 
   # Private functions
   defp fetch_initial_data(socket) do
@@ -252,7 +257,7 @@ defmodule CorroPortWeb.MessagesLive do
     <div class="space-y-6">
       <!-- Navigation Tabs -->
       <NavTabs.nav_tabs active={:messages} />
-
+      
     <!-- Page Header -->
       <.header>
         Message Operations
@@ -263,7 +268,8 @@ defmodule CorroPortWeb.MessagesLive do
           <.button
             :if={@ack_status && @ack_status.latest_message}
             phx-click="reset_tracking"
-            class="btn btn-warning btn-outline">
+            class="btn btn-warning btn-outline"
+          >
             <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Reset Tracking
           </.button>
           <.button phx-click="send_message" variant="primary">
@@ -271,10 +277,10 @@ defmodule CorroPortWeb.MessagesLive do
           </.button>
         </:actions>
       </.header>
-
+      
     <!-- Acknowledgment Status -->
       <AckStatusCard.ack_status_card ack_status={@ack_status} ack_sender_status={@ack_sender_status} />
-
+      
     <!-- Connectivity Test Results -->
       <div :if={@connectivity_test_results} class="card bg-base-200">
         <div class="card-body">
@@ -292,7 +298,7 @@ defmodule CorroPortWeb.MessagesLive do
           </div>
         </div>
       </div>
-
+      
     <!-- All Messages Table -->
       <AllMessagesTable.all_messages_table
         all_messages={@all_messages}
@@ -300,7 +306,7 @@ defmodule CorroPortWeb.MessagesLive do
         messages_error={@messages_error}
         local_node_id={@local_node_id}
       />
-
+      
     <!-- Last Updated -->
       <div :if={@last_updated} class="text-xs text-base-content/70 text-center">
         Last updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}

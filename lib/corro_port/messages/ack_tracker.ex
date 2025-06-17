@@ -98,7 +98,10 @@ defmodule CorroPort.AckTracker do
     case CorroPort.DNSNodeDiscovery.get_expected_nodes() do
       {:ok, expected_nodes} ->
         :ets.insert(@table_name, {:expected_nodes, expected_nodes})
-        Logger.info("AckTracker: Expected acknowledgments from #{length(expected_nodes)} nodes: #{inspect(expected_nodes)}")
+
+        Logger.info(
+          "AckTracker: Expected acknowledgments from #{length(expected_nodes)} nodes: #{inspect(expected_nodes)}"
+        )
 
       {:error, reason} ->
         Logger.warning("AckTracker: Failed to get expected nodes from DNS: #{inspect(reason)}")
@@ -186,7 +189,6 @@ defmodule CorroPort.AckTracker do
     :ok
   end
 
-
   def member_to_node_id(member) do
     if is_map(member) do
       if CorroPort.NodeConfig.production?() do
@@ -202,7 +204,7 @@ defmodule CorroPort.AckTracker do
 
   # Private Functions
 
-    defp production_member_to_node_id(member) do
+  defp production_member_to_node_id(member) do
     # In production, we can't easily map gossip addresses back to machine IDs
     # since machine IDs are UUIDs like "91851e13e45e58"
     # For now, we'll use the gossip address IP as a unique identifier
@@ -263,7 +265,6 @@ defmodule CorroPort.AckTracker do
       _ -> nil
     end
   end
-
 
   defp clear_acknowledgments do
     :ets.match_delete(@table_name, {{:ack, :_}, :_})
