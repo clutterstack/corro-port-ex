@@ -75,9 +75,6 @@ defmodule CorroPortWeb.ClusterCards do
         <.button phx-click="send_message" variant="primary">
           <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" /> Send Message
         </.button>
-        <.button phx-click="refresh" class="btn btn-outline">
-          <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Fetch cluster data
-        </.button>
       </:actions>
     </.header>
     """

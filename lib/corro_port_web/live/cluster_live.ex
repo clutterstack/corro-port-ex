@@ -8,44 +8,56 @@ defmodule CorroPortWeb.ClusterLive do
   # 5 minutes refresh interval
   @refresh_interval 300_000
 
-  def mount(_params, _session, socket) do
-    # Subscribe to acknowledgment updates
-    if connected?(socket) do
-      Phoenix.PubSub.subscribe(CorroPort.PubSub, AckTracker.get_pubsub_topic())
-    end
+# For ClusterLive mount function - add back the phoenix_port and corro_api_port:
 
-    phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
-
-    socket =
-      assign(socket, %{
-        page_title: "Cluster Status",
-        cluster_info: nil,
-        local_info: nil,
-        node_messages: [],
-        error: nil,
-        last_updated: nil,
-        corro_api_port: CorroPort.CorrosionClient.get_corro_api_port(),
-        phoenix_port: phoenix_port,
-        refresh_interval: @refresh_interval,
-        # Initialize region data
-        active_regions: [],
-        our_regions: [],
-        # DNS-sourced expected nodes
-        expected_regions: [],
-        # Regions that have acknowledged latest message
-        ack_regions: [],
-        # Initialize ack_status for the template conditions
-        ack_status: nil,
-        # CLI-related state
-        cli_members_task: nil,
-        cli_members_data: nil,
-        cli_members_loading: false,
-        cli_members_error: nil
-      })
-
-    {:ok, fetch_cluster_data(socket)}
+def mount(_params, _session, socket) do
+  # Subscribe to acknowledgment updates
+  if connected?(socket) do
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, AckTracker.get_pubsub_topic())
   end
 
+  phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
+
+  socket =
+    assign(socket, %{
+      page_title: "Cluster Status",
+
+      # NEW: Clear node sets based on different sources
+      expected_nodes: [],        # From DNS
+      expected_regions: [],      # Regions from DNS nodes
+      active_members: [],        # From CLI
+      active_regions: [],        # Regions from CLI members
+      our_regions: [],          # Our local region
+      ack_regions: [],          # Regions that acknowledged latest message
+
+      # CLI state tracking
+      cli_error: nil,           # Error from CLI call
+      cli_members_stale: false, # Whether CLI data is old due to error
+
+      # Keep basic cluster info for debugging
+      cluster_info: nil,
+      local_info: nil,
+      node_messages: [],        # ClusterLive needs this for messages table
+
+      # Keep these for the existing components that still need them
+      phoenix_port: phoenix_port,
+      corro_api_port: CorroPort.CorrosionClient.get_corro_api_port(),
+      refresh_interval: @refresh_interval,
+
+      # General state
+      error: nil,
+      last_updated: nil,
+      ack_status: nil,
+
+      # Keep CLI-related state for manual CLI fetch functionality:
+      cli_members_task: nil,
+      cli_members_data: nil,
+      cli_members_loading: false,
+      cli_members_error: nil
+    })
+
+  {:ok, fetch_cluster_data(socket)}
+end
   # Event handlers
 
   def handle_event("send_message", _params, socket) do
@@ -198,32 +210,36 @@ defmodule CorroPortWeb.ClusterLive do
   # Private functions
 
   defp fetch_cluster_data(socket) do
-    updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data()
+  # For ClusterLive, we need the version with messages for the messages table
+  updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data_with_messages()
 
-    # Get region data from message activity
-    {active_regions, our_regions} = get_cluster_regions(updates)
+  # Extract region data using the new helper
+  {expected_regions, active_regions, our_regions} = CorroPortWeb.RegionHelper.extract_cluster_regions(updates)
 
-    # Get expected regions from DNS discovery
-    expected_regions = get_expected_regions_from_dns()
+  # Get current acknowledgment status
+  ack_status = CorroPort.AckTracker.get_status()
+  ack_regions = CorroPortWeb.RegionHelper.extract_ack_regions(ack_status)
 
-    # Get acknowledgment regions and status
-    ack_status = CorroPort.AckTracker.get_status()
-    ack_regions = extract_ack_regions(ack_status)
+  # Determine if CLI data is stale
+  cli_members_stale = !is_nil(updates.cli_error) && updates.active_members != []
 
-    assign(socket, %{
-      cluster_info: updates.cluster_info,
-      local_info: updates.local_info,
-      node_messages: updates.node_messages,
-      error: updates.error,
-      last_updated: updates.last_updated,
-      active_regions: active_regions,
-      our_regions: our_regions,
-      expected_regions: expected_regions,
-      ack_regions: ack_regions,
-      ack_status: ack_status
-    })
-  end
-
+  assign(socket, %{
+    expected_nodes: updates.expected_nodes,
+    expected_regions: expected_regions,
+    active_members: updates.active_members,
+    active_regions: active_regions,
+    our_regions: our_regions,
+    ack_regions: ack_regions,
+    ack_status: ack_status,
+    cluster_info: updates.cluster_info,
+    local_info: updates.local_info,
+    node_messages: updates.node_messages,  # Only ClusterLive gets this
+    cli_error: updates.cli_error,
+    cli_members_stale: cli_members_stale,
+    error: updates.error,
+    last_updated: updates.last_updated
+  })
+end
   # defp extract_ack_regions_from_current_status do
   #   case AckTracker.get_status() do
   #     %{acknowledgments: acks} when is_list(acks) ->
