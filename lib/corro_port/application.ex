@@ -16,6 +16,7 @@ defmodule CorroPort.Application do
        }},
       # Corrosion integration
       CorroPort.CorroSubscriber,
+      CorroPort.DNSNodeDiscovery,
       CorroPort.AckTracker,
       CorroPort.AckSender,
       # Main web endpoint
