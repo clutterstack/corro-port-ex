@@ -22,6 +22,9 @@ defmodule CorroPortWeb.ClusterLive do
         corro_api_port: CorroPort.CorrosionClient.get_corro_api_port(),
         phoenix_port: phoenix_port,
         refresh_interval: @refresh_interval,
+        # Initialize region data
+        active_regions: [],
+        our_regions: [],
         # CLI-related state
         cli_members_task: nil,
         cli_members_data: nil,
@@ -113,18 +116,7 @@ defmodule CorroPortWeb.ClusterLive do
   end
 
 
-  # Private functions
-  defp fetch_cluster_data(socket) do
-    updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data()
-
-    assign(socket, %{
-      cluster_info: updates.cluster_info,
-      local_info: updates.local_info,
-      node_messages: updates.node_messages,
-      error: updates.error,
-      last_updated: updates.last_updated
-    })
-  end
+# Private functions
 
 
 defp fetch_cluster_data(socket) do

@@ -384,8 +384,7 @@ defmodule CorroPort.CorrosionParser do
   def extract_region_from_node_id(node_id) do
     valid_fly_regions = CorroPort.CityData.valid_fly_regions()
     # Try to extract from node_id if it follows region-machine pattern
-    with true <- is_binary(node_id),
-        [region, _] <- String.split(node_id, "-", parts: 2) do
+    with [region, _] <- String.split(node_id, "-", parts: 2) do
           if region in valid_fly_regions or region == "dev" do
             region
           else
@@ -399,7 +398,5 @@ defmodule CorroPort.CorrosionParser do
       end
     end
   end
-
-  def extract_region_from_node_id(_), do: "unknown"
 
 end

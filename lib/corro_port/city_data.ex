@@ -85,6 +85,10 @@ defmodule CorroPort.CityData do
     "your computer"
   end
 
+  def valid_fly_regions do
+    Map.keys(@cities) |> Enum.map(&Atom.to_string/1)
+  end
+
   def cities do
     @cities
   end
