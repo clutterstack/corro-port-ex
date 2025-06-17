@@ -33,25 +33,25 @@ defmodule CorroPort.NodeConfig do
     config[:corrosion_binary]
   end
 
-  @doc """
+ @doc """
   Gets the Corrosion node identifier (used in logs and for debugging).
-  In production, uses the FLY_MACHINE_ID for readability.
+  In production, uses the region-machine_id format for proper region identification.
   In development, uses the pattern "nodeN" where N is the node_id.
   """
   def get_corrosion_node_id do
-  config = app_node_config()
-  environment = config[:environment] || :dev
+    config = app_node_config()
+    environment = config[:environment] || :dev
 
-  case environment do
-    :prod ->
-      # In production, use the actual machine ID for readability
-      config[:fly_machine_id] || config[:node_id] || "unknown"
+    case environment do
+      :prod ->
+        # In production, use the full node_id which includes region prefix
+        config[:node_id] || config[:fly_machine_id] || "unknown"
 
-    _ ->
-      # In development, use the configured node_id directly
-      config[:node_id] || "unknown"
+      _ ->
+        # In development, use the configured node_id directly
+        config[:node_id] || "unknown"
+    end
   end
-end
 
   @doc """
   Gets the Corrosion API port from the application environment.
