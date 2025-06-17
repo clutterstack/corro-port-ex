@@ -46,7 +46,37 @@ defmodule CorroPortWeb.ClusterCards do
           <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" /> Send Message
         </.button>
         <.button phx-click="refresh" class="btn btn-outline">
-          <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Refresh
+          <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Fetch cluster data
+        </.button>
+      </:actions>
+    </.header>
+    """
+  end
+
+  def index_header(assigns) do
+    ~H"""
+    <.header>
+      <.icon name="hero-globe-alt" class="w-5 h-5 mr-2" /> Geographic Distribution
+      <:subtitle>
+        <div class="flex items-center gap-4">
+          <span>Watch changes propagate across the map</span>
+        </div>
+      </:subtitle>
+      <:actions>
+        <.button phx-click="refresh_dns_cache" class="btn btn-xs btn-outline">
+          <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Refresh DNS
+        </.button>
+        <.button
+          phx-click="reset_tracking"
+          class="btn btn-warning btn-outline"
+        >
+          <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Reset Tracking
+        </.button>
+        <.button phx-click="send_message" variant="primary">
+          <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" /> Send Message
+        </.button>
+        <.button phx-click="refresh" class="btn btn-outline">
+          <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Fetch cluster data
         </.button>
       </:actions>
     </.header>

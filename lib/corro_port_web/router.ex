@@ -13,7 +13,7 @@ defmodule CorroPortWeb.Router do
   scope "/", CorroPortWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live "/", IndexLive
     live "/cluster", ClusterLive
     live "/node", NodeLive
     live "/messages", MessagesLive
