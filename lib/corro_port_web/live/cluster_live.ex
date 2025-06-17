@@ -3,7 +3,7 @@ defmodule CorroPortWeb.ClusterLive do
   require Logger
 
   alias CorroPortWeb.{ClusterCards, MembersTable, DebugSection, NavTabs}
-  alias CorroPort.CorrosionCLI
+  alias CorroPort.{CorrosionCLI, DNSNodeDiscovery}
 
   # 5 minutes refresh interval
   @refresh_interval 300_000
@@ -25,6 +25,7 @@ defmodule CorroPortWeb.ClusterLive do
         # Initialize region data
         active_regions: [],
         our_regions: [],
+        expected_regions: [],  # New: DNS-sourced expected nodes
         # CLI-related state
         cli_members_task: nil,
         cli_members_data: nil,
@@ -47,9 +48,6 @@ defmodule CorroPortWeb.ClusterLive do
     # Start the async task
     task = CorrosionCLI.cluster_members_async()
 
-    # Schedule a check for task completion
-    # Process.send_after(self(), :check_cli_task, 100)
-
     socket =
       socket
       |> assign(:cli_members_task, task)
@@ -71,10 +69,22 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, socket}
   end
 
+  def handle_event("refresh_dns_cache", _params, socket) do
+    Logger.debug("ClusterLive: 🌐 DNS cache refresh triggered")
+
+    DNSNodeDiscovery.refresh_cache()
+
+    socket =
+      socket
+      |> fetch_cluster_data()
+      |> put_flash(:info, "DNS cache refreshed")
+
+    {:noreply, socket}
+  end
+
   # handle
   def handle_info({task_ref, {:ok, raw_output}}, socket) do
-    Logger.debug("handling \{:ok, #{inspect(raw_output)}\} from task #{inspect(task_ref)}")
-    # CorroPort.CorrosionParser.parse_cluster_members(raw_output) |> dbg
+    Logger.debug("handling {:ok, #{inspect(raw_output)}} from task #{inspect(task_ref)}")
 
     # Use the dedicated parser
     parsed_result =
@@ -115,64 +125,83 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, socket}
   end
 
+  # Private functions
 
-# Private functions
+  defp fetch_cluster_data(socket) do
+    updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data()
 
+    # Get region data from message activity
+    {active_regions, our_regions} = get_cluster_regions(updates)
 
-defp fetch_cluster_data(socket) do
-  updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data()
+    # Get expected regions from DNS discovery
+    expected_regions = get_expected_regions_from_dns()
 
-  # Get region data
-  {active_regions, our_regions} = get_cluster_regions(updates)
+    assign(socket, %{
+      cluster_info: updates.cluster_info,
+      local_info: updates.local_info,
+      node_messages: updates.node_messages,
+      error: updates.error,
+      last_updated: updates.last_updated,
+      active_regions: active_regions,
+      our_regions: our_regions,
+      expected_regions: expected_regions
+    })
+  end
 
-  assign(socket, %{
-    cluster_info: updates.cluster_info,
-    local_info: updates.local_info,
-    node_messages: updates.node_messages,
-    error: updates.error,
-    last_updated: updates.last_updated,
-    active_regions: active_regions,
-    our_regions: our_regions
-  })
-end
+  defp get_expected_regions_from_dns do
+    case DNSNodeDiscovery.get_expected_nodes() do
+      {:ok, expected_nodes} ->
+        # Extract regions from node IDs like "region-machine_id"
+        regions =
+          expected_nodes
+          |> Enum.map(&CorroPort.CorrosionParser.extract_region_from_node_id/1)
+          |> Enum.reject(&(&1 == "unknown"))
+          |> Enum.uniq()
 
-# Add this to your cluster_live.ex in get_cluster_regions/1
+        Logger.debug("ClusterLive: Expected regions from DNS: #{inspect(regions)}")
+        regions
 
-defp get_cluster_regions(updates) do
-  # Get regions from recent message activity
-  message_regions = get_regions_from_messages(updates.node_messages)
+      {:error, reason} ->
+        Logger.debug("ClusterLive: Failed to get expected nodes from DNS: #{inspect(reason)}")
+        []
+    end
+  end
 
-  # Debug: log what we found
-  Logger.debug("ClusterLive: Message regions: #{inspect(message_regions)}")
+  defp get_cluster_regions(updates) do
+    # Get regions from recent message activity
+    message_regions = get_regions_from_messages(updates.node_messages)
 
-  # Get our local region
-  local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
-  our_region = CorroPort.CorrosionParser.extract_region_from_node_id(local_node_id)
+    # Debug: log what we found
+    Logger.debug("ClusterLive: Message regions: #{inspect(message_regions)}")
 
-  Logger.debug("ClusterLive: Local node_id: #{local_node_id}, extracted region: #{our_region}")
+    # Get our local region
+    local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
+    our_region = CorroPort.CorrosionParser.extract_region_from_node_id(local_node_id)
 
-  # Combine all active regions (excluding our own for separate display)
-  other_regions = Map.values(message_regions) |> Enum.reject(&(&1 == our_region)) |> Enum.uniq()
-  our_regions = if our_region != "unknown", do: [our_region], else: []
+    Logger.debug("ClusterLive: Local node_id: #{local_node_id}, extracted region: #{our_region}")
 
-  Logger.debug("ClusterLive: Other regions: #{inspect(other_regions)}, Our regions: #{inspect(our_regions)}")
+    # Combine all active regions (excluding our own for separate display)
+    other_regions = Map.values(message_regions) |> Enum.reject(&(&1 == our_region)) |> Enum.uniq()
+    our_regions = if our_region != "unknown", do: [our_region], else: []
 
-  {other_regions, our_regions}
-end
+    Logger.debug("ClusterLive: Other regions: #{inspect(other_regions)}, Our regions: #{inspect(our_regions)}")
 
-defp get_regions_from_messages(messages) when is_list(messages) do
-  messages
-  |> Enum.map(fn msg ->
-    node_id = Map.get(msg, "node_id")
-    # First try the region field if it exists
-    region = Map.get(msg, "region") || CorroPort.CorrosionParser.extract_region_from_node_id(node_id)
-    {node_id, region}
-  end)
-  |> Enum.reject(fn {_node_id, region} -> region == "unknown" end)
-  |> Enum.into(%{})
-end
+    {other_regions, our_regions}
+  end
 
-defp get_regions_from_messages(_), do: %{}
+  defp get_regions_from_messages(messages) when is_list(messages) do
+    messages
+    |> Enum.map(fn msg ->
+      node_id = Map.get(msg, "node_id")
+      # First try the region field if it exists
+      region = Map.get(msg, "region") || CorroPort.CorrosionParser.extract_region_from_node_id(node_id)
+      {node_id, region}
+    end)
+    |> Enum.reject(fn {_node_id, region} -> region == "unknown" end)
+    |> Enum.into(%{})
+  end
+
+  defp get_regions_from_messages(_), do: %{}
 
   def render(assigns) do
     ~H"""
@@ -183,42 +212,62 @@ defp get_regions_from_messages(_), do: %{}
       <ClusterCards.cluster_header_simple />
       <ClusterCards.error_alerts error={@error} />
 
-   <!-- World Map with Regions -->
-<div class="card bg-base-100">
-  <div class="card-body">
-    <h3 class="card-title">
-      <.icon name="hero-globe-alt" class="w-5 h-5 mr-2" /> Geographic Distribution
-    </h3>
-    <div class="rounded-lg border">
-      <CorroPortWeb.WorldMap.world_map_svg
-        regions={@active_regions}
-        our_regions={@our_regions}
-      />
-    </div>
-    <div class="text-sm text-base-content/70 flex items-center justify-between">
-      <div class="flex items-center">
-        <!-- Use the actual SVG color for our node -->
-        <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ffdc66;"></span>
-        Our node
-        <%= if @our_regions != [] do %>
-          (<%= @our_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ") %>)
-        <% else %>
-          (region unknown)
-        <% end %>
+      <!-- World Map with Regions -->
+      <div class="card bg-base-100">
+        <div class="card-body">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="card-title">
+              <.icon name="hero-globe-alt" class="w-5 h-5 mr-2" /> Geographic Distribution
+            </h3>
+            <.button phx-click="refresh_dns_cache" class="btn btn-xs btn-outline">
+              <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Refresh DNS
+            </.button>
+          </div>
+
+          <div class="rounded-lg border">
+            <CorroPortWeb.WorldMap.world_map_svg
+              regions={@active_regions}
+              our_regions={@our_regions}
+              expected_regions={@expected_regions}
+            />
+          </div>
+
+          <div class="text-sm text-base-content/70 space-y-2">
+            <div class="flex items-center">
+              <!-- Our node (yellow) -->
+              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ffdc66;"></span>
+              Our node
+              <%= if @our_regions != [] do %>
+                (<%= @our_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ") %>)
+              <% else %>
+                (region unknown)
+              <% end %>
+            </div>
+
+            <div class="flex items-center">
+              <!-- Active other nodes (blue) -->
+              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #77b5fe;"></span>
+              Other active nodes
+              <%= if @active_regions != [] do %>
+                (<%= @active_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ") %>)
+              <% else %>
+                (none active)
+              <% end %>
+            </div>
+
+            <div class="flex items-center">
+              <!-- Expected nodes from DNS (orange) -->
+              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ff8c42;"></span>
+              Expected nodes (DNS)
+              <%= if @expected_regions != [] do %>
+                (<%= @expected_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ") %>)
+              <% else %>
+                (none found)
+              <% end %>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="flex items-center">
-        <!-- Use the actual SVG color for other nodes -->
-        <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #77b5fe;"></span>
-        Other cluster nodes
-        <%= if @active_regions != [] do %>
-          (<%= @active_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ") %>)
-        <% else %>
-          (none active)
-        <% end %>
-      </div>
-    </div>
-  </div>
-</div>
 
       <ClusterCards.status_cards_simple
         local_info={@local_info}
@@ -231,7 +280,7 @@ defp get_regions_from_messages(_), do: %{}
         error={@error}
       />
 
-    <!-- CLI Members Section -->
+      <!-- CLI Members Section -->
       <div class="card bg-base-100">
         <div class="card-body">
           <h3 class="card-title">
@@ -261,7 +310,7 @@ defp get_regions_from_messages(_), do: %{}
             </div>
           </div>
 
-    <!-- CLI Results -->
+          <!-- CLI Results -->
           <div :if={@cli_members_data && is_list(@cli_members_data)} class="space-y-4">
             <div :if={@cli_members_data == []} class="alert alert-info">
               <.icon name="hero-information-circle" class="w-5 h-5" />
@@ -314,7 +363,7 @@ defp get_regions_from_messages(_), do: %{}
             </div>
           </div>
 
-    <!-- Parse Error Display -->
+          <!-- Parse Error Display -->
           <div
             :if={
               @cli_members_data && is_map(@cli_members_data) &&
@@ -342,7 +391,7 @@ defp get_regions_from_messages(_), do: %{}
             </details>
           </div>
 
-    <!-- Error Display -->
+          <!-- Error Display -->
           <div :if={@cli_members_error} class="alert alert-error">
             <.icon name="hero-exclamation-circle" class="w-5 h-5" />
             <div>
@@ -351,7 +400,7 @@ defp get_regions_from_messages(_), do: %{}
             </div>
           </div>
 
-    <!-- Help Text -->
+          <!-- Help Text -->
           <div
             :if={!@cli_members_data && !@cli_members_error && !@cli_members_loading}
             class="text-center py-4"
@@ -378,19 +427,4 @@ defp get_regions_from_messages(_), do: %{}
     </div>
     """
   end
-
-  # Helper function for timestamp formatting
-  # defp format_timestamp(nil), do: "Never"
-
-  # defp format_timestamp(ts) when is_integer(ts) do
-  #   # Corrosion timestamps are often in nanoseconds
-  #   seconds = div(ts, 1_000_000_000)
-
-  #   case DateTime.from_unix(seconds) do
-  #     {:ok, dt} -> Calendar.strftime(dt, "%m-%d %H:%M:%S")
-  #     _ -> "Invalid"
-  #   end
-  # end
-
-  # defp format_timestamp(_), do: "Unknown"
 end
