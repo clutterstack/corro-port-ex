@@ -39,19 +39,19 @@ defmodule CorroPort.NodeConfig do
   In development, uses the pattern "nodeN" where N is the node_id.
   """
   def get_corrosion_node_id do
-    config = app_node_config()
-    environment = config[:environment] || :dev
+  config = app_node_config()
+  environment = config[:environment] || :dev
 
-    case environment do
-      :prod ->
-        # In production, use the actual machine ID for readability
-        config[:fly_machine_id] || config[:node_id] || "unknown"
+  case environment do
+    :prod ->
+      # In production, use the actual machine ID for readability
+      config[:fly_machine_id] || config[:node_id] || "unknown"
 
-      _ ->
-        # In development, use the familiar nodeN pattern
-        "node#{config[:node_id]}"
-    end
+    _ ->
+      # In development, use the configured node_id directly
+      config[:node_id] || "unknown"
   end
+end
 
   @doc """
   Gets the Corrosion API port from the application environment.

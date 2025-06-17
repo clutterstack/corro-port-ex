@@ -180,8 +180,8 @@ defmodule CorroPort.CorrosionCLI do
     # Convert to absolute path to help with path resolution
     abs_binary_path = Path.absname(binary_path)
 
-    Logger.debug("CorrosionCLI: Current working directory: #{File.cwd!()}")
-    Logger.debug("CorrosionCLI: Full command: #{abs_binary_path} #{Enum.join(args, " ")}")
+    # Logger.debug("CorrosionCLI: Current working directory: #{File.cwd!()}")
+    # Logger.debug("CorrosionCLI: Full command: #{abs_binary_path} #{Enum.join(args, " ")}")
 
     try do
       # Use System.cmd with basic options (no timeout for now)
