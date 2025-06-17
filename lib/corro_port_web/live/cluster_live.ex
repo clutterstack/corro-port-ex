@@ -3,12 +3,17 @@ defmodule CorroPortWeb.ClusterLive do
   require Logger
 
   alias CorroPortWeb.{ClusterCards, MembersTable, DebugSection, NavTabs}
-  alias CorroPort.{CorrosionCLI, DNSNodeDiscovery}
+  alias CorroPort.{CorrosionCLI, DNSNodeDiscovery, AckTracker}
 
   # 5 minutes refresh interval
   @refresh_interval 300_000
 
   def mount(_params, _session, socket) do
+    # Subscribe to acknowledgment updates
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(CorroPort.PubSub, AckTracker.get_pubsub_topic())
+    end
+
     phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
 
     socket =
@@ -25,7 +30,8 @@ defmodule CorroPortWeb.ClusterLive do
         # Initialize region data
         active_regions: [],
         our_regions: [],
-        expected_regions: [],  # New: DNS-sourced expected nodes
+        expected_regions: [],  # DNS-sourced expected nodes
+        ack_regions: [],       # NEW: Regions that have acknowledged latest message
         # CLI-related state
         cli_members_task: nil,
         cli_members_data: nil,
@@ -34,6 +40,16 @@ defmodule CorroPortWeb.ClusterLive do
       })
 
     {:ok, fetch_cluster_data(socket)}
+  end
+
+  # Handle acknowledgment updates
+  def handle_info({:ack_update, ack_status}, socket) do
+    Logger.debug("ClusterLive: 🤝 Received acknowledgment update")
+
+    ack_regions = extract_ack_regions(ack_status)
+
+    socket = assign(socket, :ack_regions, ack_regions)
+    {:noreply, socket}
   end
 
   # Event handlers
@@ -82,7 +98,7 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, socket}
   end
 
-  # handle
+  # handle CLI task completion
   def handle_info({task_ref, {:ok, raw_output}}, socket) do
     Logger.debug("handling {:ok, #{inspect(raw_output)}} from task #{inspect(task_ref)}")
 
@@ -119,7 +135,7 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, socket}
   end
 
-  # handle
+  # handle task process cleanup
   def handle_info({:DOWN, ref, :process, _pid, :normal}, socket) do
     Logger.info("Handled :DOWN message from #{inspect(ref)}")
     {:noreply, socket}
@@ -136,6 +152,9 @@ defmodule CorroPortWeb.ClusterLive do
     # Get expected regions from DNS discovery
     expected_regions = get_expected_regions_from_dns()
 
+    # Get acknowledgment regions (initially empty, will be updated via PubSub)
+    ack_regions = extract_ack_regions_from_current_status()
+
     assign(socket, %{
       cluster_info: updates.cluster_info,
       local_info: updates.local_info,
@@ -144,8 +163,28 @@ defmodule CorroPortWeb.ClusterLive do
       last_updated: updates.last_updated,
       active_regions: active_regions,
       our_regions: our_regions,
-      expected_regions: expected_regions
+      expected_regions: expected_regions,
+      ack_regions: ack_regions
     })
+  end
+
+  defp extract_ack_regions_from_current_status do
+    case AckTracker.get_status() do
+      %{acknowledgments: acks} when is_list(acks) ->
+        extract_ack_regions(%{acknowledgments: acks})
+      _ ->
+        []
+    end
+  end
+
+  defp extract_ack_regions(ack_status) do
+    ack_status
+    |> Map.get(:acknowledgments, [])
+    |> Enum.map(fn ack ->
+      CorroPort.CorrosionParser.extract_region_from_node_id(ack.node_id)
+    end)
+    |> Enum.reject(&(&1 == "unknown"))
+    |> Enum.uniq()
   end
 
   defp get_expected_regions_from_dns do
@@ -229,6 +268,7 @@ defmodule CorroPortWeb.ClusterLive do
               regions={@active_regions}
               our_regions={@our_regions}
               expected_regions={@expected_regions}
+              ack_regions={@ack_regions}
             />
           </div>
 
@@ -263,6 +303,17 @@ defmodule CorroPortWeb.ClusterLive do
                 (<%= @expected_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ") %>)
               <% else %>
                 (none found)
+              <% end %>
+            </div>
+
+            <div class="flex items-center">
+              <!-- Acknowledged nodes (plasma violet) -->
+              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #9d4edd;"></span>
+              Acknowledged latest message
+              <%= if @ack_regions != [] do %>
+                (<%= @ack_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ") %>)
+              <% else %>
+                (none yet)
               <% end %>
             </div>
           </div>

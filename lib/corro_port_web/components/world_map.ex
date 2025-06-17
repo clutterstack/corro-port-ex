@@ -20,6 +20,10 @@ defmodule CorroPortWeb.WorldMap do
   attr :muted, :string, default: "#DAA520"
   attr :dull, :string, default: "#add3ff" #"#b58b22"
   attr :bright, :string, default: "#ffdc66"
+  attr :regions, :list, default: []          # Active other regions (blue)
+  attr :our_regions, :list, default: []     # Our node regions (yellow)
+  attr :expected_regions, :list, default: [] # Expected regions from DNS (orange)
+  attr :ack_regions, :list, default: []     # Regions that acknowledged latest message (plasma violet)
 
   # Render the world map SVG
   def world_map_svg(assigns) do
@@ -32,6 +36,20 @@ defmodule CorroPortWeb.WorldMap do
           <stop offset="60%" stop-color="#77b5fe" stop-opacity="1"/>
           <stop offset="80%" stop-color="#77b5fe" stop-opacity="0.6"/>
           <stop offset="100%" stop-color="#77b5fe" stop-opacity="0.2"/>
+        </radialGradient>
+
+        <!-- Radial gradient for orange markers (DNS expected regions) -->
+        <radialGradient id="orangeRadial" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+          <stop offset="60%" stop-color="#ff8c42" stop-opacity="1"/>
+          <stop offset="80%" stop-color="#ff8c42" stop-opacity="0.6"/>
+          <stop offset="100%" stop-color="#ff8c42" stop-opacity="0.2"/>
+        </radialGradient>
+
+        <!-- Radial gradient for plasma violet markers (acknowledged regions) -->
+        <radialGradient id="violetRadial" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+          <stop offset="60%" stop-color="#9d4edd" stop-opacity="1"/>
+          <stop offset="80%" stop-color="#9d4edd" stop-opacity="0.7"/>
+          <stop offset="100%" stop-color="#9d4edd" stop-opacity="0.3"/>
         </radialGradient>
       </defs>
 
@@ -90,8 +108,7 @@ defmodule CorroPortWeb.WorldMap do
       <% end %>
 
       <%= for {x, y} <- coords(@our_regions) do %>
-
-      <!-- Outer gradient circle with animation -->
+        <!-- Outer gradient circle with animation for our node -->
         <circle
           cx={x}
           cy={y}
@@ -99,7 +116,28 @@ defmodule CorroPortWeb.WorldMap do
           fill="url(#blueRadial)">
           <animate attributeName="r" values="8;12;8" dur="3s" repeatCount="indefinite" />
         </circle>
+      <% end %>
 
+      <%= for {x, y} <- coords(@expected_regions) do %>
+        <!-- Orange circles for expected regions from DNS -->
+        <circle
+          cx={x}
+          cy={y}
+          stroke="none"
+          fill="url(#orangeRadial)">
+          <animate attributeName="r" values="6;10;6" dur="4s" repeatCount="indefinite" />
+        </circle>
+      <% end %>
+
+      <%= for {x, y} <- coords(@ack_regions) do %>
+        <!-- Plasma violet circles for regions that acknowledged latest message -->
+        <circle
+          cx={x}
+          cy={y}
+          stroke="none"
+          fill="url(#violetRadial)">
+          <animate attributeName="r" values="7;11;7" dur="2s" repeatCount="indefinite" />
+        </circle>
       <% end %>
 
     </svg>
@@ -119,17 +157,17 @@ defmodule CorroPortWeb.WorldMap do
 
 
   def city_to_svg("unknown", _bbox) do
-  {-1, -1}
-end
-
-def city_to_svg(city, bbox) when city != "unknown" do
-  case CorroPort.CityData.get_coordinates(city) do
-    {long, lat} -> wgs84_to_svg({long, lat}, bbox)
-    nil ->
-      Logger.warning("WorldMap: Region '#{city}' not found in cities map")
-      {-1, -1}  # Return off-screen coordinates
+    {-1, -1}
   end
-end
+
+  def city_to_svg(city, bbox) when city != "unknown" do
+    case CorroPort.CityData.get_coordinates(city) do
+      {long, lat} -> wgs84_to_svg({long, lat}, bbox)
+      nil ->
+        Logger.warning("WorldMap: Region '#{city}' not found in cities map")
+        {-1, -1}  # Return off-screen coordinates
+    end
+  end
 
   def all_regions_with_coords() do
     for {city, coords} <- cities() do
