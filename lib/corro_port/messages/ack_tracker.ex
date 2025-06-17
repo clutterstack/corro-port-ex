@@ -34,6 +34,14 @@ defmodule CorroPort.AckTracker do
   end
 
   @doc """
+  Reset tracking - clears the latest message and all acknowledgments.
+  This will cause all nodes to show as "expected" (orange) again.
+  """
+  def reset_tracking do
+    GenServer.call(__MODULE__, :reset_tracking)
+  end
+
+  @doc """
   Get the current tracking status.
   """
   def get_status do
@@ -128,6 +136,21 @@ defmodule CorroPort.AckTracker do
     end
   end
 
+  def handle_call(:reset_tracking, _from, state) do
+    Logger.info("AckTracker: Resetting message tracking")
+
+    # Clear the latest message
+    :ets.delete(@table_name, :latest_message)
+
+    # Clear all acknowledgments
+    clear_acknowledgments()
+
+    # Broadcast the update (this will show no message being tracked)
+    broadcast_update()
+
+    {:reply, :ok, state}
+  end
+
   def handle_call(:get_status, _from, state) do
     status = build_status()
     {:reply, status, state}
@@ -163,7 +186,84 @@ defmodule CorroPort.AckTracker do
     :ok
   end
 
+
+  def member_to_node_id(member) do
+    if is_map(member) do
+      if CorroPort.NodeConfig.production?() do
+        production_member_to_node_id(member)
+      else
+        development_member_to_node_id(member)
+      end
+    else
+      Logger.warning("AckTracker.member_to_node_id: member has to be a map")
+      ""
+    end
+  end
+
   # Private Functions
+
+    defp production_member_to_node_id(member) do
+    # In production, we can't easily map gossip addresses back to machine IDs
+    # since machine IDs are UUIDs like "91851e13e45e58"
+    # For now, we'll use the gossip address IP as a unique identifier
+    case Map.get(member, "display_addr") || get_in(member, ["state", "addr"]) do
+      addr when is_binary(addr) ->
+        case String.split(addr, ":") do
+          [ip, _port] ->
+            # Use the last part of the IPv6 address as a readable identifier
+            case String.split(ip, ":") do
+              parts when length(parts) > 1 ->
+                # Take last 2 parts of IPv6 address
+                suffix = parts |> Enum.take(-2) |> Enum.join(":")
+                "machine-#{suffix}"
+
+              _ ->
+                "machine-#{ip}"
+            end
+
+          _ ->
+            nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp development_member_to_node_id(member) do
+    # In development, extract node ID from the member's gossip address
+    case Map.get(member, "display_addr") || get_in(member, ["state", "addr"]) do
+      addr when is_binary(addr) ->
+        case String.split(addr, ":") do
+          [_ip, port_str] ->
+            case Integer.parse(port_str) do
+              {port, _} -> gossip_port_to_node_id(port)
+              _ -> nil
+            end
+
+          _ ->
+            nil
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  # Convert gossip port to node ID using our standard mapping (development only)
+  defp gossip_port_to_node_id(port) do
+    case port do
+      8787 -> "node1"
+      8788 -> "node2"
+      8789 -> "node3"
+      8790 -> "node4"
+      8791 -> "node5"
+      # General formula for higher node numbers
+      p when p > 8786 -> "node#{p - 8786}"
+      _ -> nil
+    end
+  end
+
 
   defp clear_acknowledgments do
     :ets.match_delete(@table_name, {{:ack, :_}, :_})
