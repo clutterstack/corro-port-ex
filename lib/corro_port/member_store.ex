@@ -114,8 +114,14 @@ defmodule CorroPort.ClusterMemberStore do
   def handle_info({task_ref, {:ok, raw_output}}, %{fetch_task: {task_ref, _}} = state) do
     Logger.debug("ClusterMemberStore: CLI fetch completed successfully")
 
+    # Ensure we never pass nil to the parser - convert nil to empty string
+    # This handles the case where System.cmd might unexpectedly return nil
+    normalized_output = raw_output || ""
+
+    Logger.debug("ClusterMemberStore: Raw output type: #{inspect(raw_output)} -> #{inspect(normalized_output)}")
+
     # Parse the output
-    {members, error} = parse_cli_output(raw_output)
+    {members, error} = parse_cli_output(normalized_output)
 
     # Determine status: single node setup is OK, not an error
     status = cond do
@@ -226,7 +232,7 @@ defmodule CorroPort.ClusterMemberStore do
     }
   end
 
-  defp empty_state do
+defp empty_state do
     %{
       members: [],
       last_updated: nil,

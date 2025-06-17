@@ -247,64 +247,72 @@ defmodule CorroPort.CorrosionParser do
   end
 
   # Streamlined enhancement - only compute what we actually display
-  defp add_display_fields(member) do
-    state = Map.get(member, "state", %{})
-    rtts = Map.get(member, "rtts", [])
+defp add_display_fields(member) do
+  state = Map.get(member, "state", %{})
 
-    # Compute only the fields we actually use in the template
-    short_id =
-      case Map.get(member, "id") do
-        id when is_binary(id) and byte_size(id) > 8 -> String.slice(id, 0, 8) <> "..."
-        id -> id || "unknown"
-      end
+  # Handle rtts being null/nil in the JSON
+  rtts = Map.get(member, "rtts") || []
 
-    parsed_addr = Map.get(state, "addr", "unknown")
+  # Compute only the fields we actually use in the template
+  short_id =
+    case Map.get(member, "id") do
+      id when is_binary(id) and byte_size(id) > 8 -> String.slice(id, 0, 8) <> "..."
+      id -> id || "unknown"
+    end
 
-    # Status computation
-    computed_status =
-      cond do
-        Map.get(state, "last_sync_ts") != nil -> "active"
-        Map.get(state, "ts") != nil -> "connected"
-        parsed_addr != "unknown" -> "reachable"
-        true -> "unknown"
-      end
+  parsed_addr = Map.get(state, "addr", "unknown")
 
-    # RTT stats (only avg and count since that's what we display)
-    numeric_rtts = Enum.filter(rtts, &is_number/1)
+  # Status computation
+  computed_status =
+    cond do
+      Map.get(state, "last_sync_ts") != nil -> "active"
+      Map.get(state, "ts") != nil -> "connected"
+      parsed_addr != "unknown" -> "reachable"
+      true -> "unknown"
+    end
 
-    rtt_avg =
-      if numeric_rtts != [] do
-        Float.round(Enum.sum(numeric_rtts) / length(numeric_rtts), 1)
-      else
-        0.0
-      end
+  # RTT stats (only avg and count since that's what we display)
+  # Ensure rtts is a list before filtering
+  numeric_rtts =
+    if is_list(rtts) do
+      Enum.filter(rtts, &is_number/1)
+    else
+      []
+    end
 
-    # Formatted timestamp
-    formatted_last_sync =
-      case Map.get(state, "last_sync_ts") do
-        ts when is_integer(ts) ->
-          seconds = div(ts, 1_000_000_000)
+  rtt_avg =
+    if numeric_rtts != [] do
+      Float.round(Enum.sum(numeric_rtts) / length(numeric_rtts), 1)
+    else
+      0.0
+    end
 
-          case DateTime.from_unix(seconds) do
-            {:ok, dt} -> Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S UTC")
-            _ -> "Invalid"
-          end
+  # Formatted timestamp
+  formatted_last_sync =
+    case Map.get(state, "last_sync_ts") do
+      ts when is_integer(ts) ->
+        seconds = div(ts, 1_000_000_000)
 
-        _ ->
-          "Never"
-      end
+        case DateTime.from_unix(seconds) do
+          {:ok, dt} -> Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S UTC")
+          _ -> "Invalid"
+        end
 
-    # Add all computed display fields
-    member
-    |> Map.put("display_id", short_id)
-    |> Map.put("display_addr", parsed_addr)
-    |> Map.put("display_status", computed_status)
-    |> Map.put("display_cluster_id", Map.get(state, "cluster_id", "?"))
-    |> Map.put("display_ring", Map.get(state, "ring", "?"))
-    |> Map.put("display_rtt_avg", rtt_avg)
-    |> Map.put("display_rtt_count", length(numeric_rtts))
-    |> Map.put("display_last_sync", formatted_last_sync)
-  end
+      _ ->
+        "Never"
+    end
+
+  # Add all computed display fields
+  member
+  |> Map.put("display_id", short_id)
+  |> Map.put("display_addr", parsed_addr)
+  |> Map.put("display_status", computed_status)
+  |> Map.put("display_cluster_id", Map.get(state, "cluster_id", "?"))
+  |> Map.put("display_ring", Map.get(state, "ring", "?"))
+  |> Map.put("display_rtt_avg", rtt_avg)
+  |> Map.put("display_rtt_count", length(numeric_rtts))
+  |> Map.put("display_last_sync", formatted_last_sync)
+end
 
   defp add_status_badge_class(member) do
     status = Map.get(member, "display_status")
