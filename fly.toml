@@ -21,8 +21,8 @@ destination = "/var/lib/corrosion"
 
 [env]
   PORT = "8080"
-  RUST_BACKTRACE = "1"
-  RUST_LOG="info"
+  # RUST_BACKTRACE = "1"
+  # RUST_LOG="info"
   # ,foca=debug"
   PHX_SERVER = "true"
 
