@@ -177,14 +177,6 @@ defmodule CorroPort.MessagesAPI do
     end
   end
 
-  defp valid_fly_regions do
-    # Based on your CityData module
-    ["ams", "iad", "atl", "bog", "bos", "otp", "ord", "dfw", "den", "eze",
-     "fra", "gdl", "hkg", "jnb", "lhr", "lax", "mad", "mia", "yul", "bom",
-     "cdg", "phx", "qro", "gig", "sjc", "scl", "gru", "sea", "ewr", "sin",
-     "arn", "syd", "nrt", "yyz", "waw"]
-  end
-
   @doc """
   Cleanup function to remove malformed messages from the node_messages table.
   """

@@ -93,4 +93,22 @@ defmodule CorroPort.CityData do
     @cities
   end
 
+  def get_coordinates(region) when is_binary(region) do
+  try do
+    region_atom = String.to_existing_atom(region)
+    case @cities[region_atom] do
+      {long, lat} -> {long, lat}
+      nil -> handle_special_regions(region)
+    end
+  rescue
+    ArgumentError -> handle_special_regions(region)
+  end
+end
+
+def get_coordinates(_), do: handle_special_regions("unknown")
+
+defp handle_special_regions("dev"), do: {-122, 47}  # Seattle for dev
+defp handle_special_regions("unknown"), do: {-190, 0}  # Off-screen
+defp handle_special_regions(_), do: {-190, 0}  # Default off-screen
+
 end

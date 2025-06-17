@@ -136,17 +136,26 @@ defp fetch_cluster_data(socket) do
   })
 end
 
+# Add this to your cluster_live.ex in get_cluster_regions/1
+
 defp get_cluster_regions(updates) do
   # Get regions from recent message activity
   message_regions = get_regions_from_messages(updates.node_messages)
+
+  # Debug: log what we found
+  Logger.debug("ClusterLive: Message regions: #{inspect(message_regions)}")
 
   # Get our local region
   local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
   our_region = CorroPort.CorrosionParser.extract_region_from_node_id(local_node_id)
 
+  Logger.debug("ClusterLive: Local node_id: #{local_node_id}, extracted region: #{our_region}")
+
   # Combine all active regions (excluding our own for separate display)
   other_regions = Map.values(message_regions) |> Enum.reject(&(&1 == our_region)) |> Enum.uniq()
   our_regions = if our_region != "unknown", do: [our_region], else: []
+
+  Logger.debug("ClusterLive: Other regions: #{inspect(other_regions)}, Our regions: #{inspect(our_regions)}")
 
   {other_regions, our_regions}
 end
@@ -174,30 +183,42 @@ defp get_regions_from_messages(_), do: %{}
       <ClusterCards.cluster_header_simple />
       <ClusterCards.error_alerts error={@error} />
 
-          <!-- World Map with Regions -->
-    <div class="card bg-base-100">
-      <div class="card-body">
-        <h3 class="card-title">
-          <.icon name="hero-globe-alt" class="w-5 h-5 mr-2" /> Geographic Distribution
-        </h3>
-        <div class="rounded-lg border">
-          <CorroPortWeb.WorldMap.world_map_svg
-            regions={@active_regions}
-            our_regions={@our_regions}
-          />
-        </div>
-        <div class="text-sm text-base-content/70 flex items-center justify-between">
-          <div>
-            <span class="inline-block w-3 h-3 bg-primary rounded-full mr-2"></span>
-            Our node ({Enum.join(@our_regions, ", ")})
-          </div>
-          <div>
-            <span class="inline-block w-3 h-3 bg-warning rounded-full mr-2"></span>
-            Other cluster nodes ({Enum.join(@active_regions, ", ")})
-          </div>
-        </div>
+   <!-- World Map with Regions -->
+<div class="card bg-base-100">
+  <div class="card-body">
+    <h3 class="card-title">
+      <.icon name="hero-globe-alt" class="w-5 h-5 mr-2" /> Geographic Distribution
+    </h3>
+    <div class="rounded-lg border">
+      <CorroPortWeb.WorldMap.world_map_svg
+        regions={@active_regions}
+        our_regions={@our_regions}
+      />
+    </div>
+    <div class="text-sm text-base-content/70 flex items-center justify-between">
+      <div class="flex items-center">
+        <!-- Use the actual SVG color for our node -->
+        <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ffdc66;"></span>
+        Our node
+        <%= if @our_regions != [] do %>
+          (<%= @our_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ") %>)
+        <% else %>
+          (region unknown)
+        <% end %>
+      </div>
+      <div class="flex items-center">
+        <!-- Use the actual SVG color for other nodes -->
+        <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #77b5fe;"></span>
+        Other cluster nodes
+        <%= if @active_regions != [] do %>
+          (<%= @active_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ") %>)
+        <% else %>
+          (none active)
+        <% end %>
       </div>
     </div>
+  </div>
+</div>
 
       <ClusterCards.status_cards_simple
         local_info={@local_info}

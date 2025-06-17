@@ -381,22 +381,30 @@ defmodule CorroPort.CorrosionParser do
     Extracts region from a node ID.
     Expects format: "region-machine_id" or falls back to extracting from node pattern.
     """
-  def extract_region_from_node_id(node_id) do
-    valid_fly_regions = CorroPort.CityData.valid_fly_regions()
-    # Try to extract from node_id if it follows region-machine pattern
-    with [region, _] <- String.split(node_id, "-", parts: 2) do
-          if region in valid_fly_regions or region == "dev" do
-            region
-          else
-            "invalid"
-          end
-    else
-      # Fallback: try to extract from development node pattern like "node1"
-      _ -> case Regex.run(~r/^node(\d+)$/, node_id) do
-            [_, _num] -> "dev"  # Development region
-        true -> "unknown"
+  def extract_region_from_node_id(node_id) when is_binary(node_id) do
+  case String.split(node_id, "-", parts: 2) do
+    [region, _machine_id] ->
+      # Use regular function call instead of guard
+      if region in valid_fly_regions() or region == "dev" do
+        region
+      else
+        "unknown"
       end
-    end
+    _ ->
+      # Fallback for development pattern like "node1"
+      case Regex.run(~r/^node(\d+)$/, node_id) do
+        [_, _num] -> "dev"
+        _ -> "unknown"
+      end
   end
+end
+
+def extract_region_from_node_id(nil), do: "unknown"
+def extract_region_from_node_id(_), do: "unknown"
+
+# Helper function to get valid regions at runtime
+defp valid_fly_regions do
+  CorroPort.CityData.valid_fly_regions()
+end
 
 end

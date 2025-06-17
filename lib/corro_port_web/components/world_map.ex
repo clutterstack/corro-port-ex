@@ -119,16 +119,17 @@ defmodule CorroPortWeb.WorldMap do
 
 
   def city_to_svg("unknown", _bbox) do
-    {-1, -1}
-  end
+  {-1, -1}
+end
 
-  def city_to_svg(city, bbox) when city != "unknown" do
-      city_atom = String.to_existing_atom(city) # |> IO.inspect()
-      {long, lat} = cities()[city_atom] # |> IO.inspect(label: "{long, lat} for #{city}")
-      # latlong_to_svg({long, lat}, bbox)
-      point = wgs84_to_svg({long, lat}, bbox) #|> IO.inspect(label: "transformed to point")
-      point
+def city_to_svg(city, bbox) when city != "unknown" do
+  case CorroPort.CityData.get_coordinates(city) do
+    {long, lat} -> wgs84_to_svg({long, lat}, bbox)
+    nil ->
+      Logger.warning("WorldMap: Region '#{city}' not found in cities map")
+      {-1, -1}  # Return off-screen coordinates
   end
+end
 
   def all_regions_with_coords() do
     for {city, coords} <- cities() do
