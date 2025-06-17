@@ -360,4 +360,46 @@ defmodule CorroPort.CorrosionParser do
 
     has_recent_sync and has_address
   end
+
+  @doc """
+  Extracts region information from cluster members.
+  Returns a map of node_id -> region for geographic display.
+  """
+  def extract_cluster_regions(members) when is_list(members) do
+    members
+    |> Enum.map(fn member ->
+      node_id = CorroPort.AckTracker.member_to_node_id(member)
+      region = extract_region_from_node_id(node_id)
+      {node_id, region}
+    end)
+    |> Enum.reject(fn {node_id, _region} -> is_nil(node_id) end)
+    |> Enum.into(%{})
+  end
+
+
+  @doc """
+    Extracts region from a node ID.
+    Expects format: "region-machine_id" or falls back to extracting from node pattern.
+    """
+  def extract_region_from_node_id(node_id) do
+    valid_fly_regions = CorroPort.CityData.valid_fly_regions()
+    # Try to extract from node_id if it follows region-machine pattern
+    with true <- is_binary(node_id),
+        [region, _] <- String.split(node_id, "-", parts: 2) do
+          if region in valid_fly_regions or region == "dev" do
+            region
+          else
+            "invalid"
+          end
+    else
+      # Fallback: try to extract from development node pattern like "node1"
+      _ -> case Regex.run(~r/^node(\d+)$/, node_id) do
+            [_, _num] -> "dev"  # Development region
+        true -> "unknown"
+      end
+    end
+  end
+
+  def extract_region_from_node_id(_), do: "unknown"
+
 end

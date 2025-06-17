@@ -34,18 +34,19 @@ config :corro_port, CorroPortWeb.APIEndpoint,
   secret_key_base: "IwAz1v+95qyPXhnNQPyoIMfl6xqAo6an4o3/JMPOPhCV6BLxISJ0bNup6nIsooE7",
   server: true
 
+
 # Store the node configuration for use by the application
 # Note: Config file path and bootstrap list are now managed by startup scripts
 config :corro_port, :node_config,
-  node_id: node_id,
+  node_id: "dev-node#{node_id}",  # Changed to include region prefix
   phoenix_port: phoenix_port,
-  # New field
   ack_api_port: ack_api_port,
   corrosion_api_port: corrosion_api_port,
   corrosion_gossip_port: corrosion_gossip_port,
   corro_config_path: "corrosion/config-node#{node_id}.toml",
   corrosion_binary: "corrosion/corrosion-mac",
-  environment: :dev
+  environment: :dev,
+  fly_region: "dev"  # Add this for development
 
 # Watch static and templates for browser reloading.
 config :corro_port, CorroPortWeb.Endpoint,

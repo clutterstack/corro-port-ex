@@ -309,11 +309,16 @@ defmodule CorroPort.AckTracker do
     CorroPort.CorrosionParser.active_member?(member)
   end
 
-  defp member_to_node_id(member) when is_map(member) do
-    if CorroPort.NodeConfig.production?() do
-      production_member_to_node_id(member)
+  def member_to_node_id(member) do
+    if is_map(member) do
+      if CorroPort.NodeConfig.production?() do
+        production_member_to_node_id(member)
+      else
+        development_member_to_node_id(member)
+      end
     else
-      development_member_to_node_id(member)
+      Logger.warning("AckTracker.member_to_node_id: member has to be a map")
+      ""
     end
   end
 

@@ -112,68 +112,6 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, socket}
   end
 
-  # Handle CLI task completion checking
-  # def handle_info(:check_cli_task, socket) do
-  #   Logger.debug("Handling :check_cli_task info")
-  #   case socket.assigns.cli_members_task do
-  #     nil ->
-  #       # No task running
-  #       {:noreply, socket}
-
-  #     task ->
-  #       case Task.yield(task, 0) do
-
-  #         {_task, {:ok, raw_output}, socket} ->
-  #         Logger.info("ClusterLive: ✅ CLI task completed successfully")
-
-  #         # Use the dedicated parser
-  #         parsed_result = case CorroPort.CorrosionParser.parse_cluster_members(raw_output) do
-  #           {:ok, ""} ->
-  #             Logger.info("ClusterLive: No cluster members found - single node setup")
-  #             []
-  #           {:ok, members} ->
-  #             Logger.info("ClusterLive: Parsed some CLI members")
-  #             members |> dbg
-  #           {:error, reason} ->
-  #             Logger.warning("ClusterLive: Failed to parse CLI output: #{inspect(reason)}")
-  #             %{parse_error: reason, raw_output: raw_output}
-  #         end
-
-  #         flash_message = case parsed_result do
-  #           [] -> "✅ CLI command successful - single node setup (no cluster members)"
-  #           list when is_list(list) -> "✅ CLI cluster members fetched successfully!"
-  #           %{parse_error: _} -> "⚠️ CLI command succeeded but output couldn't be parsed"
-  #         end
-
-  #         socket =
-  #           socket
-  #           |> assign(:cli_members_data, parsed_result)
-  #           |> assign(:cli_members_loading, false)
-  #           |> assign(:cli_members_task, nil)
-  #           |> put_flash(:info, flash_message)
-
-  #         {:noreply, socket}
-
-  #         {:ok, {:error, reason}} ->
-  #           # Task completed with error
-  #           Logger.warning("ClusterLive: ❌ CLI task failed: #{inspect(reason)}")
-
-  #           socket =
-  #             socket
-  #             |> assign(:cli_members_error, format_cli_error(reason))
-  #             |> assign(:cli_members_loading, false)
-  #             |> assign(:cli_members_task, nil)
-  #             |> put_flash(:error, "❌ CLI command failed: #{format_cli_error(reason)}")
-
-  #           {:noreply, socket}
-
-  #         nil ->
-  #           # Still running, check again later
-  #           Process.send_after(self(), :check_cli_task, 500)
-  #           {:noreply, socket}
-  #       end
-  #   end
-  # end
 
   # Private functions
   defp fetch_cluster_data(socket) do
@@ -188,21 +126,52 @@ defmodule CorroPortWeb.ClusterLive do
     })
   end
 
-  # defp format_cli_error({:exit_code, code, message}) do
-  #   "Exit code #{code}: #{String.slice(message, 0, 100)}"
-  # end
 
-  # defp format_cli_error(:timeout) do
-  #   "Command timed out"
-  # end
+defp fetch_cluster_data(socket) do
+  updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data()
 
-  # defp format_cli_error(reason) when is_binary(reason) do
-  #   reason
-  # end
+  # Get region data
+  {active_regions, our_regions} = get_cluster_regions(updates)
 
-  # defp format_cli_error(reason) do
-  #   inspect(reason)
-  # end
+  assign(socket, %{
+    cluster_info: updates.cluster_info,
+    local_info: updates.local_info,
+    node_messages: updates.node_messages,
+    error: updates.error,
+    last_updated: updates.last_updated,
+    active_regions: active_regions,
+    our_regions: our_regions
+  })
+end
+
+defp get_cluster_regions(updates) do
+  # Get regions from recent message activity
+  message_regions = get_regions_from_messages(updates.node_messages)
+
+  # Get our local region
+  local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
+  our_region = CorroPort.CorrosionParser.extract_region_from_node_id(local_node_id)
+
+  # Combine all active regions (excluding our own for separate display)
+  other_regions = Map.values(message_regions) |> Enum.reject(&(&1 == our_region)) |> Enum.uniq()
+  our_regions = if our_region != "unknown", do: [our_region], else: []
+
+  {other_regions, our_regions}
+end
+
+defp get_regions_from_messages(messages) when is_list(messages) do
+  messages
+  |> Enum.map(fn msg ->
+    node_id = Map.get(msg, "node_id")
+    # First try the region field if it exists
+    region = Map.get(msg, "region") || CorroPort.CorrosionParser.extract_region_from_node_id(node_id)
+    {node_id, region}
+  end)
+  |> Enum.reject(fn {_node_id, region} -> region == "unknown" end)
+  |> Enum.into(%{})
+end
+
+defp get_regions_from_messages(_), do: %{}
 
   def render(assigns) do
     ~H"""
@@ -213,9 +182,31 @@ defmodule CorroPortWeb.ClusterLive do
       <ClusterCards.cluster_header_simple />
       <ClusterCards.error_alerts error={@error} />
 
-      <div class="col-start-1 col-span-4 rounded-lg panel">
-          <%= RegionMap.world_map_svg(%{regions: active_regions(@umachines), our_regions: active_regions(@our_mach)}) %>
+          <!-- World Map with Regions -->
+    <div class="card bg-base-100">
+      <div class="card-body">
+        <h3 class="card-title">
+          <.icon name="hero-globe-alt" class="w-5 h-5 mr-2" /> Geographic Distribution
+        </h3>
+        <div class="rounded-lg border">
+          <CorroPortWeb.WorldMap.world_map_svg
+            regions={@active_regions}
+            our_regions={@our_regions}
+          />
         </div>
+        <div class="text-sm text-base-content/70 flex items-center justify-between">
+          <div>
+            <span class="inline-block w-3 h-3 bg-primary rounded-full mr-2"></span>
+            Our node ({Enum.join(@our_regions, ", ")})
+          </div>
+          <div>
+            <span class="inline-block w-3 h-3 bg-warning rounded-full mr-2"></span>
+            Other cluster nodes ({Enum.join(@active_regions, ", ")})
+          </div>
+        </div>
+      </div>
+    </div>
+
       <ClusterCards.status_cards_simple
         local_info={@local_info}
         cluster_info={@cluster_info}

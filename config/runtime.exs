@@ -74,8 +74,14 @@ if config_env() == :prod do
 
   # Update node config with production settings
   if fly_app_name && fly_private_ip && fly_machine_id do
+    # Get region from environment
+    fly_region = System.get_env("FLY_REGION") || "unknown"
+
+    # Create region-aware node ID: region-machine_id
+    region_node_id = "#{fly_region}-#{fly_machine_id}"
+
     config :corro_port, :node_config,
-      node_id: fly_machine_id,
+      node_id: region_node_id,
       ack_api_port: ack_api_port,
       corrosion_api_port: 8081,
       corrosion_gossip_port: 8787,
@@ -85,17 +91,22 @@ if config_env() == :prod do
       environment: :prod,
       fly_app_name: fly_app_name,
       private_ip: fly_private_ip,
-      fly_machine_id: fly_machine_id
+      fly_machine_id: fly_machine_id,
+      fly_region: fly_region
   else
     # Fallback configuration
+    fallback_region = System.get_env("FLY_REGION", "fallback")
+    fallback_node_id = System.get_env("NODE_ID", "fallback")
+
     config :corro_port, :node_config,
-      node_id: System.get_env("NODE_ID", "fallback"),
+      node_id: "#{fallback_region}-#{fallback_node_id}",
       ack_api_port: ack_api_port,
       corrosion_api_port: 8081,
       corrosion_gossip_port: 8787,
       corrosion_bootstrap_list: "[]",
       corro_config_path: "/app/corrosion.toml",
       corrosion_binary: "/app/corrosion",
-      environment: :prod
+      environment: :prod,
+      fly_region: fallback_region
   end
 end

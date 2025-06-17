@@ -1,13 +1,13 @@
 defmodule CorroPort.MessagesAPI do
   @moduledoc """
   API for managing user data in the node_messages table.
-  Now includes originating_ip field for direct node communication.
+  Now includes originating_endpoint and region fields for geographic tracking.
   """
   require Logger
   alias CorroPort.CorrosionClient
 
   @doc """
-  Inserts a new message into the node_messages table with originating endpoint.
+  Inserts a new message into the node_messages table with originating endpoint and region.
 
   ## Parameters
   - `node_id`: Identifier for the node sending the message
@@ -20,15 +20,15 @@ defmodule CorroPort.MessagesAPI do
   def insert_message(node_id, message) do
     sequence = System.system_time(:millisecond)
     timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
-    originating_endpoint = get_originating_endpoint()
+    {originating_endpoint, region} = get_originating_endpoint_and_region()
 
     sql = """
-    INSERT INTO node_messages (pk, node_id, message, sequence, timestamp, originating_endpoint)
-    VALUES ('#{node_id}_#{sequence}', '#{node_id}', '#{message}', #{sequence}, '#{timestamp}', '#{originating_endpoint}')
+    INSERT INTO node_messages (pk, node_id, message, sequence, timestamp, originating_endpoint, region)
+    VALUES ('#{node_id}_#{sequence}', '#{node_id}', '#{message}', #{sequence}, '#{timestamp}', '#{originating_endpoint}', '#{region}')
     """
 
     Logger.debug(
-      "Inserting: node_id=#{node_id}, message=#{message}, originating_endpoint=#{originating_endpoint}"
+      "Inserting: node_id=#{node_id}, message=#{message}, originating_endpoint=#{originating_endpoint}, region=#{region}"
     )
 
     case CorrosionClient.execute_transaction([sql]) do
@@ -39,7 +39,8 @@ defmodule CorroPort.MessagesAPI do
            message: message,
            sequence: sequence,
            timestamp: timestamp,
-           originating_endpoint: originating_endpoint
+           originating_endpoint: originating_endpoint,
+           region: region
          }}
 
       error ->
@@ -67,7 +68,7 @@ defmodule CorroPort.MessagesAPI do
   """
   def get_latest_node_messages() do
     query = """
-    SELECT message, node_id, timestamp, sequence, originating_endpoint
+    SELECT message, node_id, timestamp, sequence, originating_endpoint, region
     FROM node_messages
     WHERE (node_id, timestamp) IN (
       SELECT node_id, MAX(timestamp)
@@ -87,12 +88,40 @@ defmodule CorroPort.MessagesAPI do
   end
 
   @doc """
-  Gets messages from a specific originating endpoint.
-  Useful for debugging and filtering.
+  Gets active regions from recent node messages.
+  Returns a list of region codes for nodes that have sent messages recently.
   """
-  def get_messages_by_originating_endpoint(endpoint) do
-    query =
-      "SELECT * FROM node_messages WHERE originating_endpoint = '#{endpoint}' ORDER BY timestamp DESC"
+  def get_active_regions(minutes_ago \\ 60) do
+    cutoff_time = DateTime.add(DateTime.utc_now(), -minutes_ago, :minute) |> DateTime.to_iso8601()
+
+    query = """
+    SELECT DISTINCT region
+    FROM node_messages
+    WHERE timestamp > '#{cutoff_time}'
+    AND region != 'unknown'
+    AND region != ''
+    ORDER BY region
+    """
+
+    case CorrosionClient.execute_query(query) do
+      {:ok, response} ->
+        regions =
+          CorrosionClient.parse_query_response(response)
+          |> Enum.map(&Map.get(&1, "region"))
+          |> Enum.reject(&is_nil/1)
+        {:ok, regions}
+
+      error ->
+        Logger.warning("Failed to get active regions: #{inspect(error)}")
+        {:ok, []}
+    end
+  end
+
+  @doc """
+  Gets messages from a specific region.
+  """
+  def get_messages_by_region(region) do
+    query = "SELECT * FROM node_messages WHERE region = '#{region}' ORDER BY timestamp DESC"
 
     case CorrosionClient.execute_query(query) do
       {:ok, response} ->
@@ -103,12 +132,18 @@ defmodule CorroPort.MessagesAPI do
     end
   end
 
+
+
+
+
+
   # Private functions
 
-  defp get_originating_endpoint do
+  defp get_originating_endpoint_and_region do
     node_config = CorroPort.NodeConfig.app_node_config()
+    region = get_current_region(node_config)
 
-    case node_config[:environment] do
+    endpoint = case node_config[:environment] do
       :prod ->
         # In production, use the fly.io private IP with API port
         private_ip = node_config[:private_ip] || node_config[:fly_private_ip] || "127.0.0.1"
@@ -127,6 +162,27 @@ defmodule CorroPort.MessagesAPI do
         ack_api_port = node_config[:ack_api_port] || 5000 + (node_config[:node_id] || 1)
         "127.0.0.1:#{ack_api_port}"
     end
+
+    {endpoint, region}
+  end
+
+  defp get_current_region(node_config) do
+    case node_config[:environment] do
+      :prod ->
+        # In production, get from config or environment
+        node_config[:fly_region] || System.get_env("FLY_REGION") || "unknown"
+      _ ->
+        # In development
+        "dev"
+    end
+  end
+
+  defp valid_fly_regions do
+    # Based on your CityData module
+    ["ams", "iad", "atl", "bog", "bos", "otp", "ord", "dfw", "den", "eze",
+     "fra", "gdl", "hkg", "jnb", "lhr", "lax", "mad", "mia", "yul", "bom",
+     "cdg", "phx", "qro", "gig", "sjc", "scl", "gru", "sea", "ewr", "sin",
+     "arn", "syd", "nrt", "yyz", "waw"]
   end
 
   @doc """

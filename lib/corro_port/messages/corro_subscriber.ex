@@ -10,6 +10,7 @@ defmodule CorroPort.CorroSubscriber do
   require Logger
 
   @subscription_topic "message_updates"
+  @max_reconnect_attempts 5
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -21,8 +22,8 @@ defmodule CorroPort.CorroSubscriber do
     {:ok,
      %{
        stream_pid: nil,
-       reconnect_attempts: 0,
-       max_reconnect_attempts: 5,
+       attempts_left: @max_reconnect_attempts,
+       max_reconnect_attempts: @max_reconnect_attempts,
        status: :initializing,
        columns: nil,
        initial_state_received: false,
@@ -44,7 +45,7 @@ defmodule CorroPort.CorroSubscriber do
       state
       | stream_pid: stream_pid,
         status: :connecting,
-        reconnect_attempts: state.reconnect_attempts + 1,
+        attempts_left: @max_reconnect_attempts,
         columns: nil,
         initial_state_received: false,
         watch_id: nil
@@ -54,9 +55,9 @@ defmodule CorroPort.CorroSubscriber do
   end
 
   def handle_info(:reconnect, state) do
-    if state.reconnect_attempts < state.max_reconnect_attempts do
+    if state.attempts_left > 0 do
       Logger.warning(
-        "CorroSubscriber: Attempting to reconnect (attempt #{state.reconnect_attempts + 1})"
+        "CorroSubscriber: Attempting to reconnect (#{state.attempts_left} attempts remain)"
       )
 
       send(self(), :start_subscription)
@@ -76,7 +77,7 @@ defmodule CorroPort.CorroSubscriber do
      %{
        state
        | status: :connected,
-         reconnect_attempts: 0,
+         attempts_left: @max_reconnect_attempts,
          watch_id: watch_id
      }}
   end
@@ -87,23 +88,65 @@ defmodule CorroPort.CorroSubscriber do
   end
 
   def handle_info({:subscription_error, error}, state) do
-    Logger.warning("CorroSubscriber: Subscription error: #{inspect(error)}")
+    Logger.warning("CorroSubscriber handle_info: Subscription error: #{inspect(error)}")
     broadcast_event({:subscription_error, error})
-    new_state = %{state | status: :error, stream_pid: nil, watch_id: nil}
-    schedule_reconnect(new_state)
+
+    new_state = %{
+      state
+      | status: :error,
+        stream_pid: nil,
+        watch_id: nil,
+        attempts_left: state.attempts_left - 1
+    }
+
+    if new_state.attempts_left > 0 do
+      schedule_reconnect(new_state)
+    else
+      Logger.error("CorroSubscriber: Max reconnection attempts reached, giving up")
+      broadcast_event({:subscription_failed, :max_retries})
+      {:noreply, %{new_state | status: :failed}}
+    end
   end
 
   def handle_info({:subscription_closed, reason}, state) do
     Logger.warning("CorroSubscriber: Subscription closed: #{inspect(reason)}")
     broadcast_event({:subscription_closed, reason})
-    new_state = %{state | status: :disconnected, stream_pid: nil, watch_id: nil}
-    schedule_reconnect(new_state)
+
+    new_state = %{
+      state
+      | status: :disconnected,
+        stream_pid: nil,
+        watch_id: nil,
+        attempts_left: state.attempts_left - 1
+    }
+
+    if new_state.attempts_left > 0 do
+      schedule_reconnect(new_state)
+    else
+      Logger.error("CorroSubscriber: Max reconnection attempts reached, giving up")
+      broadcast_event({:subscription_failed, :max_retries})
+      {:noreply, %{new_state | status: :failed}}
+    end
   end
 
   def handle_info({:EXIT, pid, reason}, %{stream_pid: pid} = state) do
     Logger.warning("CorroSubscriber: Stream process crashed: #{inspect(reason)}")
-    new_state = %{state | status: :error, stream_pid: nil, watch_id: nil}
-    schedule_reconnect(new_state)
+
+    new_state = %{
+      state
+      | status: :error,
+        stream_pid: nil,
+        watch_id: nil,
+        attempts_left: state.attempts_left - 1
+    }
+
+    if new_state.attempts_left > 0 do
+      schedule_reconnect(new_state)
+    else
+      Logger.error("CorroSubscriber: Max reconnection attempts reached, giving up")
+      broadcast_event({:subscription_failed, :max_retries})
+      {:noreply, %{new_state | status: :failed}}
+    end
   end
 
   def handle_info({:EXIT, _pid, _reason}, state) do
@@ -128,7 +171,7 @@ defmodule CorroPort.CorroSubscriber do
       state
       | stream_pid: nil,
         status: :restarting,
-        reconnect_attempts: 0,
+        attempts_left: @max_reconnect_attempts,
         watch_id: nil
     }
 
@@ -139,7 +182,7 @@ defmodule CorroPort.CorroSubscriber do
     status = %{
       status: state.status,
       connected: state.status == :connected && !is_nil(state.stream_pid),
-      reconnect_attempts: state.reconnect_attempts,
+      attempts_left: state.attempts_left,
       watch_id: state.watch_id,
       initial_state_received: state.initial_state_received
     }
@@ -319,9 +362,15 @@ defmodule CorroPort.CorroSubscriber do
   end
 
   defp schedule_reconnect(state) do
-    # Simple backoff: 2 seconds, then 5 seconds, then 10 seconds
-    delay = min(2000 * state.reconnect_attempts, 10_000)
-    Logger.warning("CorroSubscriber: Scheduling reconnect in #{delay}ms")
+    # Calculate delay based on how many attempts have been made
+    attempts_made = @max_reconnect_attempts - state.attempts_left
+    delay = case attempts_made do
+      0 -> 2_000   # First retry: 2 seconds
+      1 -> 5_000   # Second retry: 5 seconds
+      _ -> 10_000  # Subsequent retries: 10 seconds
+    end
+
+    Logger.warning("CorroSubscriber: Scheduling reconnect in #{delay}ms (#{state.attempts_left} attempts left)")
     Process.send_after(self(), :reconnect, delay)
     {:noreply, %{state | status: :reconnecting}}
   end
