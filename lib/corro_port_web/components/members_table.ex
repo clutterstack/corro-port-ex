@@ -71,7 +71,7 @@ defmodule CorroPortWeb.MembersTable do
       </td>
       <td>{Map.get(@member, "member_incarnation", "?")}</td>
       <td class="text-xs">
-        {CorroPort.ClusterAPI.format_corrosion_timestamp(Map.get(@member, "member_ts"))}
+        {CorroPort.CorrosionParser.format_corrosion_timestamp(Map.get(@member, "member_ts"))}
       </td>
     <% end %>
     """

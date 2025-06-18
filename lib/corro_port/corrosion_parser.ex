@@ -291,15 +291,7 @@ defp add_display_fields(member) do
   formatted_last_sync =
     case Map.get(state, "last_sync_ts") do
       ts when is_integer(ts) ->
-        seconds = div(ts, 1_000_000_000)
-
-        case DateTime.from_unix(seconds) do
-          {:ok, dt} -> Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S UTC")
-          _ -> "Invalid"
-        end
-
-      _ ->
-        "Never"
+        format_corrosion_timestamp(ts)
     end
 
   # Add all computed display fields
@@ -355,17 +347,71 @@ end
     end)
   end
 
-  defp format_corrosion_timestamp(ts) when is_integer(ts) do
-    # Corrosion timestamps are often in nanoseconds
-    seconds = div(ts, 1_000_000_000)
+  # defp format_corrosion_timestamp(ts) when is_integer(ts) do
+  #   # Corrosion timestamps are often in nanoseconds
+  #   seconds = div(ts, 1_000_000_000)
 
-    case DateTime.from_unix(seconds) do
-      {:ok, dt} -> Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S UTC")
-      _ -> "invalid timestamp"
-    end
+  #   case DateTime.from_unix(seconds) do
+  #     {:ok, dt} -> Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S UTC")
+  #     _ -> "invalid timestamp"
+  #   end
+  # end
+
+  # defp format_corrosion_timestamp(_), do: "unknown"
+
+
+  @doc """
+Formats a Corrosion timestamp (uhlc NTP64 format) to readable format.
+
+Corrosion uses the uhlc library's NTP64 format, which is:
+- 64-bit fixed-point number
+- Upper 32 bits: seconds since Unix epoch (January 1, 1970)
+- Lower 32 bits: fractional seconds (1 unit = 1/2^32 seconds)
+
+Note: Despite the "NTP64" name, uhlc uses Unix epoch, not NTP epoch.
+
+## Examples
+    iex> CorroPort.ClusterAPI.format_corrosion_timestamp(7517054269677675168)
+    "2025-06-17 22:49:43 UTC"
+"""
+def format_corrosion_timestamp(nil), do: "Never"
+
+def format_corrosion_timestamp(ntp64_timestamp) when is_integer(ntp64_timestamp) do
+  import Bitwise
+
+  # uhlc's NTP64 is a 64-bit fixed-point number:
+  # Upper 32 bits: seconds since Unix epoch (Jan 1, 1970)
+  # Lower 32 bits: fractional seconds
+
+  # Extract the seconds part (upper 32 bits)
+  unix_seconds = ntp64_timestamp >>> 32
+
+  # Extract the fractional part (lower 32 bits)
+  ntp_fraction = ntp64_timestamp &&& 0xFFFFFFFF
+
+  # Convert fractional part to microseconds for DateTime
+  # ntp_fraction * 1_000_000 / 2^32
+  microseconds = div(ntp_fraction * 1_000_000, 4_294_967_296)
+
+  case DateTime.from_unix(unix_seconds, :second) do
+    {:ok, datetime} ->
+      # Add microseconds for sub-second precision
+      datetime_with_precision = %{datetime | microsecond: {microseconds, 6}}
+      Calendar.strftime(datetime_with_precision, "%Y-%m-%d %H:%M:%S UTC") |> dbg
+
+    {:error, _} ->
+      "Invalid timestamp"
   end
+end
 
-  defp format_corrosion_timestamp(_), do: "unknown"
+def format_corrosion_timestamp(_), do: "Invalid timestamp"
+
+
+
+
+
+
+
 
   defp add_health_indicators(status) when is_map(status) do
     # Add computed health indicators based on status data

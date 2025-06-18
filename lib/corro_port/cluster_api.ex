@@ -270,26 +270,4 @@ defmodule CorroPort.ClusterAPI do
     end
   end
 
-  @doc """
-  Formats a Corrosion timestamp (nanoseconds since epoch) to readable format.
-
-  ## Examples
-      iex> CorroPort.ClusterAPI.format_corrosion_timestamp(1640995200000000000)
-      "2022-01-01 00:00:00 UTC"
-  """
-  def format_corrosion_timestamp(nil), do: "Unknown"
-
-  def format_corrosion_timestamp(ts) when is_integer(ts) do
-    seconds = div(ts, 1_000_000_000)
-
-    case DateTime.from_unix(seconds) do
-      {:ok, datetime} ->
-        Calendar.strftime(datetime, "%Y-%m-%d %H:%M:%S UTC")
-
-      {:error, _} ->
-        "Invalid timestamp"
-    end
-  end
-
-  def format_corrosion_timestamp(_), do: "Invalid timestamp"
 end
