@@ -221,38 +221,6 @@ defmodule CorroPort.CorrosionCLI do
   - `{:ok, members}` - List of parsed member maps
   - `{:error, reason}` - Parse error details
   """
-  def parse_cluster_members(json_output) when is_binary(json_output) do
-    try do
-      # The output appears to be multiple JSON objects, one per line
-      # Let's split by lines and parse each JSON object
-      lines = String.split(json_output, "\n", trim: true)
-
-      members =
-        Enum.map(lines, fn line ->
-          case Jason.decode(line) do
-            {:ok, member_data} ->
-              # Add some parsed/computed fields for easier access
-              member_data
-              |> add_parsed_address()
-              |> add_member_status()
-
-            {:error, _} ->
-              Logger.warning("CorrosionCLI: Failed to parse member line: #{line}")
-              %{"parse_error" => line}
-          end
-        end)
-
-      valid_members = Enum.reject(members, &Map.has_key?(&1, "parse_error"))
-
-      Logger.info("CorrosionCLI: Parsed #{length(valid_members)} cluster members")
-      {:ok, valid_members}
-    rescue
-      error ->
-        Logger.error("CorrosionCLI: Error parsing cluster members: #{inspect(error)}")
-        {:error, {:parse_error, error}}
-    end
-  end
-
   defp add_parsed_address(member) do
     case get_in(member, ["state", "addr"]) do
       addr when is_binary(addr) ->

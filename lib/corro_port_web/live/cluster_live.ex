@@ -103,8 +103,7 @@ end
 
     ack_regions = extract_ack_regions(ack_status)
 
-    socket = assign(socket, :ack_regions, ack_regions)
-    {:noreply, socket}
+    {:noreply, assign(socket, :ack_regions, ack_regions)}
   end
 
   # Private functions
@@ -182,24 +181,13 @@ end
       <!-- Navigation Tabs -->
       <NavTabs.nav_tabs active={:cluster} />
 
-      <ClusterCards.cluster_header_with_actions ack_regions={@ack_regions} />
+      <ClusterCards.cluster_header />
 
       <ClusterCards.error_alerts error={@error} />
 
       <!-- Enhanced World Map with Regions -->
       <div class="card bg-base-100">
         <div class="card-body">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="card-title">
-              <.icon name="hero-globe-alt" class="w-5 h-5 mr-2" /> Geographic Distribution
-            </h3>
-            <div class="flex gap-2">
-              <.button phx-click="refresh_dns_cache" class="btn btn-xs btn-outline">
-                <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Refresh DNS
-              </.button>
-            </div>
-          </div>
-
           <div class="rounded-lg border">
             <CorroPortWeb.WorldMap.world_map_svg
               regions={@active_regions}
@@ -208,9 +196,6 @@ end
               ack_regions={@ack_regions}
             />
           </div>
-
-
-
 
           <div class="text-sm text-base-content/70 space-y-2">
             <div class="flex items-center">

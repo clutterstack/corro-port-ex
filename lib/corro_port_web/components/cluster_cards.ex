@@ -25,7 +25,7 @@ defmodule CorroPortWeb.ClusterCards do
     """
   end
 
-  def cluster_header_with_actions(assigns) do
+  def cluster_header(assigns) do
     ~H"""
     <.header>
       Corrosion Cluster Status
@@ -35,18 +35,8 @@ defmodule CorroPortWeb.ClusterCards do
         </div>
       </:subtitle>
       <:actions>
-        <.button
-          :if={@ack_regions != []}
-          phx-click="reset_tracking"
-          class="btn btn-warning btn-outline"
-        >
-          <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Reset Tracking
-        </.button>
-        <.button phx-click="send_message" variant="primary">
-          <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" /> Send Message
-        </.button>
-        <.button phx-click="refresh" class="btn btn-outline">
-          <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Fetch cluster data
+        <.button phx-click="refresh_dns_cache" class="btn btn-xs btn-outline">
+          <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Refresh DNS
         </.button>
       </:actions>
     </.header>

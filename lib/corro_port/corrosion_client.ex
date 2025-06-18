@@ -104,6 +104,16 @@ defmodule CorroPort.CorrosionClient do
   - `{"row": [row_number, [value1, value2, ...]]}` - data rows
   - `{"eoq": true}` - end of query marker
 
+  curl example:
+
+      > curl http://localhost:8081/v1/queries \
+      -H "content-type: application/json" \
+      -d "\"select * from __corro_members limit 1\""
+      {"columns":["actor_id","address","foca_state","rtt_min","updated_at"]}
+      {"row":[1,[[62,127,19,213,213,89,71,245,157,144,209,152,13,19,194,147],"127.0.0.1:8788","{\"id\":{\"id\":\"3e7f13d5-d559-47f5-9d90-d1980d13c293\",\"addr\":\"127.0.0.1:8788\",\"ts\":7517131088795160372,\"cluster_id\":0},\"incarnation\":0,\"state\":\"Down\"}",0,"2025-06-18 17:48:58.714332+00:00"]]}
+      {"eoq":{"time":4.2e-8}}
+
+
   ## Parameters
   - `response`: Raw response body from Corrosion API
 

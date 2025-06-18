@@ -112,6 +112,8 @@ COPY --chown=corrosion:corrosion --chmod=0755 corrosion/schemas /app/schemas
 
 ENV OVERMIND_NO_PORT="1"
 ENV OVERMIND_ANY_CAN_DIE="1"
+ENV OVERMIND_AUTO_RESTART="all"
+
 ENTRYPOINT ["/entrypoint"]
 CMD ["/app/overmind", "start"]
 #CMD ["/app/bin/server"]

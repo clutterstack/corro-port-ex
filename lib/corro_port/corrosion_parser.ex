@@ -73,6 +73,35 @@ defmodule CorroPort.CorrosionParser do
   @doc """
   Generic NDJSON parser that can handle any corrosion command output.
 
+  Corrosion CLI commands output a newline-delimited JSON (or an empty string if no result)
+
+  Output example:
+      ❯ corrosion/corrosion-mac cluster members --config corrosion/config-node1.toml
+      {
+        "id": "2ca684b1-8a9d-4aac-89bc-06d3b3521434",
+        "rtts": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "state": {
+          "addr": "127.0.0.1:8789",
+          "cluster_id": 0,
+          "last_empty_ts": null,
+          "last_sync_ts": null,
+          "ring": 0,
+          "ts": 7517394612988432848
+        }
+      }
+
   ## Parameters
   - `ndjson_output` - Raw NDJSON string
   - `enhancer_fun` - Optional function to enhance each parsed object
@@ -96,28 +125,28 @@ defmodule CorroPort.CorrosionParser do
   end
 
   # Handle whitespace-only strings
-  def parse_ndjson(ndjson_output, enhancer_fun) when is_binary(ndjson_output) do
-    trimmed = String.trim(ndjson_output)
+  # def parse_ndjson(ndjson_output, enhancer_fun) when is_binary(ndjson_output) do
+  #   trimmed = String.trim(ndjson_output)
 
-    if trimmed == "" do
-      Logger.debug("CorrosionParser: Received whitespace-only string - likely single node setup")
-      {:ok, []}
-    else
-      parse_non_empty_ndjson(trimmed, enhancer_fun)
-    end
-  end
+  #   if trimmed == "" do
+  #     Logger.debug("CorrosionParser: Received whitespace-only string - likely single node setup")
+  #     {:ok, []}
+  #   else
+  #     parse_non_empty_ndjson(trimmed, enhancer_fun)
+  #   end
+  # end
 
-  # The actual parsing logic, extracted for clarity
-  defp parse_non_empty_ndjson(ndjson_output, enhancer_fun) do
-    Logger.info("in parse_non_empty_json")
+  def parse_ndjson(ndjson_output, enhancer_fun) do
+    trimmed = String.trim(ndjson_output) |> dbg
+    Logger.info("in parse_ndjson")
     # Logger.info("parse_concatenated_json result is #{inspect parse_concatenated_json(ndjson_output, enhancer_fun)}")
-      # Handle Corrosion's specific output format: concatenated pretty-printed JSON objects
-      case parse_concatenated_json(ndjson_output, enhancer_fun) do
-        {:ok, objects} when objects != [] ->
-          {:ok, objects}
-      something_else ->
-        Logger.error("CorrosionParser: Error parsing JSON/NDJSON: #{inspect(something_else)}")
-        {:error, {:parse_error, something_else}}
+    # Handle Corrosion's specific output format: concatenated pretty-printed JSON objects
+    case parse_concatenated_json(trimmed, enhancer_fun) do
+      {:ok, objects} when objects != [] ->
+        {:ok, objects}
+    something_else ->
+      Logger.error("CorrosionParser: Error parsing JSON/NDJSON: #{inspect(something_else)}")
+      {:error, {:parse_error, something_else}}
     end
   end
 
@@ -178,37 +207,6 @@ defmodule CorroPort.CorrosionParser do
         {:ok, parsed_objects}
     end
   end
-
-  # Fallback to try other formats
-  # defp try_alternative_formats(ndjson_output, enhancer_fun) do
-  #   Logger.info("try_alternative_formats, ndjson_output = #{inspect ndjson_output}")
-  #   # Try NDJSON format (one JSON object per line)
-  #   lines = String.split(ndjson_output, "\n", trim: true)
-
-  #   {parsed_objects, errors} =
-  #     lines
-  #     |> Enum.map(&parse_json_line/1)
-  #     |> Enum.split_with(&match?({:ok, _}, &1))
-
-  #   # Extract successful results and apply enhancer
-  #   objects =
-  #     parsed_objects
-  #     |> Enum.map(fn {:ok, obj} -> obj end)
-  #     |> Enum.map(enhancer_fun)
-
-  #   # Log any parse errors but don't fail the whole operation
-  #   if errors != [] do
-  #     Logger.warning(
-  #       "CorrosionParser: #{length(errors)} lines failed to parse: #{inspect(errors)}"
-  #     )
-  #   end
-
-  #   Logger.debug(
-  #     "CorrosionParser: Successfully parsed #{length(objects)} objects via NDJSON fallback"
-  #   )
-
-  #   {:ok, objects}
-  # end
 
   # Private functions
 
@@ -285,6 +283,8 @@ defp add_display_fields(member) do
     case Map.get(state, "last_sync_ts") do
       ts when is_integer(ts) ->
         format_corrosion_timestamp(ts)
+      _ ->
+        "never"
     end
 
   # Add all computed display fields
