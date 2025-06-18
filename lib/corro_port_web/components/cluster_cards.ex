@@ -46,10 +46,10 @@ defmodule CorroPortWeb.ClusterCards do
   def index_header(assigns) do
     ~H"""
     <.header>
-      <.icon name="hero-globe-alt" class="w-5 h-5 mr-2" /> Geographic Distribution
+      <.icon name="hero-radio" class="w-5 h-5 mr-2" /> DB change propagation
       <:subtitle>
         <div class="flex items-center gap-4">
-          <span>Watch changes propagate across the map</span>
+          <span>Click "Send Message." Markers change colour as nodes confirm they've received the update.</span>
         </div>
       </:subtitle>
       <:actions>

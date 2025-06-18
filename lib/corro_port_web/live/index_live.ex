@@ -240,35 +240,8 @@ end
           <div class="mb-4">
             <div class="flex items-center justify-between text-sm mb-2">
               <span>Acknowledgment Progress:</span>
-              <span>
-                {length(@ack_regions)}/{length(@expected_regions)} regions
-              </span>
-            </div>
-            <div class="w-full bg-base-300 rounded-full h-2">
-              <div
-                class="h-2 rounded-full bg-gradient-to-r from-orange-500 to-violet-500 transition-all duration-500"
-                style={"width: #{if length(@expected_regions) > 0, do: length(@ack_regions) / length(@expected_regions) * 100, else: 0}%"}
-              >
-              </div>
-            </div>
-          </div>
+               <div class="flex items-center justify-between">
 
-          <!-- Message Tracking Status -->
-          <div
-            :if={@ack_regions != [] or (@ack_status && @ack_status.latest_message)}
-            class="card bg-base-200 border-l-4 border-primary"
-          >
-            <div class="card-body py-3">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                  <.icon name="hero-radio" class="w-5 h-5 text-primary" />
-                  <div>
-                    <div class="font-semibold text-sm">Tracking Message Acknowledgments</div>
-                    <div class="text-xs text-base-content/70">
-                      Watch the map as nodes acknowledge the message
-                    </div>
-                  </div>
-                </div>
                 <div class="flex items-center gap-2 text-sm">
                   <span class="badge badge-success badge-sm">
                     {length(@ack_regions)} acknowledged
@@ -279,7 +252,16 @@ end
                 </div>
               </div>
             </div>
+            <div class="w-full bg-base-300 rounded-full h-2">
+              <div
+                class="h-2 rounded-full bg-gradient-to-r from-orange-500 to-violet-500 transition-all duration-500"
+                style={"width: #{if length(@expected_regions) > 0, do: length(@ack_regions) / length(@expected_regions) * 100, else: 0}%"}
+              >
+              </div>
+            </div>
           </div>
+
+
 
           <div class="text-sm text-base-content/70 space-y-2">
             <div class="flex items-center">
@@ -333,19 +315,7 @@ end
               <% end %>
             </div>
 
-            <!-- Instructions when no message is being tracked -->
-            <div
-              :if={@ack_regions == [] and (!@ack_status or !@ack_status.latest_message)}
-              class="mt-3 p-3 bg-base-200 rounded-lg"
-            >
-              <div class="flex items-center gap-2 text-info">
-                <.icon name="hero-information-circle" class="w-4 h-4" />
-                <span class="font-semibold">Ready to track acknowledgments</span>
-              </div>
-              <div class="text-xs mt-1">
-                Click "Send Message" to broadcast a message and watch regions turn violet as they acknowledge
-              </div>
-            </div>
+
           </div>
         </div>
       </div>
