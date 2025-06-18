@@ -30,7 +30,7 @@ defmodule CorroPort.CorrosionParser do
       {:ok, []}
   """
   def parse_cluster_members(ndjson_output) when is_binary(ndjson_output) do
-    parse_ndjson(ndjson_output, &enhance_member/1)
+    parse_cli_output(ndjson_output, &enhance_member/1)
   end
 
   # Handle nil input (can happen with some CLI error cases)
@@ -50,7 +50,7 @@ defmodule CorroPort.CorrosionParser do
   - `{:error, reason}` - Parse error details
   """
   def parse_cluster_info(ndjson_output) when is_binary(ndjson_output) do
-    parse_ndjson(ndjson_output, &enhance_cluster_info/1)
+    parse_cli_output(ndjson_output, &enhance_cluster_info/1)
   end
 
   def parse_cluster_info(nil) do
@@ -62,7 +62,7 @@ defmodule CorroPort.CorrosionParser do
   Parses cluster status NDJSON output.
   """
   def parse_cluster_status(ndjson_output) when is_binary(ndjson_output) do
-    parse_ndjson(ndjson_output, &enhance_status/1)
+    parse_cli_output(ndjson_output, &enhance_status/1)
   end
 
   def parse_cluster_status(nil) do
@@ -71,151 +71,56 @@ defmodule CorroPort.CorrosionParser do
   end
 
   @doc """
-  Generic NDJSON parser that can handle any corrosion command output.
+Parses concatenated JSON objects from corrosion command output.
+"""
+def parse_cli_output(output, enhancer_fun \\ &Function.identity/1)
 
-  Corrosion CLI commands output a newline-delimited JSON (or an empty string if no result)
+def parse_cli_output(output, _enhancer_fun) when output in [nil, ""] do
+  {:ok, []}
+end
 
-  Output example:
-      ❯ corrosion/corrosion-mac cluster members --config corrosion/config-node1.toml
-      {
-        "id": "2ca684b1-8a9d-4aac-89bc-06d3b3521434",
-        "rtts": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        "state": {
-          "addr": "127.0.0.1:8789",
-          "cluster_id": 0,
-          "last_empty_ts": null,
-          "last_sync_ts": null,
-          "ring": 0,
-          "ts": 7517394612988432848
-        }
-      }
-
-  ## Parameters
-  - `ndjson_output` - Raw NDJSON string
-  - `enhancer_fun` - Optional function to enhance each parsed object
-
-  ## Returns
-  - `{:ok, objects}` - List of parsed JSON objects
-  - `{:error, reason}` - Parse error details
-  """
-  def parse_ndjson(ndjson_output, enhancer_fun \\ &Function.identity/1)
-
-  # Handle nil input
-  def parse_ndjson(nil, _enhancer_fun) do
-    Logger.debug("CorrosionParser: Received nil input for NDJSON parsing")
-    {:ok, []}
+def parse_cli_output(output, enhancer_fun) when is_binary(output) do
+  output
+  |> String.trim()
+  |> case do
+    "" -> {:ok, []}
+    trimmed -> parse_json_objects(trimmed, enhancer_fun)
   end
+end
 
-  # Handle empty string (single node case)
-  def parse_ndjson("", _enhancer_fun) do
-    Logger.debug("CorrosionParser: Received empty string - likely single node setup")
-    {:ok, []}
+defp parse_json_objects(output, enhancer_fun) do
+  # Try parsing as a single JSON first (most common case)
+  case Jason.decode(output) do
+    {:ok, object} when is_map(object) ->
+      {:ok, [enhancer_fun.(object)]}
+
+    {:ok, array} when is_list(array) ->
+      {:ok, Enum.map(array, enhancer_fun)}
+
+    {:error, _} ->
+      # Fall back to splitting concatenated objects
+      parse_concatenated_objects(output, enhancer_fun)
   end
+end
 
-  # Handle whitespace-only strings
-  # def parse_ndjson(ndjson_output, enhancer_fun) when is_binary(ndjson_output) do
-  #   trimmed = String.trim(ndjson_output)
+defp parse_concatenated_objects(output, enhancer_fun) do
+  # Split on pattern that separates complete JSON objects
+  output
+  |> String.split(~r/(?<=\})\s*(?=\{)/)
+  |> Enum.reduce_while([], fn chunk, acc ->
+    case Jason.decode(String.trim(chunk)) do
+      {:ok, object} when is_map(object) ->
+        {:cont, [enhancer_fun.(object) | acc]}
 
-  #   if trimmed == "" do
-  #     Logger.debug("CorrosionParser: Received whitespace-only string - likely single node setup")
-  #     {:ok, []}
-  #   else
-  #     parse_non_empty_ndjson(trimmed, enhancer_fun)
-  #   end
-  # end
-
-  def parse_ndjson(ndjson_output, enhancer_fun) do
-    trimmed = String.trim(ndjson_output) |> dbg
-    Logger.info("in parse_ndjson")
-    # Logger.info("parse_concatenated_json result is #{inspect parse_concatenated_json(ndjson_output, enhancer_fun)}")
-    # Handle Corrosion's specific output format: concatenated pretty-printed JSON objects
-    case parse_concatenated_json(trimmed, enhancer_fun) do
-      {:ok, objects} when objects != [] ->
-        {:ok, objects}
-    something_else ->
-      Logger.error("CorrosionParser: Error parsing JSON/NDJSON: #{inspect(something_else)}")
-      {:error, {:parse_error, something_else}}
+      {:error, reason} ->
+        {:halt, {:error, {:parse_error, chunk, reason}}}
     end
+  end)
+  |> case do
+    {:error, _} = error -> error
+    objects -> {:ok, Enum.reverse(objects)}
   end
-
-  # Try to parse concatenated pretty-printed JSON objects (Corrosion's actual format)
-  defp parse_concatenated_json(output, enhancer_fun) do
-    Logger.info("parse_concatenated_json")
-    # Split on "}\n{" pattern which separates concatenated JSON objects
-    # Then reconstruct each complete JSON object
-    parts = String.split(output, ~r/\}\s*\n\s*\{/)
-
-    case length(parts) do
-      1 ->
-        # Single object, try to parse directly
-        case Jason.decode(String.trim(output)) do
-          {:ok, object} when is_map(object) ->
-            {:ok, [enhancer_fun.(object)]}
-
-          {:ok, array} when is_list(array) ->
-            {:ok, Enum.map(array, enhancer_fun)}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-
-      _ ->
-        # Multiple objects, reconstruct and parse each
-        objects =
-          parts
-          |> Enum.with_index()
-          |> Enum.map(fn {part, index} ->
-            # Add back the braces that were removed by splitting
-            complete_json =
-              cond do
-                # First part: add closing brace
-                index == 0 -> part <> "}"
-                # Last part: add opening brace
-                index == length(parts) - 1 -> "{" <> part
-                # Middle parts: add both braces
-                true -> "{" <> part <> "}"
-              end
-
-            case Jason.decode(String.trim(complete_json)) do
-              {:ok, object} when is_map(object) -> {:ok, enhancer_fun.(object)}
-              {:error, reason} -> {:error, {complete_json, reason}}
-            end
-          end)
-
-        # Separate successful parses from errors
-        {successes, errors} = Enum.split_with(objects, &match?({:ok, _}, &1))
-
-        if errors != [] do
-          Logger.warning(
-            "CorrosionParser: #{length(errors)} objects failed to parse: #{inspect(errors)}"
-          )
-        end
-
-        parsed_objects = Enum.map(successes, fn {:ok, obj} -> obj end)
-        {:ok, parsed_objects}
-    end
-  end
-
-  # Private functions
-
-  defp parse_json_line(line) when is_binary(line) do
-    case Jason.decode(line) do
-      {:ok, object} -> {:ok, object}
-      {:error, reason} -> {:error, {line, reason}}
-    end
-  end
+end
 
   # Enhancer functions for different command types
 
