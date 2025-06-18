@@ -98,7 +98,7 @@ defmodule CorroPort.CorrosionCLI do
     # Build the full command
     cmd_args = args ++ ["--config", config_path]
 
-    Logger.debug("CorrosionCLI: Running command: #{binary_path} #{Enum.join(cmd_args, " ")}")
+    Logger.debug("CorrosionCLI: command #{binary_path} #{Enum.join(cmd_args, " ")}")
 
     # Validate that binary and config exist
     case validate_prerequisites(binary_path, config_path) do

@@ -109,29 +109,21 @@ defmodule CorroPort.CorrosionParser do
 
   # The actual parsing logic, extracted for clarity
   defp parse_non_empty_ndjson(ndjson_output, enhancer_fun) do
-    try do
+    Logger.info("in parse_non_empty_json")
+    # Logger.info("parse_concatenated_json result is #{inspect parse_concatenated_json(ndjson_output, enhancer_fun)}")
       # Handle Corrosion's specific output format: concatenated pretty-printed JSON objects
       case parse_concatenated_json(ndjson_output, enhancer_fun) do
         {:ok, objects} when objects != [] ->
           {:ok, objects}
-
-        {:ok, []} ->
-          # Empty result, try other formats
-          try_alternative_formats(ndjson_output, enhancer_fun)
-
-        {:error, _} ->
-          # Failed to parse as concatenated JSON, try other formats
-          try_alternative_formats(ndjson_output, enhancer_fun)
-      end
-    rescue
-      error ->
-        Logger.error("CorrosionParser: Error parsing JSON/NDJSON: #{inspect(error)}")
-        {:error, {:parse_error, error}}
+      something_else ->
+        Logger.error("CorrosionParser: Error parsing JSON/NDJSON: #{inspect(something_else)}")
+        {:error, {:parse_error, something_else}}
     end
   end
 
   # Try to parse concatenated pretty-printed JSON objects (Corrosion's actual format)
   defp parse_concatenated_json(output, enhancer_fun) do
+    Logger.info("parse_concatenated_json")
     # Split on "}\n{" pattern which separates concatenated JSON objects
     # Then reconstruct each complete JSON object
     parts = String.split(output, ~r/\}\s*\n\s*\{/)
@@ -188,34 +180,35 @@ defmodule CorroPort.CorrosionParser do
   end
 
   # Fallback to try other formats
-  defp try_alternative_formats(ndjson_output, enhancer_fun) do
-    # Try NDJSON format (one JSON object per line)
-    lines = String.split(ndjson_output, "\n", trim: true)
+  # defp try_alternative_formats(ndjson_output, enhancer_fun) do
+  #   Logger.info("try_alternative_formats, ndjson_output = #{inspect ndjson_output}")
+  #   # Try NDJSON format (one JSON object per line)
+  #   lines = String.split(ndjson_output, "\n", trim: true)
 
-    {parsed_objects, errors} =
-      lines
-      |> Enum.map(&parse_json_line/1)
-      |> Enum.split_with(&match?({:ok, _}, &1))
+  #   {parsed_objects, errors} =
+  #     lines
+  #     |> Enum.map(&parse_json_line/1)
+  #     |> Enum.split_with(&match?({:ok, _}, &1))
 
-    # Extract successful results and apply enhancer
-    objects =
-      parsed_objects
-      |> Enum.map(fn {:ok, obj} -> obj end)
-      |> Enum.map(enhancer_fun)
+  #   # Extract successful results and apply enhancer
+  #   objects =
+  #     parsed_objects
+  #     |> Enum.map(fn {:ok, obj} -> obj end)
+  #     |> Enum.map(enhancer_fun)
 
-    # Log any parse errors but don't fail the whole operation
-    if errors != [] do
-      Logger.warning(
-        "CorrosionParser: #{length(errors)} lines failed to parse: #{inspect(errors)}"
-      )
-    end
+  #   # Log any parse errors but don't fail the whole operation
+  #   if errors != [] do
+  #     Logger.warning(
+  #       "CorrosionParser: #{length(errors)} lines failed to parse: #{inspect(errors)}"
+  #     )
+  #   end
 
-    Logger.debug(
-      "CorrosionParser: Successfully parsed #{length(objects)} objects via NDJSON fallback"
-    )
+  #   Logger.debug(
+  #     "CorrosionParser: Successfully parsed #{length(objects)} objects via NDJSON fallback"
+  #   )
 
-    {:ok, objects}
-  end
+  #   {:ok, objects}
+  # end
 
   # Private functions
 
@@ -397,7 +390,7 @@ def format_corrosion_timestamp(ntp64_timestamp) when is_integer(ntp64_timestamp)
     {:ok, datetime} ->
       # Add microseconds for sub-second precision
       datetime_with_precision = %{datetime | microsecond: {microseconds, 6}}
-      Calendar.strftime(datetime_with_precision, "%Y-%m-%d %H:%M:%S UTC") |> dbg
+      Calendar.strftime(datetime_with_precision, "%Y-%m-%d %H:%M:%S UTC")
 
     {:error, _} ->
       "Invalid timestamp"
@@ -405,12 +398,6 @@ def format_corrosion_timestamp(ntp64_timestamp) when is_integer(ntp64_timestamp)
 end
 
 def format_corrosion_timestamp(_), do: "Invalid timestamp"
-
-
-
-
-
-
 
 
   defp add_health_indicators(status) when is_map(status) do

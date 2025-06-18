@@ -118,7 +118,7 @@ defmodule CorroPort.ClusterMemberStore do
     # This handles the case where System.cmd might unexpectedly return nil
     normalized_output = raw_output || ""
 
-    Logger.debug("ClusterMemberStore: Raw output type: #{inspect(raw_output)} -> #{inspect(normalized_output)}")
+    # Logger.debug("ClusterMemberStore: Raw output type: #{inspect(raw_output)} -> #{inspect(normalized_output)}")
 
     # Parse the output
     {members, error} = parse_cli_output(normalized_output)

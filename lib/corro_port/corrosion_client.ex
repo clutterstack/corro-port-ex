@@ -172,14 +172,14 @@ defmodule CorroPort.CorrosionClient do
   - `:ok` if connection successful
   - `{:error, reason}` if connection failed
   """
-  def test_connection(port \\ nil) do
+  def test_corro_conn(port \\ nil) do
     case execute_query("SELECT 1", port) do
       {:ok, message} ->
         Logger.info(message)
         :ok
 
       error ->
-        error
+        error |> dbg
     end
   end
 end

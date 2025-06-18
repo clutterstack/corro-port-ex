@@ -3,7 +3,7 @@ defmodule CorroPortWeb.ClusterLive do
   require Logger
 
   alias CorroPortWeb.{ClusterCards, MembersTable, DebugSection, NavTabs}
-  alias CorroPort.{DNSNodeDiscovery, AckTracker, ClusterMemberStore}
+  alias CorroPort.{DNSNodeDiscovery, AckTracker, ClusterMemberStore, NodeConfig}
 
   # 5 minutes refresh interval
   @refresh_interval 300_000
@@ -17,10 +17,12 @@ def mount(_params, _session, socket) do
   end
 
   phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
+  local_node_id = NodeConfig.get_corrosion_node_id()
 
   socket =
     assign(socket, %{
       page_title: "Cluster Status",
+      local_node_id: local_node_id,
 
       # NEW: Clear node sets based on different sources
       expected_nodes: [],        # From DNS
@@ -37,8 +39,6 @@ def mount(_params, _session, socket) do
 
       # Keep basic cluster info for debugging
       cluster_info: nil,
-      local_info: nil,
-      node_messages: [],        # ClusterLive needs this for messages table
 
       # Keep these for the existing components that still need them
       phoenix_port: phoenix_port,
@@ -56,34 +56,7 @@ end
 
   # Event handlers
 
-  def handle_event("send_message", _params, socket) do
-    case CorroPortWeb.ClusterLive.MessageHandler.send_message() do
-      {:ok, success_message, message_data} ->
-        Logger.debug("ClusterLive: ✅ Message sent successfully: #{inspect(message_data)}")
 
-        # Track this message for acknowledgment monitoring
-        track_message_data = %{
-          pk: message_data.pk,
-          timestamp: message_data.timestamp,
-          node_id: message_data.node_id
-        }
-
-        CorroPort.AckTracker.track_latest_message(track_message_data)
-        Logger.debug("ClusterLive: Now tracking message #{message_data.pk} for acknowledgments")
-
-        socket =
-          socket
-          # Reset ack regions since we're tracking a new message
-          |> assign(:ack_regions, [])
-          |> put_flash(:info, success_message)
-
-        {:noreply, socket}
-
-      {:error, error} ->
-        socket = put_flash(socket, :error, "Failed to send message: #{error}")
-        {:noreply, socket}
-    end
-  end
 
   def handle_event("refresh", _params, socket) do
     Logger.debug("ClusterLive: 🔄 Manual refresh triggered")
@@ -110,26 +83,6 @@ end
       |> put_flash(:info, "DNS cache refreshed")
 
     {:noreply, socket}
-  end
-
-  def handle_event("reset_tracking", _params, socket) do
-    case CorroPort.AckTracker.reset_tracking() do
-      :ok ->
-        Logger.info("ClusterLive: ✅ Message tracking reset successfully")
-
-        socket =
-          socket
-          # Clear the violet regions immediately
-          |> assign(:ack_regions, [])
-          |> put_flash(:info, "Message tracking reset - all nodes are now orange (expected)")
-
-        {:noreply, socket}
-
-      {:error, error} ->
-        Logger.warning("ClusterLive: ❌ Failed to reset tracking: #{inspect(error)}")
-        socket = put_flash(socket, :error, "Failed to reset tracking: #{inspect(error)}")
-        {:noreply, socket}
-    end
   end
 
   # Handle cluster member updates from centralized store
@@ -182,7 +135,6 @@ end
       ack_regions: ack_regions,
       ack_status: ack_status,
       cluster_info: updates.cluster_info,
-      local_info: updates.local_info,
       node_messages: updates.node_messages,  # Only ClusterLive gets this
       cli_error: updates.cli_error,
       cli_members_stale: cli_members_stale,
@@ -203,8 +155,7 @@ end
       |> Enum.uniq()
 
     # Remove our region from active regions
-    local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
-    our_region = CorroPort.CorrosionParser.extract_region_from_node_id(local_node_id)
+    our_region = CorroPort.CorrosionParser.extract_region_from_node_id(socket.assigns.local_node_id)
     active_regions = Enum.reject(active_regions, &(&1 == our_region))
 
     assign(socket, %{
@@ -243,13 +194,6 @@ end
               <.icon name="hero-globe-alt" class="w-5 h-5 mr-2" /> Geographic Distribution
             </h3>
             <div class="flex gap-2">
-              <.button
-                :if={@ack_regions != []}
-                phx-click="reset_tracking"
-                class="btn btn-xs btn-warning btn-outline"
-              >
-                <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Reset
-              </.button>
               <.button phx-click="refresh_dns_cache" class="btn btn-xs btn-outline">
                 <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Refresh DNS
               </.button>
@@ -265,48 +209,8 @@ end
             />
           </div>
 
-          <!-- Real-time acknowledgment progress bar -->
-          <div :if={@ack_regions != [] or (@ack_status && @ack_status.latest_message)} class="mb-4">
-            <div class="flex items-center justify-between text-sm mb-2">
-              <span>Acknowledgment Progress:</span>
-              <span>{length(@ack_regions)}/{length(@expected_regions)} regions</span>
-            </div>
-            <div class="w-full bg-base-300 rounded-full h-2">
-              <div
-                class="h-2 rounded-full bg-gradient-to-r from-orange-500 to-violet-500 transition-all duration-500"
-                style={"width: #{if length(@expected_regions) > 0, do: length(@ack_regions) / length(@expected_regions) * 100, else: 0}%"}
-              >
-              </div>
-            </div>
-          </div>
 
-          <!-- Message Tracking Status -->
-          <div
-            :if={@ack_regions != [] or (@ack_status && @ack_status.latest_message)}
-            class="card bg-base-200 border-l-4 border-primary"
-          >
-            <div class="card-body py-3">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                  <.icon name="hero-radio" class="w-5 h-5 text-primary" />
-                  <div>
-                    <div class="font-semibold text-sm">Tracking Message Acknowledgments</div>
-                    <div class="text-xs text-base-content/70">
-                      Watch the map as nodes acknowledge the message
-                    </div>
-                  </div>
-                </div>
-                <div class="flex items-center gap-2 text-sm">
-                  <span class="badge badge-success badge-sm">
-                    {length(@ack_regions)} acknowledged
-                  </span>
-                  <span class="badge badge-warning badge-sm">
-                    {length(@expected_regions)} expected
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
+
 
           <div class="text-sm text-base-content/70 space-y-2">
             <div class="flex items-center">
@@ -360,25 +264,13 @@ end
               <% end %>
             </div>
 
-            <!-- Instructions when no message is being tracked -->
-            <div
-              :if={@ack_regions == [] and (!@ack_status or !@ack_status.latest_message)}
-              class="mt-3 p-3 bg-base-200 rounded-lg"
-            >
-              <div class="flex items-center gap-2 text-info">
-                <.icon name="hero-information-circle" class="w-4 h-4" />
-                <span class="font-semibold">Ready to track acknowledgments</span>
-              </div>
-              <div class="text-xs mt-1">
-                Click "Send Message" to broadcast a message and watch regions turn violet as they acknowledge
-              </div>
-            </div>
+
           </div>
         </div>
       </div>
 
-      <ClusterCards.status_cards_simple
-        local_info={@local_info}
+      <ClusterCards.cluster_summary_card
+        local_node_id={@local_node_id}
         cluster_info={@cluster_info}
         node_messages={@node_messages}
         last_updated={@last_updated}
@@ -517,7 +409,6 @@ end
 
       <DebugSection.debug_section
         cluster_info={@cluster_info}
-        local_info={@local_info}
         node_messages={@node_messages}
       />
     </div>

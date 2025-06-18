@@ -17,7 +17,7 @@ defmodule CorroPortWeb.NodeLive do
         node_info: nil,
         config_info: nil,
         corro_config_path: NodeConfig.get_config_path(),
-        corrosion_status: nil,
+        db_info: nil,
         process_info: nil,
         file_info: nil,
         connectivity_test: nil,
@@ -34,17 +34,17 @@ defmodule CorroPortWeb.NodeLive do
   end
 
   def handle_event("test_local_connection", _params, socket) do
-    Logger.debug("NodeLive: Testing local Corrosion API connection...")
+    Logger.debug("NodeLive: Testing local Corrosion API connection.")
 
     # Run the test and update the socket with results
     test_result = perform_local_connectivity_test()
-
+    Logger.debug("API responded OK")
     socket =
       socket
       |> assign(:connectivity_test, test_result)
       |> put_flash(
         if(test_result.success, do: :info, else: :error),
-        test_result.message
+        test_result.flash_message
       )
 
     {:noreply, socket}
@@ -71,31 +71,30 @@ defmodule CorroPortWeb.NodeLive do
   defp perform_local_connectivity_test do
     start_time = System.monotonic_time(:millisecond)
 
-    case CorrosionClient.test_connection() do
-      :ok ->
-        end_time = System.monotonic_time(:millisecond)
-        response_time = end_time - start_time
+    if CorrosionClient.test_corro_conn() == :ok do
+      end_time = System.monotonic_time(:millisecond)
+      response_time = end_time - start_time
 
-        %{
-          success: true,
-          message: "✅ Local Corrosion API connection successful (#{response_time}ms)",
-          response_time_ms: response_time,
-          timestamp: DateTime.utc_now(),
-          details: "Corrosion API is responding to queries"
-        }
+      %{
+        success: true,
+        flash_message: "✅ Corrosion API is responding to queries",
+        response_time_ms: response_time,
+        timestamp: DateTime.utc_now(),
+        details: "Responded in #{response_time}ms"
+      }
 
-      {:error, reason} ->
-        end_time = System.monotonic_time(:millisecond)
-        response_time = end_time - start_time
+    else
+      end_time = System.monotonic_time(:millisecond)
+      response_time = end_time - start_time
 
-        %{
-          success: false,
-          message: "❌ Local Corrosion API connection failed: #{inspect(reason)}",
-          response_time_ms: response_time,
-          timestamp: DateTime.utc_now(),
-          details: "Error details: #{inspect(reason)}",
-          error: reason
-        }
+      %{
+        success: false,
+        flash_message: "❌ Local Corrosion API connection failed.",
+        response_time_ms: response_time,
+        timestamp: DateTime.utc_now(),
+        details: "Check logs",
+        error: "this is an error field"
+      }
     end
   end
 
@@ -104,16 +103,19 @@ defmodule CorroPortWeb.NodeLive do
 
     # Gather all the information
     node_info = get_node_info()
+
     config_info = get_config_info()
-    corrosion_status = get_corrosion_status()
+    db_info = ClusterAPI.get_database_info()
     process_info = get_process_info()
     file_info = get_file_info()
+    local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
     socket
     |> assign(%{
       node_info: node_info,
+      local_node_id: local_node_id,
       config_info: config_info,
-      corrosion_status: corrosion_status,
+      db_info: db_info,
       process_info: process_info,
       file_info: file_info,
       loading: false,
@@ -171,38 +173,6 @@ defmodule CorroPortWeb.NodeLive do
   # Safe fallback that always produces JSON-serializable output
   defp safe_inspect(data) do
     inspect(data, pretty: true, limit: :infinity)
-  end
-
-  defp get_corrosion_status do
-    # Test basic connectivity
-    connection_status =
-      case CorrosionClient.test_connection() do
-        :ok -> {:ok, "Connected"}
-        {:error, reason} -> {:error, reason}
-      end
-
-    # Try to get node info from Corrosion
-    local_info =
-      case ClusterAPI.get_info() do
-        {:ok, info} -> info
-      end
-
-    # Try to get cluster members
-    cluster_info =
-      case ClusterAPI.get_cluster_members() do
-        {:ok, members} -> %{member_count: length(members), members: members}
-        {:error, reason} -> %{error: reason}
-      end
-
-    # Try to get database info
-    db_info = ClusterAPI.get_database_info()
-
-    %{
-      connection_status: connection_status,
-      local_info: local_info,
-      cluster_info: cluster_info,
-      database_info: db_info
-    }
   end
 
   defp get_process_info do
@@ -335,7 +305,7 @@ defmodule CorroPortWeb.NodeLive do
           </.button>
         </:actions>
       </.header>
-      
+
     <!-- Connectivity Test Results -->
       <div :if={@connectivity_test} class="card bg-base-200">
         <div class="card-body">
@@ -370,22 +340,22 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- Loading State -->
       <div :if={@loading} class="flex items-center justify-center py-8">
         <div class="loading loading-spinner loading-lg"></div>
         <span class="ml-4">Loading node information...</span>
       </div>
-      
+
     <!-- Error State -->
       <div :if={@error} class="alert alert-error">
         <.icon name="hero-exclamation-circle" class="w-5 h-5" />
         <span>{@error}</span>
       </div>
-      
+
     <!-- Node Information Cards -->
       <div :if={!@loading} class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
+
     <!-- The Elixir Application -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -416,7 +386,7 @@ defmodule CorroPortWeb.NodeLive do
             </div>
           </div>
         </div>
-        
+
     <!-- Config from Application Environment -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -429,7 +399,7 @@ defmodule CorroPortWeb.NodeLive do
             </div>
           </div>
         </div>
-        
+
     <!-- Corrosion Config File -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -445,7 +415,7 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- Process Information -->
       <div class="card bg-base-100">
         <div class="card-body">
@@ -458,7 +428,7 @@ defmodule CorroPortWeb.NodeLive do
               <div><strong>Memory Usage by :erlang.memory():</strong></div>
               <div>{format_memory(@process_info.memory_usage[:total])}</div>
             </div>
-            
+
     <!-- Supervisor Children -->
             <div :if={@process_info.supervisors != []} class="mt-4">
               <h4 class="font-semibold text-sm mb-2">Supervisor Children:</h4>
@@ -481,13 +451,13 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- Database Information -->
-      <div :if={@corrosion_status && @corrosion_status.database_info} class="card bg-base-100">
+      <div :if={@db_info} class="card bg-base-100">
         <div class="card-body">
           <h3 class="card-title text-lg">Database Information</h3>
           <div class="space-y-3">
-            <div :for={{key, value} <- @corrosion_status.database_info} class="text-sm">
+            <div :for={{key, value} <- @db_info} class="text-sm">
               <div class="flex items-start justify-between">
                 <span class="font-semibold">{key}:</span>
                 <div class="text-right">
@@ -511,7 +481,7 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- File Information -->
       <div :if={@file_info && !@loading} class="card bg-base-100">
         <div class="card-body">
@@ -552,7 +522,7 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- Last Updated -->
       <div :if={@last_updated} class="text-xs text-base-content/70 text-center">
         Last updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}

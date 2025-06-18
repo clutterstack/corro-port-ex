@@ -11,8 +11,6 @@ defmodule CorroPortWeb.ClusterLive.DataFetcher do
 
     # Basic cluster info (keep for debugging)
     cluster_result = ClusterAPI.get_cluster_info()
-    # This always succeeds
-    {:ok, local_info} = ClusterAPI.get_info()
 
     # Extract active members and error from store
     active_members = cli_member_data.members
@@ -32,7 +30,6 @@ defmodule CorroPortWeb.ClusterLive.DataFetcher do
         {:ok, info} -> info
         {:error, _} -> nil
       end,
-      local_info: local_info,
       error: error,
       last_updated: DateTime.utc_now()
     }

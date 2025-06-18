@@ -31,8 +31,6 @@ def mount(_params, _session, socket) do
 
       # Keep basic cluster info for debugging
       cluster_info: nil,
-      local_info: nil,
-      # IndexLive doesn't need node_messages
 
       # General state
       error: nil,
@@ -161,7 +159,6 @@ end
       ack_regions: ack_regions,
       ack_status: ack_status,
       cluster_info: updates.cluster_info,
-      local_info: updates.local_info,
       cli_error: updates.cli_error,
       cli_members_stale: cli_members_stale,
       cli_member_data: cli_member_data,

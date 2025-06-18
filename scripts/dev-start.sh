@@ -41,7 +41,7 @@ BOOTSTRAP_LIST="[$BOOTSTRAP_PORTS]"
 
 # Paths
 CONFIG_PATH="corrosion/config-node${NODE_ID}.toml"
-DB_PATH="corrosion/node${NODE_ID}.db"
+DB_PATH="corrosion/dev-node${NODE_ID}.db"
 ADMIN_SOCKET="/tmp/corrosion/node${NODE_ID}_admin.sock"
 
 echo "📋 Node Configuration:"

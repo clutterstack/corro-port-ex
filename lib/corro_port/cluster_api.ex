@@ -52,7 +52,6 @@ defmodule CorroPort.ClusterAPI do
   - `member_count`: Number of remote cluster members
   - `active_member_count`: Number of active (non-Down) remote members
   - `peer_count`: Number of tracked peers
-  - `local_node_active`: Boolean indicating if local node is responding
   - `total_active_nodes`: Total active nodes including local
   """
   def get_cluster_info(port \\ nil) do
@@ -63,35 +62,16 @@ defmodule CorroPort.ClusterAPI do
       "member_count" => 0,
       "active_member_count" => 0,
       "peer_count" => 0,
-      "local_node_active" => false,
       "total_active_nodes" => 0
     }
 
-    # Check if local node is active (can respond to API calls)
-    local_active = check_local_node_active(port)
 
     # Get members and peers
     cluster_data
-    |> Map.put("local_node_active", local_active)
     |> fetch_members_with_activity(port)
     |> fetch_tracked_peers(port)
     |> calculate_total_active_nodes()
     |> then(&{:ok, &1})
-  end
-
-  @doc """
-  Checks if the local Corrosion node API responds to a trivial query.
-  """
-  def check_local_node_active(port \\ nil) do
-    case CorrosionClient.execute_query("SELECT 1 as alive", port) do
-      {:ok, _} ->
-        Logger.debug("Local Corrosion node is responding")
-        true
-
-      {:error, reason} ->
-        Logger.debug("Local Corrosion node not responding: #{inspect(reason)}")
-        false
-    end
   end
 
   @doc """
@@ -176,10 +156,9 @@ defmodule CorroPort.ClusterAPI do
   end
 
   defp calculate_total_active_nodes(cluster_data) do
-    local_active = Map.get(cluster_data, "local_node_active", false)
-    active_members = Map.get(cluster_data, "active_member_count", 0)
-
-    total_active = if local_active, do: active_members + 1, else: active_members
+    # table doesn't include local mode; if we were able to read the table,
+    # the local node is active so add it to the count
+    total_active = Map.get(cluster_data, "active_member_count", 0) + 1
 
     Map.put(cluster_data, "total_active_nodes", total_active)
   end
@@ -200,23 +179,6 @@ defmodule CorroPort.ClusterAPI do
   end
 
   ## System Introspection
-
-  @doc """
-  Gets local node information using the configured Elixir node ID.
-
-  Returns the node identification from the application configuration
-  instead of querying Corrosion database tables.
-  """
-  def get_info() do
-    node_id = CorroPort.NodeConfig.get_corrosion_node_id()
-    local_active = check_local_node_active()
-
-    {:ok,
-     %{
-       "node_id" => node_id,
-       "local_active" => local_active
-     }}
-  end
 
   def get_database_info() do
     # Use only SELECT queries that are guaranteed to be read-only
