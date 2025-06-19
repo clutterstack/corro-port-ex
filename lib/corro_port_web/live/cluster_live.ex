@@ -186,7 +186,6 @@ end
         end
       :dev ->
         Logger.debug("dns_regions_display: we're in dev")
-
         "(none; no DNS in dev)"
     end
   end
@@ -242,10 +241,10 @@ end
             </div>
 
             <div class="flex items-center">
-              <!-- Expected nodes from DNS (orange) -->
+              <!-- Nodes from DNS (orange) -->
               <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ff8c42;">
               </span>
-              Expected nodes (DNS)
+              Nodes from DNS
               <%= dns_regions_display(@expected_regions) %>
             </div>
 
