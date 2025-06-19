@@ -71,56 +71,56 @@ defmodule CorroPort.CorrosionParser do
   end
 
   @doc """
-Parses concatenated JSON objects from corrosion command output.
-"""
-def parse_cli_output(output, enhancer_fun \\ &Function.identity/1)
+  Parses concatenated JSON objects from corrosion command output.
+  """
+  def parse_cli_output(output, enhancer_fun \\ &Function.identity/1)
 
-def parse_cli_output(output, _enhancer_fun) when output in [nil, ""] do
-  {:ok, []}
-end
-
-def parse_cli_output(output, enhancer_fun) when is_binary(output) do
-  output
-  |> String.trim()
-  |> case do
-    "" -> {:ok, []}
-    trimmed -> parse_json_objects(trimmed, enhancer_fun)
+  def parse_cli_output(output, _enhancer_fun) when output in [nil, ""] do
+    {:ok, []}
   end
-end
 
-defp parse_json_objects(output, enhancer_fun) do
-  # Try parsing as a single JSON first (most common case)
-  case Jason.decode(output) do
-    {:ok, object} when is_map(object) ->
-      {:ok, [enhancer_fun.(object)]}
-
-    {:ok, array} when is_list(array) ->
-      {:ok, Enum.map(array, enhancer_fun)}
-
-    {:error, _} ->
-      # Fall back to splitting concatenated objects
-      parse_concatenated_objects(output, enhancer_fun)
-  end
-end
-
-defp parse_concatenated_objects(output, enhancer_fun) do
-  # Split on pattern that separates complete JSON objects
-  output
-  |> String.split(~r/(?<=\})\s*(?=\{)/)
-  |> Enum.reduce_while([], fn chunk, acc ->
-    case Jason.decode(String.trim(chunk)) do
-      {:ok, object} when is_map(object) ->
-        {:cont, [enhancer_fun.(object) | acc]}
-
-      {:error, reason} ->
-        {:halt, {:error, {:parse_error, chunk, reason}}}
+  def parse_cli_output(output, enhancer_fun) when is_binary(output) do
+    output
+    |> String.trim()
+    |> case do
+      "" -> {:ok, []}
+      trimmed -> parse_json_objects(trimmed, enhancer_fun)
     end
-  end)
-  |> case do
-    {:error, _} = error -> error
-    objects -> {:ok, Enum.reverse(objects)}
   end
-end
+
+  defp parse_json_objects(output, enhancer_fun) do
+    # Try parsing as a single JSON first (most common case)
+    case Jason.decode(output) do
+      {:ok, object} when is_map(object) ->
+        {:ok, [enhancer_fun.(object)]}
+
+      {:ok, array} when is_list(array) ->
+        {:ok, Enum.map(array, enhancer_fun)}
+
+      {:error, _} ->
+        # Fall back to splitting concatenated objects
+        parse_concatenated_objects(output, enhancer_fun)
+    end
+  end
+
+  defp parse_concatenated_objects(output, enhancer_fun) do
+    # Split on pattern that separates complete JSON objects
+    output
+    |> String.split(~r/(?<=\})\s*(?=\{)/)
+    |> Enum.reduce_while([], fn chunk, acc ->
+      case Jason.decode(String.trim(chunk)) do
+        {:ok, object} when is_map(object) ->
+          {:cont, [enhancer_fun.(object) | acc]}
+
+        {:error, reason} ->
+          {:halt, {:error, {:parse_error, chunk, reason}}}
+      end
+    end)
+    |> case do
+      {:error, _} = error -> error
+      objects -> {:ok, Enum.reverse(objects)}
+    end
+  end
 
   # Enhancer functions for different command types
 
@@ -143,66 +143,67 @@ end
   end
 
   # Streamlined enhancement - only compute what we actually display
-defp add_display_fields(member) do
-  state = Map.get(member, "state", %{})
+  defp add_display_fields(member) do
+    state = Map.get(member, "state", %{})
 
-  # Handle rtts being null/nil in the JSON
-  rtts = Map.get(member, "rtts") || []
+    # Handle rtts being null/nil in the JSON
+    rtts = Map.get(member, "rtts") || []
 
-  # Compute only the fields we actually use in the template
-  short_id =
-    case Map.get(member, "id") do
-      id when is_binary(id) and byte_size(id) > 8 -> String.slice(id, 0, 8) <> "..."
-      id -> id || "unknown"
-    end
+    # Compute only the fields we actually use in the template
+    short_id =
+      case Map.get(member, "id") do
+        id when is_binary(id) and byte_size(id) > 8 -> String.slice(id, 0, 8) <> "..."
+        id -> id || "unknown"
+      end
 
-  parsed_addr = Map.get(state, "addr", "unknown")
+    parsed_addr = Map.get(state, "addr", "unknown")
 
-  # Status computation
-  computed_status =
-    cond do
-      Map.get(state, "last_sync_ts") != nil -> "active"
-      Map.get(state, "ts") != nil -> "connected"
-      parsed_addr != "unknown" -> "reachable"
-      true -> "unknown"
-    end
+    # Status computation
+    computed_status =
+      cond do
+        Map.get(state, "last_sync_ts") != nil -> "active"
+        Map.get(state, "ts") != nil -> "connected"
+        parsed_addr != "unknown" -> "reachable"
+        true -> "unknown"
+      end
 
-  # RTT stats (only avg and count since that's what we display)
-  # Ensure rtts is a list before filtering
-  numeric_rtts =
-    if is_list(rtts) do
-      Enum.filter(rtts, &is_number/1)
-    else
-      []
-    end
+    # RTT stats (only avg and count since that's what we display)
+    # Ensure rtts is a list before filtering
+    numeric_rtts =
+      if is_list(rtts) do
+        Enum.filter(rtts, &is_number/1)
+      else
+        []
+      end
 
-  rtt_avg =
-    if numeric_rtts != [] do
-      Float.round(Enum.sum(numeric_rtts) / length(numeric_rtts), 1)
-    else
-      0.0
-    end
+    rtt_avg =
+      if numeric_rtts != [] do
+        Float.round(Enum.sum(numeric_rtts) / length(numeric_rtts), 1)
+      else
+        0.0
+      end
 
-  # Formatted timestamp
-  formatted_last_sync =
-    case Map.get(state, "last_sync_ts") do
-      ts when is_integer(ts) ->
-        format_corrosion_timestamp(ts)
-      _ ->
-        "never"
-    end
+    # Formatted timestamp
+    formatted_last_sync =
+      case Map.get(state, "last_sync_ts") do
+        ts when is_integer(ts) ->
+          format_corrosion_timestamp(ts)
 
-  # Add all computed display fields
-  member
-  |> Map.put("display_id", short_id)
-  |> Map.put("display_addr", parsed_addr)
-  |> Map.put("display_status", computed_status)
-  |> Map.put("display_cluster_id", Map.get(state, "cluster_id", "?"))
-  |> Map.put("display_ring", Map.get(state, "ring", "?"))
-  |> Map.put("display_rtt_avg", rtt_avg)
-  |> Map.put("display_rtt_count", length(numeric_rtts))
-  |> Map.put("display_last_sync", formatted_last_sync)
-end
+        _ ->
+          "never"
+      end
+
+    # Add all computed display fields
+    member
+    |> Map.put("display_id", short_id)
+    |> Map.put("display_addr", parsed_addr)
+    |> Map.put("display_status", computed_status)
+    |> Map.put("display_cluster_id", Map.get(state, "cluster_id", "?"))
+    |> Map.put("display_ring", Map.get(state, "ring", "?"))
+    |> Map.put("display_rtt_avg", rtt_avg)
+    |> Map.put("display_rtt_count", length(numeric_rtts))
+    |> Map.put("display_last_sync", formatted_last_sync)
+  end
 
   defp add_status_badge_class(member) do
     status = Map.get(member, "display_status")
@@ -257,53 +258,51 @@ end
 
   # defp format_corrosion_timestamp(_), do: "unknown"
 
-
   @doc """
-Formats a Corrosion timestamp (uhlc NTP64 format) to readable format.
+  Formats a Corrosion timestamp (uhlc NTP64 format) to readable format.
 
-Corrosion uses the uhlc library's NTP64 format, which is:
-- 64-bit fixed-point number
-- Upper 32 bits: seconds since Unix epoch (January 1, 1970)
-- Lower 32 bits: fractional seconds (1 unit = 1/2^32 seconds)
+  Corrosion uses the uhlc library's NTP64 format, which is:
+  - 64-bit fixed-point number
+  - Upper 32 bits: seconds since Unix epoch (January 1, 1970)
+  - Lower 32 bits: fractional seconds (1 unit = 1/2^32 seconds)
 
-Note: Despite the "NTP64" name, uhlc uses Unix epoch, not NTP epoch.
+  Note: Despite the "NTP64" name, uhlc uses Unix epoch, not NTP epoch.
 
-## Examples
-    iex> CorroPort.ClusterAPI.format_corrosion_timestamp(7517054269677675168)
-    "2025-06-17 22:49:43 UTC"
-"""
-def format_corrosion_timestamp(nil), do: "Never"
+  ## Examples
+      iex> CorroPort.ClusterAPI.format_corrosion_timestamp(7517054269677675168)
+      "2025-06-17 22:49:43 UTC"
+  """
+  def format_corrosion_timestamp(nil), do: "Never"
 
-def format_corrosion_timestamp(ntp64_timestamp) when is_integer(ntp64_timestamp) do
-  import Bitwise
+  def format_corrosion_timestamp(ntp64_timestamp) when is_integer(ntp64_timestamp) do
+    import Bitwise
 
-  # uhlc's NTP64 is a 64-bit fixed-point number:
-  # Upper 32 bits: seconds since Unix epoch (Jan 1, 1970)
-  # Lower 32 bits: fractional seconds
+    # uhlc's NTP64 is a 64-bit fixed-point number:
+    # Upper 32 bits: seconds since Unix epoch (Jan 1, 1970)
+    # Lower 32 bits: fractional seconds
 
-  # Extract the seconds part (upper 32 bits)
-  unix_seconds = ntp64_timestamp >>> 32
+    # Extract the seconds part (upper 32 bits)
+    unix_seconds = ntp64_timestamp >>> 32
 
-  # Extract the fractional part (lower 32 bits)
-  ntp_fraction = ntp64_timestamp &&& 0xFFFFFFFF
+    # Extract the fractional part (lower 32 bits)
+    ntp_fraction = ntp64_timestamp &&& 0xFFFFFFFF
 
-  # Convert fractional part to microseconds for DateTime
-  # ntp_fraction * 1_000_000 / 2^32
-  microseconds = div(ntp_fraction * 1_000_000, 4_294_967_296)
+    # Convert fractional part to microseconds for DateTime
+    # ntp_fraction * 1_000_000 / 2^32
+    microseconds = div(ntp_fraction * 1_000_000, 4_294_967_296)
 
-  case DateTime.from_unix(unix_seconds, :second) do
-    {:ok, datetime} ->
-      # Add microseconds for sub-second precision
-      datetime_with_precision = %{datetime | microsecond: {microseconds, 6}}
-      Calendar.strftime(datetime_with_precision, "%Y-%m-%d %H:%M:%S UTC")
+    case DateTime.from_unix(unix_seconds, :second) do
+      {:ok, datetime} ->
+        # Add microseconds for sub-second precision
+        datetime_with_precision = %{datetime | microsecond: {microseconds, 6}}
+        Calendar.strftime(datetime_with_precision, "%Y-%m-%d %H:%M:%S UTC")
 
-    {:error, _} ->
-      "Invalid timestamp"
+      {:error, _} ->
+        "Invalid timestamp"
+    end
   end
-end
 
-def format_corrosion_timestamp(_), do: "Invalid timestamp"
-
+  def format_corrosion_timestamp(_), do: "Invalid timestamp"
 
   defp add_health_indicators(status) when is_map(status) do
     # Add computed health indicators based on status data

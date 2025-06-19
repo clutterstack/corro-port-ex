@@ -65,7 +65,6 @@ defmodule CorroPort.ClusterAPI do
       "total_active_nodes" => 0
     }
 
-
     # Get members and peers
     cluster_data
     |> fetch_members_with_activity(port)
@@ -231,5 +230,4 @@ defmodule CorroPort.ClusterAPI do
         Map.put(member_row, "parse_error", "Missing or invalid foca_state")
     end
   end
-
 end

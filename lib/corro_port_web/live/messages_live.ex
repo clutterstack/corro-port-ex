@@ -32,7 +32,9 @@ defmodule CorroPortWeb.MessagesLive do
 
   # Handle acknowledgment updates
   def handle_info({:ack_update, ack_status}, socket) do
-    Logger.debug("MessagesLive: Received acknowledgment update: #{ack_status.ack_count}/#{ack_status.expected_count}")
+    Logger.debug(
+      "MessagesLive: Received acknowledgment update: #{ack_status.ack_count}/#{ack_status.expected_count}"
+    )
 
     socket = assign(socket, :ack_status, ack_status)
     {:noreply, socket}
@@ -255,7 +257,7 @@ defmodule CorroPortWeb.MessagesLive do
     <div class="space-y-6">
       <!-- Navigation Tabs -->
       <NavTabs.nav_tabs active={:messages} />
-
+      
     <!-- Page Header -->
       <.header>
         Message Operations
@@ -275,10 +277,10 @@ defmodule CorroPortWeb.MessagesLive do
           </.button>
         </:actions>
       </.header>
-
+      
     <!-- Acknowledgment Status -->
       <AckStatusCard.ack_status_card ack_status={@ack_status} ack_sender_status={@ack_sender_status} />
-
+      
     <!-- Connectivity Test Results -->
       <div :if={@connectivity_test_results} class="card bg-base-200">
         <div class="card-body">
@@ -296,7 +298,7 @@ defmodule CorroPortWeb.MessagesLive do
           </div>
         </div>
       </div>
-
+      
     <!-- All Messages Table -->
       <AllMessagesTable.all_messages_table
         all_messages={@all_messages}
@@ -304,7 +306,7 @@ defmodule CorroPortWeb.MessagesLive do
         messages_error={@messages_error}
         local_node_id={@local_node_id}
       />
-
+      
     <!-- Last Updated -->
       <div :if={@last_updated} class="text-xs text-base-content/70 text-center">
         Last updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}

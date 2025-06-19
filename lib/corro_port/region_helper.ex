@@ -48,14 +48,16 @@ defmodule CorroPortWeb.RegionHelper do
   Extract acknowledgment regions from AckTracker status.
   """
   def extract_ack_regions(ack_status) do
-    regions = ack_status
-    |> Map.get(:acknowledgments, [])
-    |> Enum.map(fn ack ->
-      CorrosionParser.extract_region_from_node_id(ack.node_id)
-    end)
-    |> Enum.reject(&(&1 == "unknown"))
-    |> Enum.uniq()
-    Logger.debug("regions: #{inspect regions}")
+    regions =
+      ack_status
+      |> Map.get(:acknowledgments, [])
+      |> Enum.map(fn ack ->
+        CorrosionParser.extract_region_from_node_id(ack.node_id)
+      end)
+      |> Enum.reject(&(&1 == "unknown"))
+      |> Enum.uniq()
+
+    Logger.debug("regions: #{inspect(regions)}")
     regions
   end
 end

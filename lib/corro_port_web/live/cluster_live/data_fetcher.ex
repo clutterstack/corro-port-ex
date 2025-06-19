@@ -20,16 +20,18 @@ defmodule CorroPortWeb.ClusterLive.DataFetcher do
     error = determine_overall_error(expected_nodes_result, cli_member_data, cluster_result)
 
     %{
-      expected_nodes: case expected_nodes_result do
-        {:ok, nodes} -> nodes
-        {:error, _} -> []
-      end,
+      expected_nodes:
+        case expected_nodes_result do
+          {:ok, nodes} -> nodes
+          {:error, _} -> []
+        end,
       active_members: active_members,
       cli_error: cli_error,
-      cluster_info: case cluster_result do
-        {:ok, info} -> info
-        {:error, _} -> nil
-      end,
+      cluster_info:
+        case cluster_result do
+          {:ok, info} -> info
+          {:error, _} -> nil
+        end,
       error: error,
       last_updated: DateTime.utc_now()
     }
@@ -41,12 +43,15 @@ defmodule CorroPortWeb.ClusterLive.DataFetcher do
 
     messages_result = CorroPort.MessagesAPI.get_latest_node_messages()
 
-    node_messages = case messages_result do
-      {:ok, messages} -> messages
-      {:error, error} ->
-        Logger.debug("Failed to fetch node messages (table might not exist yet): #{error}")
-        []
-    end
+    node_messages =
+      case messages_result do
+        {:ok, messages} ->
+          messages
+
+        {:error, error} ->
+          Logger.debug("Failed to fetch node messages (table might not exist yet): #{error}")
+          []
+      end
 
     Map.put(base_data, :node_messages, node_messages)
   end
@@ -70,10 +75,13 @@ defmodule CorroPortWeb.ClusterLive.DataFetcher do
         case cli_member_data.last_error do
           {:cli_error, :timeout} ->
             "CLI cluster members query timed out - active member list may be stale"
+
           {:parse_error, _} ->
             "CLI command succeeded but output couldn't be parsed"
+
           {:cli_error, _reason} ->
             "CLI cluster members query failed - active member list may be stale"
+
           _ ->
             "CLI data issue - active member list may be unreliable"
         end

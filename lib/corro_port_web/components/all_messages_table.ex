@@ -64,7 +64,7 @@ defmodule CorroPortWeb.AllMessagesTable do
             </tbody>
           </table>
         </div>
-
+        
     <!-- Empty state -->
         <div :if={@all_messages == []} class="text-center py-8">
           <.icon
@@ -78,13 +78,13 @@ defmodule CorroPortWeb.AllMessagesTable do
             Click "Send Message" to create the first message
           </div>
         </div>
-
+        
     <!-- Loading state -->
         <div :if={@loading_messages} class="text-center py-8">
           <div class="loading loading-spinner loading-md mb-2"></div>
           <div class="text-sm text-base-content/70">Loading messages...</div>
         </div>
-
+        
     <!-- Error state -->
         <div :if={@messages_error} class="alert alert-warning">
           <.icon name="hero-exclamation-triangle" class="w-5 h-5" />

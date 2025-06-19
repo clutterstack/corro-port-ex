@@ -14,7 +14,6 @@ defmodule CorroPortWeb.NavTabs do
   def nav_tabs(assigns) do
     ~H"""
     <div class="tabs tabs-boxed">
-
       <.link
         navigate={~p"/cluster"}
         class={["tab", if(@active == :cluster, do: "tab-active", else: "")]}
@@ -22,10 +21,7 @@ defmodule CorroPortWeb.NavTabs do
         <.icon name="hero-server-stack" class="w-4 h-4 mr-2" /> Cluster
       </.link>
 
-      <.link
-        navigate={~p"/"}
-        class={["tab", if(@active == :propagation, do: "tab-active", else: "")]}
-      >
+      <.link navigate={~p"/"} class={["tab", if(@active == :propagation, do: "tab-active", else: "")]}>
         <.icon name="hero-globe-alt" class="w-4 h-4 mr-2" /> Propagation
       </.link>
 

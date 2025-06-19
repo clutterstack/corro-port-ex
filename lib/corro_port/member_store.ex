@@ -124,19 +124,21 @@ defmodule CorroPort.ClusterMemberStore do
     {members, error} = parse_cli_output(normalized_output)
 
     # Determine status: single node setup is OK, not an error
-    status = cond do
-      error != nil -> :error
-      members == [] -> :ok  # Single node is OK
-      true -> :ok
-    end
+    status =
+      cond do
+        error != nil -> :error
+        # Single node is OK
+        members == [] -> :ok
+        true -> :ok
+      end
 
     new_state = %{
-      state |
-      members: members,
-      last_updated: DateTime.utc_now(),
-      last_error: error,
-      fetch_task: nil,
-      status: status
+      state
+      | members: members,
+        last_updated: DateTime.utc_now(),
+        last_error: error,
+        fetch_task: nil,
+        status: status
     }
 
     # Broadcast update
@@ -149,11 +151,11 @@ defmodule CorroPort.ClusterMemberStore do
     Logger.warning("ClusterMemberStore: CLI fetch failed: #{inspect(reason)}")
 
     new_state = %{
-      state |
-      last_error: {:cli_error, reason},
-      fetch_task: nil,
-      status: :error,
-      last_updated: DateTime.utc_now()
+      state
+      | last_error: {:cli_error, reason},
+        fetch_task: nil,
+        status: :error,
+        last_updated: DateTime.utc_now()
     }
 
     # Keep existing members on error, just update error state
@@ -189,9 +191,10 @@ defmodule CorroPort.ClusterMemberStore do
   defp start_fetch_task(state) do
     Logger.debug("ClusterMemberStore: Starting CLI fetch task")
 
-    task = Task.async(fn ->
-      CorrosionCLI.cluster_members(timeout: @cli_timeout)
-    end)
+    task =
+      Task.async(fn ->
+        CorrosionCLI.cluster_members(timeout: @cli_timeout)
+      end)
 
     task_ref = task.ref
 
@@ -232,7 +235,7 @@ defmodule CorroPort.ClusterMemberStore do
     }
   end
 
-defp empty_state do
+  defp empty_state do
     %{
       members: [],
       last_updated: nil,
@@ -251,6 +254,8 @@ defp empty_state do
       {:cluster_members_updated, member_data}
     )
 
-    Logger.debug("ClusterMemberStore: Broadcasted update - #{length(state.members)} members, status: #{state.status}")
+    Logger.debug(
+      "ClusterMemberStore: Broadcasted update - #{length(state.members)} members, status: #{state.status}"
+    )
   end
 end

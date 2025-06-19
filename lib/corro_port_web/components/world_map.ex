@@ -49,14 +49,14 @@ defmodule CorroPortWeb.WorldMap do
           <stop offset="80%" stop-color="#77b5fe" stop-opacity="0.6" />
           <stop offset="100%" stop-color="#77b5fe" stop-opacity="0.2" />
         </radialGradient>
-
+        
     <!-- Radial gradient for orange markers (DNS expected regions) -->
         <radialGradient id="orangeRadial" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
           <stop offset="60%" stop-color="#ff8c42" stop-opacity="1" />
           <stop offset="80%" stop-color="#ff8c42" stop-opacity="0.6" />
           <stop offset="100%" stop-color="#ff8c42" stop-opacity="0.2" />
         </radialGradient>
-
+        
     <!-- Radial gradient for plasma violet markers (acknowledged regions) -->
         <radialGradient id="violetRadial" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
           <stop offset="60%" stop-color="#9d4edd" stop-opacity="1" />
@@ -167,7 +167,7 @@ defmodule CorroPortWeb.WorldMap do
   def city_to_svg(city, bbox) when city != "unknown" do
     # get_coordinates(city) handles all the cases and always outputs  a tuple {long, lat}
     CorroPort.CityData.get_coordinates(city)
-      |>  wgs84_to_svg(bbox)
+    |> wgs84_to_svg(bbox)
   end
 
   def all_regions_with_coords() do

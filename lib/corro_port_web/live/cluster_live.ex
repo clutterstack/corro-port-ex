@@ -8,55 +8,62 @@ defmodule CorroPortWeb.ClusterLive do
   # 5 minutes refresh interval
   @refresh_interval 300_000
 
-def mount(_params, _session, socket) do
-  # Subscribe to acknowledgment updates
-  if connected?(socket) do
-    Phoenix.PubSub.subscribe(CorroPort.PubSub, AckTracker.get_pubsub_topic())
-    # Subscribe to cluster member updates
-    ClusterMemberStore.subscribe()
+  def mount(_params, _session, socket) do
+    # Subscribe to acknowledgment updates
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(CorroPort.PubSub, AckTracker.get_pubsub_topic())
+      # Subscribe to cluster member updates
+      ClusterMemberStore.subscribe()
+    end
+
+    phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
+    local_node_id = NodeConfig.get_corrosion_node_id()
+
+    socket =
+      assign(socket, %{
+        page_title: "Cluster Status",
+        local_node_id: local_node_id,
+
+        # NEW: Clear node sets based on different sources
+        # From DNS
+        expected_nodes: [],
+        # Regions from DNS nodes
+        expected_regions: [],
+        # From CLI store
+        active_members: [],
+        # Regions from CLI members
+        active_regions: [],
+        # Our local region
+        our_regions: [],
+        # Regions that acknowledged latest message
+        ack_regions: [],
+
+        # CLI state tracking (now from centralized store)
+        # Error from CLI store
+        cli_error: nil,
+        # Whether CLI data is old due to error
+        cli_members_stale: false,
+        # Data from centralized store
+        cli_member_data: nil,
+
+        # Keep basic cluster info for debugging
+        cluster_info: nil,
+
+        # Keep these for the existing components that still need them
+        phoenix_port: phoenix_port,
+        corro_api_port: CorroPort.CorrosionClient.get_corro_api_port(),
+        refresh_interval: @refresh_interval,
+
+        # General state
+        error: nil,
+        last_updated: nil,
+        ack_status: nil
+      })
+
+    {:ok, fetch_cluster_data(socket)}
   end
 
-  phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
-  local_node_id = NodeConfig.get_corrosion_node_id()
-
-  socket =
-    assign(socket, %{
-      page_title: "Cluster Status",
-      local_node_id: local_node_id,
-
-      # NEW: Clear node sets based on different sources
-      expected_nodes: [],        # From DNS
-      expected_regions: [],      # Regions from DNS nodes
-      active_members: [],        # From CLI store
-      active_regions: [],        # Regions from CLI members
-      our_regions: [],          # Our local region
-      ack_regions: [],          # Regions that acknowledged latest message
-
-      # CLI state tracking (now from centralized store)
-      cli_error: nil,           # Error from CLI store
-      cli_members_stale: false, # Whether CLI data is old due to error
-      cli_member_data: nil,     # Data from centralized store
-
-      # Keep basic cluster info for debugging
-      cluster_info: nil,
-
-      # Keep these for the existing components that still need them
-      phoenix_port: phoenix_port,
-      corro_api_port: CorroPort.CorrosionClient.get_corro_api_port(),
-      refresh_interval: @refresh_interval,
-
-      # General state
-      error: nil,
-      last_updated: nil,
-      ack_status: nil
-    })
-
-  {:ok, fetch_cluster_data(socket)}
-end
-
   # Event handlers
-
-
 
   def handle_event("refresh", _params, socket) do
     Logger.debug("ClusterLive: 🔄 Manual refresh triggered")
@@ -113,7 +120,8 @@ end
     updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data_with_messages()
 
     # Extract region data using the new helper
-    {expected_regions, active_regions, our_regions} = CorroPortWeb.RegionHelper.extract_cluster_regions(updates)
+    {expected_regions, active_regions, our_regions} =
+      CorroPortWeb.RegionHelper.extract_cluster_regions(updates)
 
     # Get current acknowledgment status
     ack_status = CorroPort.AckTracker.get_status()
@@ -134,7 +142,8 @@ end
       ack_regions: ack_regions,
       ack_status: ack_status,
       cluster_info: updates.cluster_info,
-      node_messages: updates.node_messages,  # Only ClusterLive gets this
+      # Only ClusterLive gets this
+      node_messages: updates.node_messages,
       cli_error: updates.cli_error,
       cli_members_stale: cli_members_stale,
       cli_member_data: cli_member_data,
@@ -154,7 +163,9 @@ end
       |> Enum.uniq()
 
     # Remove our region from active regions
-    our_region = CorroPort.CorrosionParser.extract_region_from_node_id(socket.assigns.local_node_id)
+    our_region =
+      CorroPort.CorrosionParser.extract_region_from_node_id(socket.assigns.local_node_id)
+
     active_regions = Enum.reject(active_regions, &(&1 == our_region))
 
     assign(socket, %{
@@ -179,11 +190,13 @@ end
     case Application.get_env(:corro_port, :node_config)[:environment] do
       :prod ->
         Logger.debug("dns_regions_display: we're in prod")
+
         if expected_regions != [] do
-          ({expected_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
+          {expected_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")}
         else
           "(none found)"
         end
+
       :dev ->
         Logger.debug("dns_regions_display: we're in dev")
         "(none; no DNS in dev)"
@@ -201,69 +214,13 @@ end
       <ClusterCards.error_alerts error={@error} />
 
       <!-- Enhanced World Map with Regions -->
-      <div class="card bg-base-100">
-        <div class="card-body">
-          <div class="rounded-lg border">
-            <CorroPortWeb.WorldMap.world_map_svg
-              regions={@active_regions}
-              our_regions={@our_regions}
-              expected_regions={@expected_regions}
-              ack_regions={@ack_regions}
-            />
-          </div>
-
-          <div class="text-sm text-base-content/70 space-y-2">
-            <div class="flex items-center">
-              <!-- Our node (yellow) -->
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ffdc66;">
-              </span>
-              Our node
-              <%= if @our_regions != [] do %>
-                ({@our_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
-              <% else %>
-                (region unknown)
-              <% end %>
-            </div>
-
-            <div class="flex items-center">
-              <!-- Active other nodes (blue) -->
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #77b5fe;">
-              </span>
-              Other active nodes
-              <%= if @active_regions != [] do %>
-                ({@active_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
-                <%= if @cli_members_stale do %>
-                  <span class="badge badge-warning badge-xs ml-2">stale</span>
-                <% end %>
-              <% else %>
-                (none active)
-              <% end %>
-            </div>
-
-            <div class="flex items-center">
-              <!-- Nodes from DNS (orange) -->
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ff8c42;">
-              </span>
-              Nodes from DNS
-              <%= dns_regions_display(@expected_regions) %>
-            </div>
-
-            <div class="flex items-center">
-              <!-- Acknowledged nodes (plasma violet) -->
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #9d4edd;">
-              </span>
-              Acknowledged latest message
-              <%= if @ack_regions != [] do %>
-                ({@ack_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
-              <% else %>
-                (none yet)
-              <% end %>
-            </div>
-
-
-          </div>
-        </div>
-      </div>
+      <CorroPortWeb.WorldMapCard.world_map_card
+        active_regions={@active_regions}
+        our_regions={@our_regions}
+        expected_regions={@expected_regions}
+        ack_regions={@ack_regions}
+        cli_members_stale={@cli_members_stale}
+      />
 
       <CLIMembersTable.display
         cli_member_data={@cli_member_data}
@@ -271,7 +228,6 @@ end
       />
 
       <MembersTable.cluster_members_table cluster_info={@cluster_info} />
-
 
       <ClusterCards.cluster_summary_card
         local_node_id={@local_node_id}
@@ -284,7 +240,6 @@ end
         error={@error}
       />
 
-
       <DebugSection.debug_section
         cluster_info={@cluster_info}
         node_messages={@node_messages}
@@ -292,6 +247,4 @@ end
     </div>
     """
   end
-
-
 end

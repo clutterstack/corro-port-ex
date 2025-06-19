@@ -6,7 +6,6 @@ defmodule CorroPortWeb.ClusterCards do
   Function components to illustrate Corrosion cluster status.
   """
 
-
   def cluster_header(assigns) do
     ~H"""
     <.header>
@@ -17,7 +16,11 @@ defmodule CorroPortWeb.ClusterCards do
         </div>
       </:subtitle>
       <:actions>
-        <.button :if={Application.get_env(:corro_port, :node_config) == :prod} phx-click="refresh_dns_cache" class="btn btn-xs btn-outline">
+        <.button
+          :if={Application.get_env(:corro_port, :node_config) == :prod}
+          phx-click="refresh_dns_cache"
+          class="btn btn-xs btn-outline"
+        >
           <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Refresh DNS
         </.button>
       </:actions>
@@ -115,5 +118,4 @@ defmodule CorroPortWeb.ClusterCards do
     gossip_port = config[:corrosion_gossip_port] || 8787
     "127.0.0.1:#{gossip_port}"
   end
-
 end

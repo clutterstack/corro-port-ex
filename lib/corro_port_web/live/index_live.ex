@@ -5,43 +5,52 @@ defmodule CorroPortWeb.IndexLive do
   alias CorroPortWeb.{ClusterCards, RegionHelper, NavTabs}
   alias CorroPort.{DNSNodeDiscovery, AckTracker, ClusterMemberStore}
 
-def mount(_params, _session, socket) do
-  # Subscribe to acknowledgment updates and cluster member updates
-  if connected?(socket) do
-    Phoenix.PubSub.subscribe(CorroPort.PubSub, AckTracker.get_pubsub_topic())
-    ClusterMemberStore.subscribe()
+  def mount(_params, _session, socket) do
+    # Subscribe to acknowledgment updates and cluster member updates
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(CorroPort.PubSub, AckTracker.get_pubsub_topic())
+      ClusterMemberStore.subscribe()
+    end
+
+    socket =
+      assign(socket, %{
+        page_title: "Geographic Distribution",
+
+        # Clear node sets based on different sources
+        # From DNS
+        expected_nodes: [],
+        # Regions from DNS nodes
+        expected_regions: [],
+        # From CLI store
+        active_members: [],
+        # Regions from CLI members
+        active_regions: [],
+        # Our local region
+        our_regions: [],
+        # Regions that acknowledged latest message
+        ack_regions: [],
+
+        # CLI state tracking (now from centralized store)
+        # Error from CLI store
+        cli_error: nil,
+        # Whether CLI data is old due to error
+        cli_members_stale: false,
+        # Data from centralized store
+        cli_member_data: nil,
+
+        # Keep basic cluster info for debugging
+        cluster_info: nil,
+
+        # General state
+        error: nil,
+        last_updated: nil,
+        ack_status: nil
+      })
+
+    {:ok, fetch_cluster_data(socket)}
   end
 
-  socket =
-    assign(socket, %{
-      page_title: "Geographic Distribution",
-
-      # Clear node sets based on different sources
-      expected_nodes: [],        # From DNS
-      expected_regions: [],      # Regions from DNS nodes
-      active_members: [],        # From CLI store
-      active_regions: [],        # Regions from CLI members
-      our_regions: [],          # Our local region
-      ack_regions: [],          # Regions that acknowledged latest message
-
-      # CLI state tracking (now from centralized store)
-      cli_error: nil,           # Error from CLI store
-      cli_members_stale: false, # Whether CLI data is old due to error
-      cli_member_data: nil,     # Data from centralized store
-
-      # Keep basic cluster info for debugging
-      cluster_info: nil,
-
-      # General state
-      error: nil,
-      last_updated: nil,
-      ack_status: nil
-    })
-
-  {:ok, fetch_cluster_data(socket)}
-end
-
-# Event handlers
+  # Event handlers
 
   def handle_event("send_message", _params, socket) do
     case CorroPortWeb.ClusterLive.MessageHandler.send_message() do
@@ -138,7 +147,8 @@ end
     updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data()
 
     # Extract region data using the new helper
-    {expected_regions, active_regions, our_regions} = RegionHelper.extract_cluster_regions(updates)
+    {expected_regions, active_regions, our_regions} =
+      RegionHelper.extract_cluster_regions(updates)
 
     # Get current acknowledgment status
     ack_status = AckTracker.get_status()
@@ -190,22 +200,24 @@ end
     })
   end
 
-    defp dns_regions_display(expected_regions) do
+  defp dns_regions_display(expected_regions) do
     case Application.get_env(:corro_port, :node_config)[:environment] do
       :prod ->
         Logger.debug("dns_regions_display: we're in prod")
+
         if expected_regions != [] do
-          ({expected_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
+          {expected_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")}
         else
           "(none found)"
         end
+
       :dev ->
         Logger.debug("dns_regions_display: we're in dev")
         "(none; no DNS in dev)"
     end
   end
 
-  def render(assigns) do
+ def render(assigns) do
     ~H"""
     <div class="space-y-6">
     <!-- Navigation Tabs -->
@@ -261,93 +273,14 @@ end
       </div>
 
       <!-- Enhanced World Map with Regions -->
-      <div class="card bg-base-100">
-        <div class="card-body">
-          <div class="rounded-lg border">
-            <CorroPortWeb.WorldMap.world_map_svg
-              regions={@active_regions}
-              our_regions={@our_regions}
-              expected_regions={@expected_regions}
-              ack_regions={@ack_regions}
-            />
-          </div>
-
-          <!-- Real-time acknowledgment count -->
-          <div class="mb-4">
-            <div class="flex items-center justify-between text-sm mb-2">
-              <span>Acknowledgment Progress:</span>
-               <div class="flex items-center justify-between">
-
-                <div class="flex items-center gap-2 text-sm">
-                  <span class="badge badge-success badge-sm">
-                    {length(@ack_regions)} acknowledged
-                  </span>
-                  <span class="badge badge-warning badge-sm">
-                    {length(@expected_regions)} expected
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div class="w-full bg-base-300 rounded-full h-2">
-              <div
-                class="h-2 rounded-full bg-gradient-to-r from-orange-500 to-violet-500 transition-all duration-500"
-                style={"width: #{if length(@expected_regions) > 0, do: length(@ack_regions) / length(@expected_regions) * 100, else: 0}%"}
-              >
-              </div>
-            </div>
-          </div>
-
-          <div class="text-sm text-base-content/70 space-y-2">
-            <div class="flex items-center">
-              <!-- Our node (blue with animation) -->
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #77b5fe;">
-              </span>
-              Our node
-              <%= if @our_regions != [] do %>
-                ({@our_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
-              <% else %>
-                (region unknown)
-              <% end %>
-            </div>
-
-            <div class="flex items-center">
-              <!-- Active nodes (yellow) -->
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ffdc66;">
-              </span>
-              Active nodes (CLI)
-              <%= if @active_regions != [] do %>
-                ({@active_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
-                <%= if @cli_members_stale do %>
-                  <span class="badge badge-warning badge-xs ml-2">stale</span>
-                <% end %>
-              <% else %>
-                (none found)
-              <% end %>
-            </div>
-
-            <div class="flex items-center">
-              <!-- Expected nodes from DNS (orange) -->
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ff8c42;">
-              </span>
-              Nodes from DNS
-              <%= dns_regions_display(@expected_regions) %>
-            </div>
-
-            <div class="flex items-center">
-              <!-- Acknowledged nodes (plasma violet) -->
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #9d4edd;">
-              </span>
-              Acknowledged latest message
-              <%= if @ack_regions != [] do %>
-                ({@ack_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
-              <% else %>
-                (none yet)
-              <% end %>
-            </div>
-
-          </div>
-        </div>
-      </div>
+      <CorroPortWeb.WorldMapCard.world_map_card
+        active_regions={@active_regions}
+        our_regions={@our_regions}
+        expected_regions={@expected_regions}
+        ack_regions={@ack_regions}
+        show_acknowledgment_progress={true}
+        cli_members_stale={@cli_members_stale}
+      />
 
       <!-- Summary Stats -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
