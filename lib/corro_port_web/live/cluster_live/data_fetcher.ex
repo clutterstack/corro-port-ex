@@ -4,7 +4,7 @@ defmodule CorroPortWeb.ClusterLive.DataFetcher do
 
   def fetch_all_data() do
     # DNS-based expected nodes
-    expected_nodes_result = DNSNodeDiscovery.get_expected_nodes()
+    expected_nodes_result = DNSNodeDiscovery.get_dns_nodes()
 
     # Get CLI members from centralized store
     cli_member_data = ClusterMemberStore.get_members()

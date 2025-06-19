@@ -32,8 +32,8 @@ defmodule CorroPort.DNSNodeDiscovery do
   - `{:ok, [node_id]}` - List of node IDs in "region-machine_id" format
   - `{:error, reason}` - DNS query failed
   """
-  def get_expected_nodes do
-    case GenServer.call(__MODULE__, :get_expected_nodes, @dns_timeout + 1000) do
+  def get_dns_nodes do
+    case GenServer.call(__MODULE__, :get_dns_nodes, @dns_timeout + 1000) do
       {:ok, nodes} ->
         {:ok, nodes}
 
@@ -75,7 +75,7 @@ defmodule CorroPort.DNSNodeDiscovery do
     {:ok, state}
   end
 
-  def handle_call(:get_expected_nodes, _from, state) do
+  def handle_call(:get_dns_nodes, _from, state) do
     case get_cached_or_fetch_nodes(state) do
       {:ok, nodes, new_state} ->
         {:reply, {:ok, nodes}, new_state}

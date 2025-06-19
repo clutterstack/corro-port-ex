@@ -51,8 +51,8 @@ defmodule CorroPort.AckTracker do
   @doc """
   Get the list of nodes we expect acknowledgments from.
   """
-  def get_expected_nodes do
-    GenServer.call(__MODULE__, :get_expected_nodes)
+  def get_dns_nodes do
+    GenServer.call(__MODULE__, :get_dns_nodes)
   end
 
   @doc """
@@ -95,7 +95,7 @@ defmodule CorroPort.AckTracker do
     :ets.insert(@table_name, {:latest_message, message_data})
 
     # Get expected nodes from DNS
-    case CorroPort.DNSNodeDiscovery.get_expected_nodes() do
+    case CorroPort.DNSNodeDiscovery.get_dns_nodes() do
       {:ok, expected_nodes} ->
         :ets.insert(@table_name, {:expected_nodes, expected_nodes})
 
@@ -159,7 +159,7 @@ defmodule CorroPort.AckTracker do
     {:reply, status, state}
   end
 
-  def handle_call(:get_expected_nodes, _from, state) do
+  def handle_call(:get_dns_nodes, _from, state) do
     expected_nodes = get_cached_expected_nodes()
     {:reply, expected_nodes, state}
   end
@@ -171,7 +171,7 @@ defmodule CorroPort.AckTracker do
     CorroPort.DNSNodeDiscovery.refresh_cache()
 
     # Update our expected nodes
-    case CorroPort.DNSNodeDiscovery.get_expected_nodes() do
+    case CorroPort.DNSNodeDiscovery.get_dns_nodes() do
       {:ok, expected_nodes} ->
         :ets.insert(@table_name, {:expected_nodes, expected_nodes})
         Logger.info("AckTracker: Updated expected nodes: #{inspect(expected_nodes)}")

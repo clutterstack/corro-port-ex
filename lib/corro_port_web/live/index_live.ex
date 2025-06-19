@@ -124,7 +124,7 @@ end
 
   # Handle acknowledgment updates
   def handle_info({:ack_update, ack_status}, socket) do
-    Logger.debug("IndexLive: 🤝 Received acknowledgment update")
+    Logger.debug("IndexLive: Received acknowledgment update")
 
     ack_regions = RegionHelper.extract_ack_regions(ack_status)
 
@@ -190,12 +190,48 @@ end
     })
   end
 
+    defp dns_regions_display(expected_regions) do
+    case Application.get_env(:corro_port, :node_config)[:environment] do
+      :prod ->
+        Logger.debug("dns_regions_display: we're in prod")
+        if expected_regions != [] do
+          ({expected_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
+        else
+          "(none found)"
+        end
+      :dev ->
+        Logger.debug("dns_regions_display: we're in dev")
+        "(none; no DNS in dev)"
+    end
+  end
+
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
     <!-- Navigation Tabs -->
-      <NavTabs.nav_tabs active={:overview} />
-      <ClusterCards.index_header ack_regions={@ack_regions} />
+      <NavTabs.nav_tabs active={:propagation} />
+      <.header>
+      <.icon name="hero-radio" class="w-5 h-5 mr-2" /> DB change propagation
+      <:subtitle>
+        <div class="flex items-center gap-4">
+          <span>Click "Send Message." Markers change colour as nodes confirm they've received the update.</span>
+        </div>
+      </:subtitle>
+      <:actions>
+        <.button :if={Application.get_env(:corro_port, :node_config) == :prod} phx-click="refresh_dns_cache" class="btn btn-xs btn-outline">
+          <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Refresh DNS
+        </.button>
+        <.button
+          phx-click="reset_tracking"
+          class="btn btn-warning btn-outline"
+        >
+          <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Reset Tracking
+        </.button>
+        <.button phx-click="send_message" variant="primary">
+          <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" /> Send Message
+        </.button>
+      </:actions>
+    </.header>
 
       <ClusterCards.error_alerts error={@error} />
 
@@ -261,8 +297,6 @@ end
             </div>
           </div>
 
-
-
           <div class="text-sm text-base-content/70 space-y-2">
             <div class="flex items-center">
               <!-- Our node (blue with animation) -->
@@ -295,12 +329,8 @@ end
               <!-- Expected nodes from DNS (orange) -->
               <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ff8c42;">
               </span>
-              Expected nodes (DNS)
-              <%= if @expected_regions != [] do %>
-                ({@expected_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
-              <% else %>
-                (none found)
-              <% end %>
+              Nodes from DNS
+              <%= dns_regions_display(@expected_regions) %>
             </div>
 
             <div class="flex items-center">
@@ -314,7 +344,6 @@ end
                 (none yet)
               <% end %>
             </div>
-
 
           </div>
         </div>

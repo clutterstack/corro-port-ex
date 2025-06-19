@@ -8,7 +8,7 @@ defmodule CorroPortWeb.MembersTable do
     ~H"""
     <div class="card bg-base-100">
       <div class="card-body">
-        <h3 class="card-title">Cluster Members</h3>
+        <h3 class="card-title"><pre>__corro_members</pre> table entries</h3>
 
         <div :if={Map.get(@cluster_info, "members", []) != []} class="overflow-x-auto">
           <table class="table table-zebra">

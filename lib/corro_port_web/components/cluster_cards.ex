@@ -4,26 +4,8 @@ defmodule CorroPortWeb.ClusterCards do
 
   @moduledoc """
   Function components to illustrate Corrosion cluster status.
-  Simplified version focused on cluster monitoring only.
   """
 
-  def cluster_header_simple(assigns) do
-    ~H"""
-    <.header>
-      Corrosion Cluster Status
-      <:subtitle>
-        <div class="flex items-center gap-4">
-          <span>Monitoring cluster health and node connectivity</span>
-        </div>
-      </:subtitle>
-      <:actions>
-        <.button phx-click="refresh" variant="primary">
-          <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Refresh
-        </.button>
-      </:actions>
-    </.header>
-    """
-  end
 
   def cluster_header(assigns) do
     ~H"""
@@ -35,35 +17,8 @@ defmodule CorroPortWeb.ClusterCards do
         </div>
       </:subtitle>
       <:actions>
-        <.button phx-click="refresh_dns_cache" class="btn btn-xs btn-outline">
+        <.button :if={Application.get_env(:corro_port, :node_config) == :prod} phx-click="refresh_dns_cache" class="btn btn-xs btn-outline">
           <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Refresh DNS
-        </.button>
-      </:actions>
-    </.header>
-    """
-  end
-
-  def index_header(assigns) do
-    ~H"""
-    <.header>
-      <.icon name="hero-radio" class="w-5 h-5 mr-2" /> DB change propagation
-      <:subtitle>
-        <div class="flex items-center gap-4">
-          <span>Click "Send Message." Markers change colour as nodes confirm they've received the update.</span>
-        </div>
-      </:subtitle>
-      <:actions>
-        <.button phx-click="refresh_dns_cache" class="btn btn-xs btn-outline">
-          <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Refresh DNS
-        </.button>
-        <.button
-          phx-click="reset_tracking"
-          class="btn btn-warning btn-outline"
-        >
-          <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Reset Tracking
-        </.button>
-        <.button phx-click="send_message" variant="primary">
-          <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" /> Send Message
         </.button>
       </:actions>
     </.header>
@@ -160,4 +115,5 @@ defmodule CorroPortWeb.ClusterCards do
     gossip_port = config[:corrosion_gossip_port] || 8787
     "127.0.0.1:#{gossip_port}"
   end
+
 end
