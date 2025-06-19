@@ -2,7 +2,7 @@ defmodule CorroPort.CorrosionParser do
   @moduledoc """
   Parses output from various Corrosion CLI commands.
 
-  Handles the NDJSON (newline-delimited JSON) format that Corrosion uses
+  Handles the pretty-printed JSON format that Corrosion uses
   for structured output from commands like `cluster members`, `cluster info`, etc.
 
   Also properly handles single-node setups where CLI commands return empty results.
@@ -14,7 +14,7 @@ defmodule CorroPort.CorrosionParser do
   Parses cluster members NDJSON output into a structured format.
 
   ## Parameters
-  - `ndjson_output` - Raw NDJSON string output from `corrosion cluster members`
+  - `cli_output` - Raw NDJSON string output from `corrosion cluster members`
 
   ## Returns
   - `{:ok, members}` - List of parsed member maps with enhanced fields
@@ -29,8 +29,8 @@ defmodule CorroPort.CorrosionParser do
       iex> CorroPort.CorrosionParser.parse_cluster_members("")
       {:ok, []}
   """
-  def parse_cluster_members(ndjson_output) when is_binary(ndjson_output) do
-    parse_cli_output(ndjson_output, &enhance_member/1)
+  def parse_cluster_members(cli_output) when is_binary(cli_output) do
+    parse_cli_output(cli_output, &enhance_member/1)
   end
 
   # Handle nil input (can happen with some CLI error cases)
@@ -43,14 +43,14 @@ defmodule CorroPort.CorrosionParser do
   Parses cluster info NDJSON output.
 
   ## Parameters
-  - `ndjson_output` - Raw NDJSON string output from `corrosion cluster info`
+  - `cli_output` - Raw NDJSON string output from `corrosion cluster info`
 
   ## Returns
   - `{:ok, info}` - Parsed cluster info
   - `{:error, reason}` - Parse error details
   """
-  def parse_cluster_info(ndjson_output) when is_binary(ndjson_output) do
-    parse_cli_output(ndjson_output, &enhance_cluster_info/1)
+  def parse_cluster_info(cli_output) when is_binary(cli_output) do
+    parse_cli_output(cli_output, &enhance_cluster_info/1)
   end
 
   def parse_cluster_info(nil) do
@@ -61,8 +61,8 @@ defmodule CorroPort.CorrosionParser do
   @doc """
   Parses cluster status NDJSON output.
   """
-  def parse_cluster_status(ndjson_output) when is_binary(ndjson_output) do
-    parse_cli_output(ndjson_output, &enhance_status/1)
+  def parse_cluster_status(cli_output) when is_binary(cli_output) do
+    parse_cli_output(cli_output, &enhance_status/1)
   end
 
   def parse_cluster_status(nil) do

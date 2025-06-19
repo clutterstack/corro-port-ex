@@ -11,17 +11,17 @@ defmodule CorroPortWeb.RegionHelper do
 
   Returns {expected_regions, active_regions, our_regions}
   """
-  def extract_cluster_regions(updates) do
+  def extract_regions(data) do
     # Extract regions from expected nodes (DNS)
     expected_regions =
-      updates.expected_nodes
+      data.expected_nodes
       |> Enum.map(&CorrosionParser.extract_region_from_node_id/1)
       |> Enum.reject(&(&1 == "unknown"))
       |> Enum.uniq()
 
     # Extract regions from active members (CLI)
     active_regions =
-      updates.active_members
+      data.active_members
       |> Enum.map(&AckTracker.member_to_node_id/1)
       |> Enum.reject(&is_nil/1)
       |> Enum.map(&CorrosionParser.extract_region_from_node_id/1)

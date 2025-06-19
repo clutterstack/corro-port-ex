@@ -14,7 +14,7 @@ defmodule CorroPortWeb.IndexLive do
 
     socket =
       assign(socket, %{
-        page_title: "Geographic Distribution",
+        page_title: "Data propagation",
 
         # Clear node sets based on different sources
         # From DNS
@@ -144,11 +144,11 @@ defmodule CorroPortWeb.IndexLive do
   # Private functions
 
   defp fetch_cluster_data(socket) do
-    updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data()
+    fetched_data = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data()
 
     # Extract region data using the new helper
     {expected_regions, active_regions, our_regions} =
-      RegionHelper.extract_cluster_regions(updates)
+      RegionHelper.extract_regions(fetched_data)
 
     # Get current acknowledgment status
     ack_status = AckTracker.get_status()
@@ -158,22 +158,22 @@ defmodule CorroPortWeb.IndexLive do
     cli_member_data = ClusterMemberStore.get_members()
 
     # Determine if CLI data is stale
-    cli_members_stale = !is_nil(updates.cli_error) && updates.active_members != []
+    cli_members_stale = !is_nil(fetched_data.cli_error) && fetched_data.active_members != []
 
     assign(socket, %{
-      expected_nodes: updates.expected_nodes,
+      expected_nodes: fetched_data.expected_nodes,
       expected_regions: expected_regions,
-      active_members: updates.active_members,
+      active_members: fetched_data.active_members,
       active_regions: active_regions,
       our_regions: our_regions,
       ack_regions: ack_regions,
       ack_status: ack_status,
-      cluster_info: updates.cluster_info,
-      cli_error: updates.cli_error,
+      cluster_info: fetched_data.cluster_info,
+      cli_error: fetched_data.cli_error,
       cli_members_stale: cli_members_stale,
       cli_member_data: cli_member_data,
-      error: updates.error,
-      last_updated: updates.last_updated
+      error: fetched_data.error,
+      last_updated: fetched_data.last_updated
     })
   end
 

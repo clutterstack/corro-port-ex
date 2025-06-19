@@ -117,11 +117,11 @@ defmodule CorroPortWeb.ClusterLive do
 
   defp fetch_cluster_data(socket) do
     # For ClusterLive, we need the version with messages for the messages table
-    updates = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data_with_messages()
+    fetched_data = CorroPortWeb.ClusterLive.DataFetcher.fetch_all_data_with_messages()
 
     # Extract region data using the new helper
     {expected_regions, active_regions, our_regions} =
-      CorroPortWeb.RegionHelper.extract_cluster_regions(updates)
+      CorroPortWeb.RegionHelper.extract_regions(fetched_data)
 
     # Get current acknowledgment status
     ack_status = CorroPort.AckTracker.get_status()
@@ -131,24 +131,24 @@ defmodule CorroPortWeb.ClusterLive do
     cli_member_data = ClusterMemberStore.get_members()
 
     # Determine if CLI data is stale
-    cli_members_stale = !is_nil(updates.cli_error) && updates.active_members != []
+    cli_members_stale = !is_nil(fetched_data.cli_error) && fetched_data.active_members != []
 
     assign(socket, %{
-      expected_nodes: updates.expected_nodes,
+      expected_nodes: fetched_data.expected_nodes,
       expected_regions: expected_regions,
-      active_members: updates.active_members,
+      active_members: fetched_data.active_members,
       active_regions: active_regions,
       our_regions: our_regions,
       ack_regions: ack_regions,
       ack_status: ack_status,
-      cluster_info: updates.cluster_info,
+      cluster_info: fetched_data.cluster_info,
       # Only ClusterLive gets this
-      node_messages: updates.node_messages,
-      cli_error: updates.cli_error,
+      node_messages: fetched_data.node_messages,
+      cli_error: fetched_data.cli_error,
       cli_members_stale: cli_members_stale,
       cli_member_data: cli_member_data,
-      error: updates.error,
-      last_updated: updates.last_updated
+      error: fetched_data.error,
+      last_updated: fetched_data.last_updated
     })
   end
 
