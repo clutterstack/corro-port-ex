@@ -99,6 +99,7 @@ defmodule CorroPortWeb.ClusterLive do
     socket =
       socket
       |> assign(:cli_member_data, cli_member_data)
+      |> assign(:active_members, cli_member_data.members)  # Add this line
       |> update_regions_from_cli_data(cli_member_data)
 
     {:noreply, socket}
