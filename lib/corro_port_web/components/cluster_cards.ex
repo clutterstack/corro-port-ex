@@ -1,12 +1,28 @@
 defmodule CorroPortWeb.ClusterCards do
   use Phoenix.Component
   import CorroPortWeb.CoreComponents
+  alias CorroPortWeb.DisplayHelpers
 
   @moduledoc """
   Function components for Corrosion cluster status using clean domain data.
   """
 
+  attr :expected_data, :map, required: true
+  attr :active_data, :map, required: true
+  attr :system_data, :map, required: true
+
   def cluster_header(assigns) do
+    # Pre-compute button configurations using helper functions
+    dns_button = DisplayHelpers.refresh_button_config(assigns.expected_data, "refresh_expected", "DNS", "hero-globe-alt")
+    cli_button = DisplayHelpers.refresh_button_config(assigns.active_data, "refresh_active", "CLI", "hero-command-line")
+    system_button = DisplayHelpers.system_button_config(assigns.system_data, "refresh_system", "System", "hero-server")
+
+    assigns = assign(assigns, %{
+      dns_button: dns_button,
+      cli_button: cli_button,
+      system_button: system_button
+    })
+
     ~H"""
     <.header>
       Corrosion Cluster Status
@@ -17,42 +33,10 @@ defmodule CorroPortWeb.ClusterCards do
       </:subtitle>
       <:actions>
         <div class="flex gap-2">
-          <!-- Per-domain refresh buttons -->
-          <.button
-            phx-click="refresh_expected"
-            class={[
-              "btn btn-xs",
-              if(@expected_data && match?({:error, _}, @expected_data.nodes), do: "btn-error", else: "btn-outline")
-            ]}
-          >
-            <.icon name="hero-globe-alt" class="w-3 h-3 mr-1" />
-            DNS
-            <span :if={@expected_data && match?({:error, _}, @expected_data.nodes)} class="ml-1">⚠</span>
-          </.button>
-
-          <.button
-            phx-click="refresh_active"
-            class={[
-              "btn btn-xs",
-              if(@active_data && match?({:error, _}, @active_data.members), do: "btn-error", else: "btn-outline")
-            ]}
-          >
-            <.icon name="hero-command-line" class="w-3 h-3 mr-1" />
-            CLI
-            <span :if={@active_data && match?({:error, _}, @active_data.members)} class="ml-1">⚠</span>
-          </.button>
-
-          <.button
-            phx-click="refresh_system"
-            class={[
-              "btn btn-xs",
-              if(@system_data && @system_data.cache_status.error, do: "btn-error", else: "btn-outline")
-            ]}
-          >
-            <.icon name="hero-server" class="w-3 h-3 mr-1" />
-            System
-            <span :if={@system_data && @system_data.cache_status.error} class="ml-1">⚠</span>
-          </.button>
+          <!-- Per-domain refresh buttons using helper configurations -->
+          <.action_button config={@dns_button} />
+          <.action_button config={@cli_button} />
+          <.action_button config={@system_button} />
 
           <.button phx-click="reset_tracking" class="btn btn-warning btn-outline btn-sm">
             <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Reset
@@ -76,39 +60,26 @@ defmodule CorroPortWeb.ClusterCards do
   attr :system_data, :map, required: true
 
   def error_alerts(assigns) do
+    # Pre-compute alert configurations using helper functions
+    alerts = DisplayHelpers.build_all_alerts(assigns.expected_data, assigns.active_data, assigns.system_data)
+    assigns = assign(assigns, :alerts, alerts)
+
     ~H"""
     <div class="space-y-2">
-      <!-- DNS Error -->
-      <div :if={match?({:error, reason}, @expected_data.nodes)} class="alert alert-warning">
-        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-        <div>
-          <div class="font-semibold">DNS Discovery Failed</div>
-          <div class="text-sm">
-            Error: {format_error(reason)} - Expected regions may be incomplete
-          </div>
-        </div>
-      </div>
+      <.single_alert :for={alert <- @alerts} config={alert} />
+    </div>
+    """
+  end
 
-      <!-- CLI Error -->
-      <div :if={match?({:error, reason}, @active_data.members)} class="alert alert-error">
-        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-        <div>
-          <div class="font-semibold">CLI Data Failed</div>
-          <div class="text-sm">
-            Error: {format_error(reason)} - Active member list may be stale
-          </div>
-        </div>
-      </div>
-
-      <!-- System Error -->
-      <div :if={@system_data.cache_status.error} class="alert alert-warning">
-        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-        <div>
-          <div class="font-semibold">System Data Issue</div>
-          <div class="text-sm">
-            Error: {format_error(@system_data.cache_status.error)} - Cluster info may be incomplete
-          </div>
-        </div>
+  # Helper component for individual alerts
+  defp single_alert(%{config: nil} = assigns), do: ~H""
+  defp single_alert(assigns) do
+    ~H"""
+    <div class={@config.class}>
+      <.icon name={@config.icon} class="w-5 h-5" />
+      <div>
+        <div class="font-semibold">{@config.title}</div>
+        <div class="text-sm">{@config.message}</div>
       </div>
     </div>
     """
@@ -122,6 +93,24 @@ defmodule CorroPortWeb.ClusterCards do
   attr :last_updated, :any, required: true
 
   def enhanced_cluster_summary(assigns) do
+    # Pre-compute all display data using helper functions
+    summary_stats = DisplayHelpers.cluster_summary_stats(
+      assigns.expected_data,
+      assigns.active_data,
+      assigns.system_data,
+      assigns.expected_regions,
+      assigns.active_regions
+    )
+
+    system_info = DisplayHelpers.system_info_details(assigns.system_data)
+    last_updated_display = DisplayHelpers.format_timestamp(assigns.last_updated)
+
+    assigns = assign(assigns, %{
+      summary_stats: summary_stats,
+      system_info: system_info,
+      last_updated_display: last_updated_display
+    })
+
     ~H"""
     <div class="card bg-base-200">
       <div class="card-body">
@@ -131,91 +120,82 @@ defmodule CorroPortWeb.ClusterCards do
 
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
           <!-- Expected Nodes -->
-          <div class="stat bg-base-100 rounded-lg">
-            <div class="stat-title text-xs">Expected Nodes</div>
-            <div class="stat-value text-lg flex items-center">
-              <%= case @expected_data.nodes do %>
-                <% {:ok, nodes} -> %>
-                  {length(nodes)}
-                <% {:error, _} -> %>
-                  <span class="text-error">?</span>
-              <% end %>
-            </div>
-            <div class="stat-desc text-xs">{length(@expected_regions)} regions</div>
-          </div>
+          <.stat_card
+            title="Expected Nodes"
+            display={@summary_stats.expected.display}
+            description="{@summary_stats.expected.regions_count} regions"
+          />
 
           <!-- Active Members -->
-          <div class="stat bg-base-100 rounded-lg">
-            <div class="stat-title text-xs">Active Members</div>
-            <div class="stat-value text-lg flex items-center">
-              <%= case @active_data.members do %>
-                <% {:ok, members} -> %>
-                  {length(members)}
-                <% {:error, _} -> %>
-                  <span class="text-error">?</span>
-              <% end %>
-            </div>
-            <div class="stat-desc text-xs">{length(@active_regions)} regions</div>
-          </div>
+          <.stat_card
+            title="Active Members"
+            display={@summary_stats.active.display}
+            description="{@summary_stats.active.regions_count} regions"
+          />
 
-          <!-- Cluster Health -->
-          <div class="stat bg-base-100 rounded-lg">
-            <div class="stat-title text-xs">API Health</div>
-            <div class="stat-value text-lg">
-              <%= if @system_data.cluster_info do %>
-                <span class="text-success">✓</span>
-              <% else %>
-                <span class="text-error">✗</span>
-              <% end %>
-            </div>
-            <div class="stat-desc text-xs">
-              <%= if @system_data.cluster_info do %>
-                connected
-              <% else %>
-                failed
-              <% end %>
-            </div>
-          </div>
+          <!-- API Health -->
+          <.stat_card
+            title="API Health"
+            display={@summary_stats.api_health}
+            description={@summary_stats.api_health.description}
+          />
 
           <!-- Message Activity -->
-          <div class="stat bg-base-100 rounded-lg">
-            <div class="stat-title text-xs">Messages</div>
-            <div class="stat-value text-lg">{length(@system_data.latest_messages)}</div>
-            <div class="stat-desc text-xs">in database</div>
-          </div>
+          <.stat_card
+            title="Messages"
+            display={@summary_stats.messages_count}
+            class=""
+            description="in database"
+          />
         </div>
 
-        <!-- System Info Details -->
-        <div :if={@system_data.cluster_info} class="mt-4 text-sm space-y-2">
-          <div class="flex items-center justify-between">
-            <strong>Total Active Nodes:</strong>
-            <span class="font-semibold text-lg">
-              {Map.get(@system_data.cluster_info, "total_active_nodes", 0)}
-            </span>
-          </div>
+        <!-- System Info Details using helper function -->
+        <.system_info_section :if={@system_info} system_info={@system_info} />
 
-          <div class="flex items-center justify-between">
-            <strong>Remote Members:</strong>
-            <span>
-              {Map.get(@system_data.cluster_info, "active_member_count", 0)}/{Map.get(
-                @system_data.cluster_info,
-                "member_count",
-                0
-              )} active
-            </span>
-          </div>
+        <div class="divider my-2"></div>
 
-          <div class="flex items-center justify-between">
-            <strong>Tracked Peers:</strong>
-            <span>{Map.get(@system_data.cluster_info, "peer_count", 0)}</span>
-          </div>
-
-          <div class="divider my-2"></div>
-
-          <div class="text-xs text-base-content/70">
-            <strong>Last Updated:</strong> {format_timestamp(@last_updated)}
-          </div>
+        <div class="text-xs text-base-content/70">
+          <strong>Last Updated:</strong> {@last_updated_display}
         </div>
+      </div>
+    </div>
+    """
+  end
+
+  # Helper component for stat cards
+  defp stat_card(assigns) do
+    ~H"""
+    <div class="stat bg-base-100 rounded-lg">
+      <div class="stat-title text-xs">{@title}</div>
+      <div class={"stat-value text-lg flex items-center #{@class}"}>
+        {@display}
+      </div>
+      <div class="stat-desc text-xs">{@description}</div>
+    </div>
+    """
+  end
+
+  # Helper component for system info section
+  defp system_info_section(assigns) do
+    ~H"""
+    <div class="mt-4 text-sm space-y-2">
+      <div class="flex items-center justify-between">
+        <strong>Total Active Nodes:</strong>
+        <span class="font-semibold text-lg">
+          {@system_info.total_active_nodes}
+        </span>
+      </div>
+
+      <div class="flex items-center justify-between">
+        <strong>Remote Members:</strong>
+        <span>
+          {@system_info.active_member_count}/{@system_info.member_count} active
+        </span>
+      </div>
+
+      <div class="flex items-center justify-between">
+        <strong>Tracked Peers:</strong>
+        <span>{@system_info.peer_count}</span>
       </div>
     </div>
     """
@@ -226,73 +206,55 @@ defmodule CorroPortWeb.ClusterCards do
   attr :system_data, :map, required: true
 
   def cache_status_indicators(assigns) do
+    # Pre-compute all cache status displays using helper function
+    cache_status = DisplayHelpers.all_cache_status(assigns.expected_data, assigns.active_data, assigns.system_data)
+    assigns = assign(assigns, :cache_status, cache_status)
+
     ~H"""
     <div class="flex gap-4 text-xs text-base-content/70">
-      <div>
-        <strong>DNS Cache:</strong>
-        <%= case @expected_data.cache_status do %>
-          <% %{last_updated: nil} -> %>
-            Never loaded
-          <% %{last_updated: updated, error: nil} -> %>
-            Updated {Calendar.strftime(updated, "%H:%M:%S")}
-          <% %{last_updated: updated, error: error} -> %>
-            Failed at {Calendar.strftime(updated, "%H:%M:%S")} ({format_error(error)})
-        <% end %>
-      </div>
-
-      <div>
-        <strong>CLI Cache:</strong>
-        <%= case @active_data.cache_status do %>
-          <% %{last_updated: nil} -> %>
-            Never loaded
-          <% %{last_updated: updated, error: nil} -> %>
-            Updated {Calendar.strftime(updated, "%H:%M:%S")}
-          <% %{last_updated: updated, error: error} -> %>
-            Failed at {Calendar.strftime(updated, "%H:%M:%S")} ({format_error(error)})
-        <% end %>
-      </div>
-
-      <div>
-        <strong>System Cache:</strong>
-        <%= case @system_data.cache_status do %>
-          <% %{last_updated: nil} -> %>
-            Never loaded
-          <% %{last_updated: updated, error: nil} -> %>
-            Updated {Calendar.strftime(updated, "%H:%M:%S")}
-          <% %{last_updated: updated, error: error} -> %>
-            Failed at {Calendar.strftime(updated, "%H:%M:%S")} ({format_error(error)})
-        <% end %>
-      </div>
+      <.cache_item label="DNS Cache" status={@cache_status.dns} />
+      <.cache_item label="CLI Cache" status={@cache_status.cli} />
+      <.cache_item label="System Cache" status={@cache_status.system} />
     </div>
     """
   end
 
-  # Helper functions
+  # Helper component for individual cache status items
+  defp cache_item(assigns) do
+    ~H"""
+    <div>
+      <strong>{@label}:</strong>
+      {@status}
+    </div>
+    """
+  end
+
+  # Helper component for action buttons with configurations
+  defp action_button(assigns) do
+    ~H"""
+    <.button phx-click={@config.action} class={@config.class}>
+      <.icon name={@config.icon} class="w-3 h-3 mr-1" />
+      {@config.label}
+      <span :if={@config.show_warning} class="ml-1">⚠</span>
+    </.button>
+    """
+  end
+
+  # Helper functions - kept for backward compatibility but now deprecated
+  # These are replaced by the DisplayHelpers functions
 
   defp format_error(reason) do
-    case reason do
-      :dns_failed -> "DNS lookup failed"
-      :cli_timeout -> "CLI command timed out"
-      {:cli_failed, _} -> "CLI command failed"
-      {:parse_failed, _} -> "Failed to parse CLI output"
-      :service_unavailable -> "Service unavailable"
-      {:cluster_api_failed, _} -> "Cluster API connection failed"
-      {:fetch_exception, _} -> "System data fetch failed"
-      _ -> "#{inspect(reason)}"
-    end
+    DisplayHelpers.format_error_reason(reason)
   end
 
   defp format_timestamp(nil), do: "Unknown"
 
   defp format_timestamp(timestamp) when is_binary(timestamp) do
-    case DateTime.from_iso8601(timestamp) do
-      {:ok, dt, _} -> Calendar.strftime(dt, "%H:%M:%S")
-      _ -> timestamp
-    end
+    DisplayHelpers.format_timestamp(timestamp)
   end
 
   defp format_timestamp(%DateTime{} = dt) do
-    Calendar.strftime(dt, "%H:%M:%S")
+    DisplayHelpers.format_timestamp(dt)
   end
 
   defp format_timestamp(_), do: "Unknown"

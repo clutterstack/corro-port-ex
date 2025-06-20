@@ -357,7 +357,7 @@ defmodule CorroPortWeb.ClusterLive do
           <div class="stat bg-base-100 rounded-lg">
             <div class="stat-title text-xs">API Health</div>
             <div class={"stat-value text-lg #{@summary_stats.api_health.class}"}>
-              {@summary_stats.api_health.icon}
+              {@summary_stats.api_health.content}
             </div>
             <div class="stat-desc text-xs">{@summary_stats.api_health.description}</div>
           </div>
