@@ -166,14 +166,94 @@ defmodule CorroPortWeb.DisplayHelpers do
     end
   end
 
-  # Private helper functions
+  @doc """
+  Builds display configuration for cluster summary stats.
+  """
+  def cluster_summary_stats(expected_data, active_data, system_data, expected_regions, active_regions) do
+    expected_display = count_display(expected_data, :nodes)
+    active_display = count_display(active_data, :members)
+    api_health = api_health_display(system_data)
 
-  defp get_data_result(data) do
-    # Try different keys that might contain the result
-    Map.get(data, :nodes) || Map.get(data, :members) || {:ok, []}
+    %{
+      expected: %{
+        display: expected_display,
+        regions_count: length(expected_regions)
+      },
+      active: %{
+        display: active_display,
+        regions_count: length(active_regions)
+      },
+      api_health: api_health,
+      messages_count: length(system_data.latest_messages)
+    }
   end
 
-  defp format_error_reason(reason) do
+  @doc """
+  Gets system info details for cluster summary.
+  Returns nil if no cluster info available.
+  """
+  def system_info_details(system_data) do
+    case system_data.cluster_info do
+      nil -> nil
+      cluster_info -> %{
+        total_active_nodes: Map.get(cluster_info, "total_active_nodes", 0),
+        active_member_count: Map.get(cluster_info, "active_member_count", 0),
+        member_count: Map.get(cluster_info, "member_count", 0),
+        peer_count: Map.get(cluster_info, "peer_count", 0)
+      }
+    end
+  end
+
+  @doc """
+  Builds CLI member data for the CLIMembersTable component.
+  """
+  def build_cli_member_data(active_data) do
+    case active_data.members do
+      {:ok, members} ->
+        %{
+          members: members,
+          member_count: length(members),
+          status: :ok,
+          last_updated: active_data.cache_status.last_updated,
+          last_error: nil
+        }
+
+      {:error, reason} ->
+        %{
+          members: [],
+          member_count: 0,
+          status: :error,
+          last_updated: active_data.cache_status.last_updated,
+          last_error: reason
+        }
+    end
+  end
+
+  @doc """
+  Extracts CLI error from active data for the CLIMembersTable component.
+  """
+  def extract_cli_error(active_data) do
+    case active_data.members do
+      {:ok, _} -> nil
+      {:error, reason} -> reason
+    end
+  end
+
+  @doc """
+  Builds cache status display data for all data sources.
+  """
+  def all_cache_status(expected_data, active_data, system_data) do
+    %{
+      dns: cache_status_display(expected_data.cache_status),
+      cli: cache_status_display(active_data.cache_status),
+      system: cache_status_display(system_data.cache_status)
+    }
+  end
+
+  @doc """
+  Formats error reasons consistently across the application.
+  """
+  def format_error_reason(reason) do
     case reason do
       :dns_failed -> "DNS lookup failed"
       :cli_timeout -> "CLI command timed out"
@@ -185,5 +265,12 @@ defmodule CorroPortWeb.DisplayHelpers do
       {:fetch_exception, _} -> "System data fetch failed"
       _ -> "#{inspect(reason)}"
     end
+  end
+
+  # Private helper functions
+
+  defp get_data_result(data) do
+    # Try different keys that might contain the result
+    Map.get(data, :nodes) || Map.get(data, :members) || {:ok, []}
   end
 end

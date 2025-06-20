@@ -1,9 +1,8 @@
-
 defmodule CorroPortWeb.ClusterLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPortWeb.{ClusterCards, MembersTable, DebugSection, NavTabs, CLIMembersTable}
+  alias CorroPortWeb.{MembersTable, DebugSection, NavTabs, CLIMembersTable}
   alias CorroPortWeb.DisplayHelpers
   alias CorroPort.NodeConfig
 
@@ -179,39 +178,36 @@ defmodule CorroPortWeb.ClusterLive do
     Enum.reject(regions, &(&1 == our_region))
   end
 
-  # Helper functions to bridge between new data structure and existing components
-
-  defp build_cli_member_data_for_component(active_data) do
-    # Convert the new active_data structure to what CLIMembersTable expects
-    case active_data.members do
-      {:ok, members} ->
-        %{
-          members: members,
-          member_count: length(members),
-          status: :ok,
-          last_updated: active_data.cache_status.last_updated,
-          last_error: nil
-        }
-
-      {:error, reason} ->
-        %{
-          members: [],
-          member_count: 0,
-          status: :error,
-          last_updated: active_data.cache_status.last_updated,
-          last_error: reason
-        }
-    end
-  end
-
-  defp extract_cli_error(active_data) do
-    case active_data.members do
-      {:ok, _} -> nil
-      {:error, reason} -> reason
-    end
-  end
-
   def render(assigns) do
+    # Pre-compute all display data using helpers
+    dns_alert = DisplayHelpers.dns_alert_config(assigns.expected_data)
+    cli_alert = DisplayHelpers.cli_alert_config(assigns.active_data)
+    system_alert = DisplayHelpers.system_alert_config(assigns.system_data)
+
+    summary_stats = DisplayHelpers.cluster_summary_stats(
+      assigns.expected_data,
+      assigns.active_data,
+      assigns.system_data,
+      assigns.expected_regions,
+      assigns.active_regions
+    )
+
+    system_info = DisplayHelpers.system_info_details(assigns.system_data)
+    cli_member_data = DisplayHelpers.build_cli_member_data(assigns.active_data)
+    cli_error = DisplayHelpers.extract_cli_error(assigns.active_data)
+    cache_status = DisplayHelpers.all_cache_status(assigns.expected_data, assigns.active_data, assigns.system_data)
+
+    assigns = assign(assigns, %{
+      dns_alert: dns_alert,
+      cli_alert: cli_alert,
+      system_alert: system_alert,
+      summary_stats: summary_stats,
+      system_info: system_info,
+      cli_member_data: cli_member_data,
+      cli_error: cli_error,
+      cache_status: cache_status
+    })
+
     ~H"""
     <div class="space-y-6">
       <!-- Navigation Tabs -->
@@ -269,15 +265,10 @@ defmodule CorroPortWeb.ClusterLive do
         </:actions>
       </.header>
 
-      <!-- Error alerts using helper functions -->
-      <.error_alert :if={DisplayHelpers.dns_alert_config(@expected_data)}
-                    config={DisplayHelpers.dns_alert_config(@expected_data)} />
-
-      <.error_alert :if={DisplayHelpers.cli_alert_config(@active_data)}
-                    config={DisplayHelpers.cli_alert_config(@active_data)} />
-
-      <.error_alert :if={DisplayHelpers.system_alert_config(@system_data)}
-                    config={DisplayHelpers.system_alert_config(@system_data)} />
+      <!-- Error alerts using pre-computed configurations -->
+      <.error_alert :if={@dns_alert} config={@dns_alert} />
+      <.error_alert :if={@cli_alert} config={@cli_alert} />
+      <.error_alert :if={@system_alert} config={@system_alert} />
 
       <!-- Enhanced World Map with Regions -->
       <CorroPortWeb.WorldMapCard.world_map_card
@@ -291,20 +282,17 @@ defmodule CorroPortWeb.ClusterLive do
 
       <!-- CLI Members Display with clean data structure -->
       <CLIMembersTable.display
-        cli_member_data={build_cli_member_data_for_component(@active_data)}
-        cli_error={extract_cli_error(@active_data)}
+        cli_member_data={@cli_member_data}
+        cli_error={@cli_error}
       />
 
       <!-- System Members Table using clean data -->
       <MembersTable.cluster_members_table cluster_info={@system_data.cluster_info} />
 
-      <!-- Enhanced Cluster Summary using helper functions -->
+      <!-- Enhanced Cluster Summary using pre-computed stats -->
       <.cluster_summary
-        expected_data={@expected_data}
-        active_data={@active_data}
-        system_data={@system_data}
-        expected_regions={@expected_regions}
-        active_regions={@active_regions} />
+        summary_stats={@summary_stats}
+        system_info={@system_info} />
 
       <!-- Debug Section with clean data -->
       <DebugSection.debug_section
@@ -312,11 +300,8 @@ defmodule CorroPortWeb.ClusterLive do
         node_messages={@system_data.latest_messages}
       />
 
-      <!-- Cache status indicators using helper functions -->
-      <.cache_status_display
-        expected_data={@expected_data}
-        active_data={@active_data}
-        system_data={@system_data} />
+      <!-- Cache status indicators using pre-computed status -->
+      <.cache_status_display cache_status={@cache_status} />
 
       <!-- Last Updated -->
       <div class="text-xs text-base-content/70 text-center">
@@ -342,17 +327,6 @@ defmodule CorroPortWeb.ClusterLive do
   end
 
   defp cluster_summary(assigns) do
-    # Pre-compute display values using helpers
-    expected_display = DisplayHelpers.count_display(assigns.expected_data, :nodes)
-    active_display = DisplayHelpers.count_display(assigns.active_data, :members)
-    api_health = DisplayHelpers.api_health_display(assigns.system_data)
-
-    assigns = assign(assigns, %{
-      expected_display: expected_display,
-      active_display: active_display,
-      api_health: api_health
-    })
-
     ~H"""
     <div class="card bg-base-200">
       <div class="card-body">
@@ -364,61 +338,57 @@ defmodule CorroPortWeb.ClusterLive do
           <!-- Expected Nodes -->
           <div class="stat bg-base-100 rounded-lg">
             <div class="stat-title text-xs">Expected Nodes</div>
-            <div class={"stat-value text-lg flex items-center #{@expected_display.class}"}>
-              {@expected_display.content}
+            <div class={"stat-value text-lg flex items-center #{@summary_stats.expected.display.class}"}>
+              {@summary_stats.expected.display.content}
             </div>
-            <div class="stat-desc text-xs">{length(@expected_regions)} regions</div>
+            <div class="stat-desc text-xs">{@summary_stats.expected.regions_count} regions</div>
           </div>
 
           <!-- Active Members -->
           <div class="stat bg-base-100 rounded-lg">
             <div class="stat-title text-xs">Active Members</div>
-            <div class={"stat-value text-lg flex items-center #{@active_display.class}"}>
-              {@active_display.content}
+            <div class={"stat-value text-lg flex items-center #{@summary_stats.active.display.class}"}>
+              {@summary_stats.active.display.content}
             </div>
-            <div class="stat-desc text-xs">{length(@active_regions)} regions</div>
+            <div class="stat-desc text-xs">{@summary_stats.active.regions_count} regions</div>
           </div>
 
           <!-- Cluster Health -->
           <div class="stat bg-base-100 rounded-lg">
             <div class="stat-title text-xs">API Health</div>
-            <div class={"stat-value text-lg #{@api_health.class}"}>
-              {@api_health.icon}
+            <div class={"stat-value text-lg #{@summary_stats.api_health.class}"}>
+              {@summary_stats.api_health.icon}
             </div>
-            <div class="stat-desc text-xs">{@api_health.description}</div>
+            <div class="stat-desc text-xs">{@summary_stats.api_health.description}</div>
           </div>
 
           <!-- Message Activity -->
           <div class="stat bg-base-100 rounded-lg">
             <div class="stat-title text-xs">Messages</div>
-            <div class="stat-value text-lg">{length(@system_data.latest_messages)}</div>
+            <div class="stat-value text-lg">{@summary_stats.messages_count}</div>
             <div class="stat-desc text-xs">in database</div>
           </div>
         </div>
 
         <!-- System Info Details -->
-        <div :if={@system_data.cluster_info} class="mt-4 text-sm space-y-2">
+        <div :if={@system_info} class="mt-4 text-sm space-y-2">
           <div class="flex items-center justify-between">
             <strong>Total Active Nodes:</strong>
             <span class="font-semibold text-lg">
-              {Map.get(@system_data.cluster_info, "total_active_nodes", 0)}
+              {@system_info.total_active_nodes}
             </span>
           </div>
 
           <div class="flex items-center justify-between">
             <strong>Remote Members:</strong>
             <span>
-              {Map.get(@system_data.cluster_info, "active_member_count", 0)}/{Map.get(
-                @system_data.cluster_info,
-                "member_count",
-                0
-              )} active
+              {@system_info.active_member_count}/{@system_info.member_count} active
             </span>
           </div>
 
           <div class="flex items-center justify-between">
             <strong>Tracked Peers:</strong>
-            <span>{Map.get(@system_data.cluster_info, "peer_count", 0)}</span>
+            <span>{@system_info.peer_count}</span>
           </div>
         </div>
       </div>
@@ -431,17 +401,17 @@ defmodule CorroPortWeb.ClusterLive do
     <div class="flex gap-4 text-xs text-base-content/70">
       <div>
         <strong>DNS Cache:</strong>
-        {DisplayHelpers.cache_status_display(@expected_data.cache_status)}
+        {@cache_status.dns}
       </div>
 
       <div>
         <strong>CLI Cache:</strong>
-        {DisplayHelpers.cache_status_display(@active_data.cache_status)}
+        {@cache_status.cli}
       </div>
 
       <div>
         <strong>System Cache:</strong>
-        {DisplayHelpers.cache_status_display(@system_data.cache_status)}
+        {@cache_status.system}
       </div>
     </div>
     """
