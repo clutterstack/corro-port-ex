@@ -2,7 +2,14 @@ defmodule CorroPortWeb.IndexLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPortWeb.NavTabs
+  alias CorroPortWeb.{
+    NavTabs,
+    PropagationHeader,
+    ErrorAlerts,
+    PropagationProgress,
+    PropagationStats,
+    CacheStatus
+  }
 
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -146,90 +153,23 @@ defmodule CorroPortWeb.IndexLive do
     end
   end
 
-  defp dns_regions_display(expected_regions) do
-    case Application.get_env(:corro_port, :node_config)[:environment] do
-      :prod ->
-        if expected_regions != [] do
-          expected_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")
-        else
-          "(none found)"
-        end
-      _ ->
-        "(none; no DNS in dev)"
-    end
-  end
-
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
       <!-- Navigation Tabs -->
       <NavTabs.nav_tabs active={:propagation} />
 
-      <.header>
-        <.icon name="hero-radio" class="w-5 h-5 mr-2" /> DB change propagation
-        <:subtitle>
-          <div class="flex items-center gap-4">
-            <span>Click "Send Message." Markers change colour as nodes confirm they've received the update.</span>
-          </div>
-        </:subtitle>
-        <:actions>
-          <div class="flex gap-2">
-            <!-- Per-domain refresh buttons -->
-            <.button
-              phx-click="refresh_expected"
-              class={[
-                "btn btn-sm",
-                if(match?({:error, _}, @expected_data.nodes), do: "btn-error", else: "btn-outline")
-              ]}
-            >
-              <.icon name="hero-globe-alt" class="w-4 h-4 mr-1" />
-              DNS
-              <span :if={match?({:error, _}, @expected_data.nodes)} class="ml-1">⚠</span>
-            </.button>
+      <!-- Page Header with Actions -->
+      <PropagationHeader.propagation_header
+        expected_data={@expected_data}
+        active_data={@active_data}
+      />
 
-            <.button
-              phx-click="refresh_active"
-              class={[
-                "btn btn-sm",
-                if(match?({:error, _}, @active_data.members), do: "btn-error", else: "btn-outline")
-              ]}
-            >
-              <.icon name="hero-command-line" class="w-4 h-4 mr-1" />
-              CLI
-              <span :if={match?({:error, _}, @active_data.members)} class="ml-1">⚠</span>
-            </.button>
-
-            <.button phx-click="reset_tracking" class="btn btn-warning btn-outline">
-              <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Reset Tracking
-            </.button>
-
-            <.button phx-click="send_message" variant="primary">
-              <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" /> Send Message
-            </.button>
-          </div>
-        </:actions>
-      </.header>
-
-      <!-- Error alerts for each domain -->
-      <div :if={match?({:error, reason}, @expected_data.nodes)} class="alert alert-warning">
-        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-        <div>
-          <div class="font-semibold">DNS Discovery Failed</div>
-          <div class="text-sm">
-            Error: #{format_error(reason)} - Expected regions may be incomplete
-          </div>
-        </div>
-      </div>
-
-      <div :if={match?({:error, reason}, @active_data.members)} class="alert alert-error">
-        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-        <div>
-          <div class="font-semibold">CLI Data Failed</div>
-          <div class="text-sm">
-            Error: {format_error(reason)} - Active member list may be stale
-          </div>
-        </div>
-      </div>
+      <!-- Error Alerts -->
+      <ErrorAlerts.error_alerts
+        expected_data={@expected_data}
+        active_data={@active_data}
+      />
 
       <!-- Enhanced World Map with Regions -->
       <div class="card bg-base-100">
@@ -243,148 +183,30 @@ defmodule CorroPortWeb.IndexLive do
             />
           </div>
 
-          <!-- Real-time acknowledgment progress -->
-          <div class="mb-4">
-            <div class="flex items-center justify-between text-sm mb-2">
-              <span>Acknowledgment Progress:</span>
-              <div class="flex items-center gap-2 text-sm">
-                <span class="badge badge-success badge-sm">
-                  {length(@ack_regions)} acknowledged
-                </span>
-                <span class="badge badge-warning badge-sm">
-                  {length(@expected_regions)} expected
-                </span>
-              </div>
-            </div>
-            <div class="w-full bg-base-300 rounded-full h-2">
-              <div
-                class="h-2 rounded-full bg-gradient-to-r from-orange-500 to-violet-500 transition-all duration-500"
-                style={"width: #{if length(@expected_regions) > 0, do: length(@ack_regions) / length(@expected_regions) * 100, else: 0}%"}
-              >
-              </div>
-            </div>
-          </div>
-
-          <!-- Region legend -->
-          <div class="text-sm text-base-content/70 space-y-2">
-            <div class="flex items-center">
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #77b5fe;"></span>
-              Our node
-              <%= if @our_regions != [] do %>
-                ({@our_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
-              <% else %>
-                (region unknown)
-              <% end %>
-            </div>
-
-            <div class="flex items-center">
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ffdc66;"></span>
-              Active nodes (CLI)
-              <%= if @active_regions != [] do %>
-                ({@active_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
-              <% else %>
-                (none found)
-              <% end %>
-              <%= if match?({:error, _}, @active_data.members) do %>
-                <span class="badge badge-error badge-xs ml-2">error</span>
-              <% end %>
-            </div>
-
-            <div class="flex items-center">
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #ff8c42;"></span>
-              Nodes from DNS
-              <%= dns_regions_display(@expected_regions) %>
-              <%= if match?({:error, _}, @expected_data.nodes) do %>
-                <span class="badge badge-warning badge-xs ml-2">error</span>
-              <% end %>
-            </div>
-
-            <div class="flex items-center">
-              <span class="inline-block w-3 h-3 rounded-full mr-2" style="background-color: #9d4edd;"></span>
-              Acknowledged latest message
-              <%= if @ack_regions != [] do %>
-                ({@ack_regions |> Enum.reject(&(&1 == "" or &1 == "unknown")) |> Enum.join(", ")})
-              <% else %>
-                (none yet)
-              <% end %>
-            </div>
-          </div>
+          <!-- Progress and Legend -->
+          <PropagationProgress.propagation_progress
+            expected_regions={@expected_regions}
+            active_regions={@active_regions}
+            ack_regions={@ack_regions}
+            our_regions={@our_regions}
+          />
         </div>
       </div>
 
       <!-- Summary Stats -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div class="stat bg-base-200 rounded-lg">
-          <div class="stat-title">Expected Nodes</div>
-          <div class="stat-value text-2xl flex items-center">
-            <%= case @expected_data.nodes do %>
-              <% {:ok, nodes} -> %>
-                {length(nodes)}
-              <% {:error, _} -> %>
-                <span class="text-error">?</span>
-            <% end %>
-          </div>
-          <div class="stat-desc">{length(@expected_regions)} regions</div>
-        </div>
+      <PropagationStats.propagation_stats
+        expected_data={@expected_data}
+        active_data={@active_data}
+        expected_regions={@expected_regions}
+        active_regions={@active_regions}
+        ack_regions={@ack_regions}
+      />
 
-        <div class="stat bg-base-200 rounded-lg">
-          <div class="stat-title">Active Members</div>
-          <div class="stat-value text-2xl flex items-center">
-            <%= case @active_data.members do %>
-              <% {:ok, members} -> %>
-                {length(members)}
-              <% {:error, _} -> %>
-                <span class="text-error">?</span>
-            <% end %>
-          </div>
-          <div class="stat-desc">{length(@active_regions)} regions</div>
-        </div>
-
-        <div class="stat bg-base-200 rounded-lg">
-          <div class="stat-title">Acknowledged</div>
-          <div class="stat-value text-2xl">{length(@ack_regions)}</div>
-          <div class="stat-desc">regions responded</div>
-        </div>
-
-        <div class="stat bg-base-200 rounded-lg">
-          <div class="stat-title">Coverage</div>
-          <div class="stat-value text-2xl">
-            <%= if length(@expected_regions) > 0 do %>
-              {round(length(@ack_regions) / length(@expected_regions) * 100)}%
-            <% else %>
-              0%
-            <% end %>
-          </div>
-          <div class="stat-desc">acknowledgment rate</div>
-        </div>
-      </div>
-
-      <!-- Cache status indicators -->
-      <div class="flex gap-4 text-xs text-base-content/70">
-        <div>
-          <strong>DNS Cache:</strong>
-          <%= case @expected_data.cache_status do %>
-            <% %{last_updated: nil} -> %>
-              Never loaded
-            <% %{last_updated: updated, error: nil} -> %>
-              Updated {Calendar.strftime(updated, "%H:%M:%S")}
-            <% %{last_updated: updated, error: error} -> %>
-              Failed at {Calendar.strftime(updated, "%H:%M:%S")} ({format_error(error)})
-          <% end %>
-        </div>
-
-        <div>
-          <strong>CLI Cache:</strong>
-          <%= case @active_data.cache_status do %>
-            <% %{last_updated: nil} -> %>
-              Never loaded
-            <% %{last_updated: updated, error: nil} -> %>
-              Updated {Calendar.strftime(updated, "%H:%M:%S")}
-            <% %{last_updated: updated, error: error} -> %>
-              Failed at {Calendar.strftime(updated, "%H:%M:%S")} ({format_error(error)})
-          <% end %>
-        </div>
-      </div>
+      <!-- Cache Status Indicators -->
+      <CacheStatus.cache_status
+        expected_data={@expected_data}
+        active_data={@active_data}
+      />
 
       <!-- Last Updated -->
       <div class="text-xs text-base-content/70 text-center">

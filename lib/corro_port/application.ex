@@ -15,16 +15,17 @@ defmodule CorroPort.Application do
          default: [conn_opts: [transport_opts: [inet6: true]]]
        }},
 
-      # Core data services (keep existing GenServers for now)
+      # Core data services (legacy - kept for compatibility)
       CorroPort.CorroSubscriber,
       CorroPort.AckTracker,
       CorroPort.AckSender,
       CorroPort.ClusterMemberStore,
 
-      # NEW: Clean domain modules
+      # Clean domain modules
       CorroPort.NodeDiscovery,
       CorroPort.ClusterMembership,
       CorroPort.MessagePropagation,
+      CorroPort.ClusterSystemInfo,
 
       # Web endpoints
       CorroPortWeb.Endpoint,
