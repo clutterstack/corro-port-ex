@@ -14,16 +14,20 @@ defmodule CorroPort.Application do
        pools: %{
          default: [conn_opts: [transport_opts: [inet6: true]]]
        }},
-      # Corrosion integration
+
+      # Core data services (keep existing GenServers for now)
       CorroPort.CorroSubscriber,
-      CorroPort.DNSNodeDiscovery,
       CorroPort.AckTracker,
       CorroPort.AckSender,
-      # NEW: Centralized cluster member store
       CorroPort.ClusterMemberStore,
-      # Main web endpoint
+
+      # NEW: Clean domain modules
+      CorroPort.NodeDiscovery,
+      CorroPort.ClusterMembership,
+      CorroPort.MessagePropagation,
+
+      # Web endpoints
       CorroPortWeb.Endpoint,
-      # API endpoint for node-to-node communication
       CorroPortWeb.APIEndpoint
     ]
 
