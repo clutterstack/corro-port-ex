@@ -306,22 +306,6 @@ defmodule CorroPortWeb.DisplayHelpers do
 
   def format_timestamp(_), do: "Unknown"
 
-  @doc """
-  Formats error reasons consistently across the application.
-  """
-  def format_error_reason(reason) do
-    case reason do
-      :dns_failed -> "DNS lookup failed"
-      :cli_timeout -> "CLI command timed out"
-      {:cli_failed, _} -> "CLI command failed"
-      {:parse_failed, _} -> "Failed to parse CLI output"
-      :service_unavailable -> "Service unavailable"
-      {:tracking_failed, _} -> "Failed to start tracking"
-      {:cluster_api_failed, _} -> "Cluster API connection failed"
-      {:fetch_exception, _} -> "System data fetch failed"
-      _ -> "#{inspect(reason)}"
-    end
-  end
 
   # Private helper functions
 
@@ -339,4 +323,124 @@ defmodule CorroPortWeb.DisplayHelpers do
       "#{base_class} btn-outline"
     end
   end
+
+
+@doc """
+  Builds CLI status information for display.
+  """
+  def build_cli_status_info(cli_member_data) do
+    %{
+      status_badge_class: cli_status_badge_class(cli_member_data.status),
+      status_text: format_cli_status(cli_member_data.status),
+      last_updated_text: format_cli_last_updated(cli_member_data.last_updated),
+      member_count: cli_member_data.member_count
+    }
+  end
+
+  @doc """
+  Determines CLI status badge CSS classes.
+  """
+  def cli_status_badge_class(status) do
+    base = "badge badge-sm"
+
+    case status do
+      :ok -> "#{base} badge-success"
+      :fetching -> "#{base} badge-info"
+      :error -> "#{base} badge-error"
+      :unavailable -> "#{base} badge-warning"
+      :initializing -> "#{base} badge-neutral"
+      _ -> "#{base} badge-neutral"
+    end
+  end
+
+  @doc """
+  Formats CLI status for display.
+  """
+  def format_cli_status(status) do
+    case status do
+      :ok -> "Active"
+      :fetching -> "Fetching"
+      :error -> "Error"
+      :unavailable -> "Unavailable"
+      :initializing -> "Starting"
+      _ -> "Unknown"
+    end
+  end
+
+  @doc """
+  Determines if CLI fetching spinner should be shown.
+  """
+  def show_fetching_spinner?(cli_member_data) do
+    cli_member_data && cli_member_data.status == :fetching
+  end
+
+  @doc """
+  Determines if CLI error should be displayed.
+  """
+  def should_show_cli_error?(cli_error) do
+    !is_nil(cli_error)
+  end
+
+  @doc """
+  Determines if CLI has successful members to display.
+  """
+  def has_successful_cli_members?(cli_member_data) do
+    cli_member_data && cli_member_data.members != []
+  end
+
+  @doc """
+  Determines if CLI empty state should be shown.
+  """
+  def show_cli_empty_state?(cli_member_data, cli_error) do
+    cli_member_data && cli_member_data.members == [] && is_nil(cli_error)
+  end
+
+  @doc """
+  Determines if CLI loading state should be shown.
+  """
+  def show_cli_loading_state?(cli_member_data) do
+    is_nil(cli_member_data) || cli_member_data.status == :initializing
+  end
+
+  @doc """
+  Builds CLI error configuration for display.
+  """
+  def build_cli_error_config(cli_error) do
+    {title, message} = case cli_error do
+      {:cli_error, :timeout} ->
+        {"CLI Data Issue", "CLI command timed out after 15 seconds"}
+
+      {:cli_error, reason} ->
+        {"CLI Data Issue", "CLI command failed: #{inspect(reason)}"}
+
+      {:parse_error, _reason} ->
+        {"CLI Data Issue", "CLI command succeeded but output couldn't be parsed"}
+
+      {:service_unavailable, msg} ->
+        {"CLI Data Issue", msg}
+
+      _ ->
+        {"CLI Data Issue", "Unknown CLI error: #{inspect(cli_error)}"}
+    end
+
+    %{title: title, message: message}
+  end
+
+  @doc """
+  Formats error reasons consistently across the application.
+  """
+  def format_error_reason(reason) do
+    case reason do
+      :dns_failed -> "DNS lookup failed"
+      :cli_timeout -> "CLI command timed out"
+      {:cli_failed, _} -> "CLI command failed"
+      {:parse_failed, _} -> "Failed to parse CLI output"
+      :service_unavailable -> "Service unavailable"
+      {:tracking_failed, _} -> "Failed to start tracking"
+      {:cluster_api_failed, _} -> "Cluster API connection failed"
+      {:fetch_exception, _} -> "System data fetch failed"
+      _ -> "#{inspect(reason)}"
+    end
+  end
+
 end
