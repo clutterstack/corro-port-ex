@@ -18,6 +18,44 @@ defmodule CorroPortWeb.DisplayHelpers do
   end
 
   @doc """
+  Builds refresh button configuration for action buttons.
+  """
+  def refresh_button_config(data, action, label, icon) do
+    %{
+      action: action,
+      label: label,
+      icon: icon,
+      class: refresh_button_class(data, "btn btn-xs"),
+      show_warning: has_error?(data)
+    }
+  end
+
+  @doc """
+  Builds system button configuration (different error checking).
+  """
+  def system_button_config(data, action, label, icon) do
+    %{
+      action: action,
+      label: label,
+      icon: icon,
+      class: system_refresh_button_class(data),
+      show_warning: !is_nil(data.cache_status.error)
+    }
+  end
+
+  @doc """
+  Builds all alert configurations for display.
+  """
+  def build_all_alerts(expected_data, active_data, system_data) do
+    [
+      dns_alert_config(expected_data),
+      cli_alert_config(active_data),
+      system_alert_config(system_data)
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  @doc """
   Checks if data has an error state.
   """
   def has_error?(data) do
@@ -82,13 +120,13 @@ defmodule CorroPortWeb.DisplayHelpers do
   def api_health_display(system_data) do
     if system_data.cluster_info do
       %{
-        icon: "✓",
+        content: "✓",
         class: "text-success",
         description: "connected"
       }
     else
       %{
-        icon: "✗",
+        content: "✗",
         class: "text-error",
         description: "failed"
       }
@@ -251,6 +289,24 @@ defmodule CorroPortWeb.DisplayHelpers do
   end
 
   @doc """
+  Formats a timestamp for consistent display across the app.
+  """
+  def format_timestamp(nil), do: "Unknown"
+
+  def format_timestamp(timestamp) when is_binary(timestamp) do
+    case DateTime.from_iso8601(timestamp) do
+      {:ok, dt, _} -> Calendar.strftime(dt, "%H:%M:%S")
+      _ -> timestamp
+    end
+  end
+
+  def format_timestamp(%DateTime{} = dt) do
+    Calendar.strftime(dt, "%H:%M:%S")
+  end
+
+  def format_timestamp(_), do: "Unknown"
+
+  @doc """
   Formats error reasons consistently across the application.
   """
   def format_error_reason(reason) do
@@ -272,5 +328,15 @@ defmodule CorroPortWeb.DisplayHelpers do
   defp get_data_result(data) do
     # Try different keys that might contain the result
     Map.get(data, :nodes) || Map.get(data, :members) || {:ok, []}
+  end
+
+  # Private helper for system button class
+  defp system_refresh_button_class(data) do
+    base_class = "btn btn-xs"
+    if data.cache_status.error do
+      "#{base_class} btn-error"
+    else
+      "#{base_class} btn-outline"
+    end
   end
 end
