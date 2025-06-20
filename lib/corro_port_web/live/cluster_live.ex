@@ -1,8 +1,10 @@
+
 defmodule CorroPortWeb.ClusterLive do
   use CorroPortWeb, :live_view
   require Logger
 
   alias CorroPortWeb.{ClusterCards, MembersTable, DebugSection, NavTabs, CLIMembersTable}
+  alias CorroPortWeb.DisplayHelpers
   alias CorroPort.NodeConfig
 
   def mount(_params, _session, socket) do
@@ -76,7 +78,7 @@ defmodule CorroPortWeb.ClusterLive do
         {:noreply, socket}
 
       {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to send: #{format_error(reason)}")}
+        {:noreply, put_flash(socket, :error, "Failed to send: #{DisplayHelpers.format_error_reason(reason)}")}
     end
   end
 
@@ -94,7 +96,7 @@ defmodule CorroPortWeb.ClusterLive do
 
       {:error, error} ->
         Logger.warning("ClusterLive: ❌ Failed to reset tracking: #{inspect(error)}")
-        {:noreply, put_flash(socket, :error, "Failed to reset tracking: #{format_error(error)}")}
+        {:noreply, put_flash(socket, :error, "Failed to reset tracking: #{DisplayHelpers.format_error_reason(error)}")}
     end
   end
 
@@ -177,281 +179,6 @@ defmodule CorroPortWeb.ClusterLive do
     Enum.reject(regions, &(&1 == our_region))
   end
 
-  defp format_error(reason) do
-    case reason do
-      :dns_failed -> "DNS lookup failed"
-      :cli_timeout -> "CLI command timed out"
-      {:cli_failed, _} -> "CLI command failed"
-      {:parse_failed, _} -> "Failed to parse CLI output"
-      :service_unavailable -> "Service unavailable"
-      {:tracking_failed, _} -> "Failed to start tracking"
-      {:cluster_api_failed, _} -> "Cluster API connection failed"
-      {:fetch_exception, _} -> "System data fetch failed"
-      _ -> "#{inspect(reason)}"
-    end
-  end
-
-  def render(assigns) do
-    ~H"""
-    <div class="space-y-6">
-      <!-- Navigation Tabs -->
-      <NavTabs.nav_tabs active={:cluster} />
-
-      <.header>
-        Corrosion Cluster Status
-        <:subtitle>
-          <div class="flex items-center gap-4">
-            <span>Comprehensive cluster health and node connectivity monitoring</span>
-          </div>
-        </:subtitle>
-        <:actions>
-          <div class="flex gap-2">
-            <!-- Per-domain refresh buttons -->
-            <.button
-              phx-click="refresh_expected"
-              class={[
-                "btn btn-xs",
-                if(match?({:error, _}, @expected_data.nodes), do: "btn-error", else: "btn-outline")
-              ]}
-            >
-              <.icon name="hero-globe-alt" class="w-3 h-3 mr-1" />
-              DNS
-              <span :if={match?({:error, _}, @expected_data.nodes)} class="ml-1">⚠</span>
-            </.button>
-
-            <.button
-              phx-click="refresh_active"
-              class={[
-                "btn btn-xs",
-                if(match?({:error, _}, @active_data.members), do: "btn-error", else: "btn-outline")
-              ]}
-            >
-              <.icon name="hero-command-line" class="w-3 h-3 mr-1" />
-              CLI
-              <span :if={match?({:error, _}, @active_data.members)} class="ml-1">⚠</span>
-            </.button>
-
-            <.button
-              phx-click="refresh_system"
-              class={[
-                "btn btn-xs",
-                if(@system_data.cache_status.error, do: "btn-error", else: "btn-outline")
-              ]}
-            >
-              <.icon name="hero-server" class="w-3 h-3 mr-1" />
-              System
-              <span :if={@system_data.cache_status.error} class="ml-1">⚠</span>
-            </.button>
-
-            <.button phx-click="reset_tracking" class="btn btn-warning btn-outline btn-sm">
-              <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Reset
-            </.button>
-
-            <.button phx-click="send_message" variant="primary" class="btn-sm">
-              <.icon name="hero-paper-airplane" class="w-3 h-3 mr-1" /> Send
-            </.button>
-
-            <.button phx-click="refresh_all" class="btn btn-sm">
-              <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Refresh All
-            </.button>
-          </div>
-        </:actions>
-      </.header>
-
-      <!-- Error alerts for each domain -->
-      <div :if={match?({:error, reason}, @expected_data.nodes)} class="alert alert-warning">
-        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-        <div>
-          <div class="font-semibold">DNS Discovery Failed</div>
-          <div class="text-sm">
-            Error: #{format_error(reason)} - Expected regions may be incomplete
-          </div>
-        </div>
-      </div>
-
-      <div :if={match?({:error, reason}, @active_data.members)} class="alert alert-error">
-        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-        <div>
-          <div class="font-semibold">CLI Data Failed</div>
-          <div class="text-sm">
-            Error: {format_error(reason)} - Active member list may be stale
-          </div>
-        </div>
-      </div>
-
-      <div :if={@system_data.cache_status.error} class="alert alert-warning">
-        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-        <div>
-          <div class="font-semibold">System Data Issue</div>
-          <div class="text-sm">
-            Error: {format_error(@system_data.cache_status.error)} - Cluster info may be incomplete
-          </div>
-        </div>
-      </div>
-
-      <!-- Enhanced World Map with Regions -->
-      <CorroPortWeb.WorldMapCard.world_map_card
-        active_regions={@active_regions}
-        our_regions={@our_regions}
-        expected_regions={@expected_regions}
-        ack_regions={@ack_regions}
-        show_acknowledgment_progress={true}
-        cli_members_stale={match?({:error, _}, @active_data.members)}
-      />
-
-      <!-- CLI Members Display with clean data structure -->
-      <CLIMembersTable.display
-        cli_member_data={build_cli_member_data_for_component(@active_data)}
-        cli_error={extract_cli_error(@active_data)}
-      />
-
-      <!-- System Members Table using clean data -->
-      <MembersTable.cluster_members_table cluster_info={@system_data.cluster_info} />
-
-      <!-- Enhanced Cluster Summary -->
-      <div class="card bg-base-200">
-        <div class="card-body">
-          <h3 class="card-title text-sm">
-            <.icon name="hero-server-stack" class="w-4 h-4 mr-2" /> Cluster Summary
-          </h3>
-
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <!-- Expected Nodes -->
-            <div class="stat bg-base-100 rounded-lg">
-              <div class="stat-title text-xs">Expected Nodes</div>
-              <div class="stat-value text-lg flex items-center">
-                <%= case @expected_data.nodes do %>
-                  <% {:ok, nodes} -> %>
-                    {length(nodes)}
-                  <% {:error, _} -> %>
-                    <span class="text-error">?</span>
-                <% end %>
-              </div>
-              <div class="stat-desc text-xs">{length(@expected_regions)} regions</div>
-            </div>
-
-            <!-- Active Members -->
-            <div class="stat bg-base-100 rounded-lg">
-              <div class="stat-title text-xs">Active Members</div>
-              <div class="stat-value text-lg flex items-center">
-                <%= case @active_data.members do %>
-                  <% {:ok, members} -> %>
-                    {length(members)}
-                  <% {:error, _} -> %>
-                    <span class="text-error">?</span>
-                <% end %>
-              </div>
-              <div class="stat-desc text-xs">{length(@active_regions)} regions</div>
-            </div>
-
-            <!-- Cluster Health -->
-            <div class="stat bg-base-100 rounded-lg">
-              <div class="stat-title text-xs">API Health</div>
-              <div class="stat-value text-lg">
-                <%= if @system_data.cluster_info do %>
-                  <span class="text-success">✓</span>
-                <% else %>
-                  <span class="text-error">✗</span>
-                <% end %>
-              </div>
-              <div class="stat-desc text-xs">
-                <%= if @system_data.cluster_info do %>
-                  connected
-                <% else %>
-                  failed
-                <% end %>
-              </div>
-            </div>
-
-            <!-- Message Activity -->
-            <div class="stat bg-base-100 rounded-lg">
-              <div class="stat-title text-xs">Messages</div>
-              <div class="stat-value text-lg">{length(@system_data.latest_messages)}</div>
-              <div class="stat-desc text-xs">in database</div>
-            </div>
-          </div>
-
-          <!-- System Info Details -->
-          <div :if={@system_data.cluster_info} class="mt-4 text-sm space-y-2">
-            <div class="flex items-center justify-between">
-              <strong>Total Active Nodes:</strong>
-              <span class="font-semibold text-lg">
-                {Map.get(@system_data.cluster_info, "total_active_nodes", 0)}
-              </span>
-            </div>
-
-            <div class="flex items-center justify-between">
-              <strong>Remote Members:</strong>
-              <span>
-                {Map.get(@system_data.cluster_info, "active_member_count", 0)}/{Map.get(
-                  @system_data.cluster_info,
-                  "member_count",
-                  0
-                )} active
-              </span>
-            </div>
-
-            <div class="flex items-center justify-between">
-              <strong>Tracked Peers:</strong>
-              <span>{Map.get(@system_data.cluster_info, "peer_count", 0)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Debug Section with clean data -->
-      <DebugSection.debug_section
-        cluster_info={@system_data.cluster_info}
-        node_messages={@system_data.latest_messages}
-      />
-
-      <!-- Cache status indicators -->
-      <div class="flex gap-4 text-xs text-base-content/70">
-        <div>
-          <strong>DNS Cache:</strong>
-          <%= case @expected_data.cache_status do %>
-            <% %{last_updated: nil} -> %>
-              Never loaded
-            <% %{last_updated: updated, error: nil} -> %>
-              Updated {Calendar.strftime(updated, "%H:%M:%S")}
-            <% %{last_updated: updated, error: error} -> %>
-              Failed at {Calendar.strftime(updated, "%H:%M:%S")} ({format_error(error)})
-          <% end %>
-        </div>
-
-        <div>
-          <strong>CLI Cache:</strong>
-          <%= case @active_data.cache_status do %>
-            <% %{last_updated: nil} -> %>
-              Never loaded
-            <% %{last_updated: updated, error: nil} -> %>
-              Updated {Calendar.strftime(updated, "%H:%M:%S")}
-            <% %{last_updated: updated, error: error} -> %>
-              Failed at {Calendar.strftime(updated, "%H:%M:%S")} ({format_error(error)})
-          <% end %>
-        </div>
-
-        <div>
-          <strong>System Cache:</strong>
-          <%= case @system_data.cache_status do %>
-            <% %{last_updated: nil} -> %>
-              Never loaded
-            <% %{last_updated: updated, error: nil} -> %>
-              Updated {Calendar.strftime(updated, "%H:%M:%S")}
-            <% %{last_updated: updated, error: error} -> %>
-              Failed at {Calendar.strftime(updated, "%H:%M:%S")} ({format_error(error)})
-          <% end %>
-        </div>
-      </div>
-
-      <!-- Last Updated -->
-      <div class="text-xs text-base-content/70 text-center">
-        Page updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}
-      </div>
-    </div>
-    """
-  end
-
   # Helper functions to bridge between new data structure and existing components
 
   defp build_cli_member_data_for_component(active_data) do
@@ -482,5 +209,241 @@ defmodule CorroPortWeb.ClusterLive do
       {:ok, _} -> nil
       {:error, reason} -> reason
     end
+  end
+
+  def render(assigns) do
+    ~H"""
+    <div class="space-y-6">
+      <!-- Navigation Tabs -->
+      <NavTabs.nav_tabs active={:cluster} />
+
+      <.header>
+        Corrosion Cluster Status
+        <:subtitle>
+          <div class="flex items-center gap-4">
+            <span>Comprehensive cluster health and node connectivity monitoring</span>
+          </div>
+        </:subtitle>
+        <:actions>
+          <div class="flex gap-2">
+            <!-- Per-domain refresh buttons using helper functions -->
+            <.button
+              phx-click="refresh_expected"
+              class={DisplayHelpers.refresh_button_class(@expected_data)}
+            >
+              <.icon name="hero-globe-alt" class="w-3 h-3 mr-1" />
+              DNS
+              <span :if={DisplayHelpers.show_warning?(@expected_data)} class="ml-1">⚠</span>
+            </.button>
+
+            <.button
+              phx-click="refresh_active"
+              class={DisplayHelpers.refresh_button_class(@active_data)}
+            >
+              <.icon name="hero-command-line" class="w-3 h-3 mr-1" />
+              CLI
+              <span :if={DisplayHelpers.show_warning?(@active_data)} class="ml-1">⚠</span>
+            </.button>
+
+            <.button
+              phx-click="refresh_system"
+              class={DisplayHelpers.refresh_button_class(@system_data, "btn btn-xs")}
+            >
+              <.icon name="hero-server" class="w-3 h-3 mr-1" />
+              System
+              <span :if={@system_data.cache_status.error} class="ml-1">⚠</span>
+            </.button>
+
+            <.button phx-click="reset_tracking" class="btn btn-warning btn-outline btn-sm">
+              <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Reset
+            </.button>
+
+            <.button phx-click="send_message" variant="primary" class="btn-sm">
+              <.icon name="hero-paper-airplane" class="w-3 h-3 mr-1" /> Send
+            </.button>
+
+            <.button phx-click="refresh_all" class="btn btn-sm">
+              <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Refresh All
+            </.button>
+          </div>
+        </:actions>
+      </.header>
+
+      <!-- Error alerts using helper functions -->
+      <.error_alert :if={DisplayHelpers.dns_alert_config(@expected_data)}
+                    config={DisplayHelpers.dns_alert_config(@expected_data)} />
+
+      <.error_alert :if={DisplayHelpers.cli_alert_config(@active_data)}
+                    config={DisplayHelpers.cli_alert_config(@active_data)} />
+
+      <.error_alert :if={DisplayHelpers.system_alert_config(@system_data)}
+                    config={DisplayHelpers.system_alert_config(@system_data)} />
+
+      <!-- Enhanced World Map with Regions -->
+      <CorroPortWeb.WorldMapCard.world_map_card
+        active_regions={@active_regions}
+        our_regions={@our_regions}
+        expected_regions={@expected_regions}
+        ack_regions={@ack_regions}
+        show_acknowledgment_progress={true}
+        cli_members_stale={DisplayHelpers.has_error?(@active_data)}
+      />
+
+      <!-- CLI Members Display with clean data structure -->
+      <CLIMembersTable.display
+        cli_member_data={build_cli_member_data_for_component(@active_data)}
+        cli_error={extract_cli_error(@active_data)}
+      />
+
+      <!-- System Members Table using clean data -->
+      <MembersTable.cluster_members_table cluster_info={@system_data.cluster_info} />
+
+      <!-- Enhanced Cluster Summary using helper functions -->
+      <.cluster_summary
+        expected_data={@expected_data}
+        active_data={@active_data}
+        system_data={@system_data}
+        expected_regions={@expected_regions}
+        active_regions={@active_regions} />
+
+      <!-- Debug Section with clean data -->
+      <DebugSection.debug_section
+        cluster_info={@system_data.cluster_info}
+        node_messages={@system_data.latest_messages}
+      />
+
+      <!-- Cache status indicators using helper functions -->
+      <.cache_status_display
+        expected_data={@expected_data}
+        active_data={@active_data}
+        system_data={@system_data} />
+
+      <!-- Last Updated -->
+      <div class="text-xs text-base-content/70 text-center">
+        Page updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}
+      </div>
+    </div>
+    """
+  end
+
+  # Helper components extracted from inline template logic
+
+  defp error_alert(%{config: nil} = assigns), do: ~H""
+  defp error_alert(assigns) do
+    ~H"""
+    <div class={@config.class}>
+      <.icon name={@config.icon} class="w-5 h-5" />
+      <div>
+        <div class="font-semibold">{@config.title}</div>
+        <div class="text-sm">{@config.message}</div>
+      </div>
+    </div>
+    """
+  end
+
+  defp cluster_summary(assigns) do
+    # Pre-compute display values using helpers
+    expected_display = DisplayHelpers.count_display(assigns.expected_data, :nodes)
+    active_display = DisplayHelpers.count_display(assigns.active_data, :members)
+    api_health = DisplayHelpers.api_health_display(assigns.system_data)
+
+    assigns = assign(assigns, %{
+      expected_display: expected_display,
+      active_display: active_display,
+      api_health: api_health
+    })
+
+    ~H"""
+    <div class="card bg-base-200">
+      <div class="card-body">
+        <h3 class="card-title text-sm">
+          <.icon name="hero-server-stack" class="w-4 h-4 mr-2" /> Cluster Summary
+        </h3>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <!-- Expected Nodes -->
+          <div class="stat bg-base-100 rounded-lg">
+            <div class="stat-title text-xs">Expected Nodes</div>
+            <div class={"stat-value text-lg flex items-center #{@expected_display.class}"}>
+              {@expected_display.content}
+            </div>
+            <div class="stat-desc text-xs">{length(@expected_regions)} regions</div>
+          </div>
+
+          <!-- Active Members -->
+          <div class="stat bg-base-100 rounded-lg">
+            <div class="stat-title text-xs">Active Members</div>
+            <div class={"stat-value text-lg flex items-center #{@active_display.class}"}>
+              {@active_display.content}
+            </div>
+            <div class="stat-desc text-xs">{length(@active_regions)} regions</div>
+          </div>
+
+          <!-- Cluster Health -->
+          <div class="stat bg-base-100 rounded-lg">
+            <div class="stat-title text-xs">API Health</div>
+            <div class={"stat-value text-lg #{@api_health.class}"}>
+              {@api_health.icon}
+            </div>
+            <div class="stat-desc text-xs">{@api_health.description}</div>
+          </div>
+
+          <!-- Message Activity -->
+          <div class="stat bg-base-100 rounded-lg">
+            <div class="stat-title text-xs">Messages</div>
+            <div class="stat-value text-lg">{length(@system_data.latest_messages)}</div>
+            <div class="stat-desc text-xs">in database</div>
+          </div>
+        </div>
+
+        <!-- System Info Details -->
+        <div :if={@system_data.cluster_info} class="mt-4 text-sm space-y-2">
+          <div class="flex items-center justify-between">
+            <strong>Total Active Nodes:</strong>
+            <span class="font-semibold text-lg">
+              {Map.get(@system_data.cluster_info, "total_active_nodes", 0)}
+            </span>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <strong>Remote Members:</strong>
+            <span>
+              {Map.get(@system_data.cluster_info, "active_member_count", 0)}/{Map.get(
+                @system_data.cluster_info,
+                "member_count",
+                0
+              )} active
+            </span>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <strong>Tracked Peers:</strong>
+            <span>{Map.get(@system_data.cluster_info, "peer_count", 0)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp cache_status_display(assigns) do
+    ~H"""
+    <div class="flex gap-4 text-xs text-base-content/70">
+      <div>
+        <strong>DNS Cache:</strong>
+        {DisplayHelpers.cache_status_display(@expected_data.cache_status)}
+      </div>
+
+      <div>
+        <strong>CLI Cache:</strong>
+        {DisplayHelpers.cache_status_display(@active_data.cache_status)}
+      </div>
+
+      <div>
+        <strong>System Cache:</strong>
+        {DisplayHelpers.cache_status_display(@system_data.cache_status)}
+      </div>
+    </div>
+    """
   end
 end
