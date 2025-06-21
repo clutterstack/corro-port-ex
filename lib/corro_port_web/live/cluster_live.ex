@@ -11,7 +11,6 @@ defmodule CorroPortWeb.ClusterLive do
       # Subscribe to all clean domain modules
       CorroPort.NodeDiscovery.subscribe()
       CorroPort.CLIMemberStore.subscribe_active()
-      CorroPort.MessagePropagation.subscribe()
       CorroPort.ClusterSystemInfo.subscribe()
     end
 
@@ -28,14 +27,12 @@ defmodule CorroPortWeb.ClusterLive do
         # Data from clean domain modules
         expected_data: nil,
         active_data: nil,
-        ack_data: nil,
         system_data: nil,
         local_node: CorroPort.LocalNode.get_info(),
 
         # Computed regions for map display
         expected_regions: [],
         active_regions: [],
-        ack_regions: [],
         our_regions: [],
 
         # General state
@@ -67,37 +64,6 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, put_flash(socket, :info, "System info refresh initiated...")}
   end
 
-  def handle_event("send_message", _params, socket) do
-    case CorroPort.MessagePropagation.send_message("Test message from cluster view") do
-      {:ok, _message_data} ->
-        socket =
-          socket
-          |> assign(:ack_regions, [])  # Reset ack regions for new message
-          |> put_flash(:info, "Message sent! Tracking acknowledgments...")
-        {:noreply, socket}
-
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to send: #{DisplayHelpers.format_error_reason(reason)}")}
-    end
-  end
-
-  def handle_event("reset_tracking", _params, socket) do
-    case CorroPort.MessagePropagation.reset_tracking() do
-      :ok ->
-        Logger.info("ClusterLive: ✅ Message tracking reset successfully")
-
-        socket =
-          socket
-          |> assign(:ack_regions, [])  # Clear violet regions immediately
-          |> put_flash(:info, "Message tracking reset - all nodes are now orange (expected)")
-
-        {:noreply, socket}
-
-      {:error, error} ->
-        Logger.warning("ClusterLive: ❌ Failed to reset tracking: #{inspect(error)}")
-        {:noreply, put_flash(socket, :error, "Failed to reset tracking: #{DisplayHelpers.format_error_reason(error)}")}
-    end
-  end
 
   # Real-time updates from domain modules
 
@@ -127,16 +93,6 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, socket}
   end
 
-  def handle_info({:ack_status_updated, ack_data}, socket) do
-    Logger.debug("ClusterLive: Received ack status update")
-
-    socket = assign(socket, %{
-      ack_data: ack_data,
-      ack_regions: ack_data.regions
-    })
-
-    {:noreply, socket}
-  end
 
   def handle_info({:cluster_system_updated, system_data}, socket) do
     Logger.debug("ClusterLive: Received cluster system update")
@@ -152,7 +108,6 @@ defmodule CorroPortWeb.ClusterLive do
     # Fetch from all clean domain modules
     expected_data = CorroPort.NodeDiscovery.get_expected_data()
     active_data = CorroPort.CLIMemberStore.get_active_data()
-    ack_data = CorroPort.MessagePropagation.get_ack_data()
     system_data = CorroPort.ClusterSystemInfo.get_system_data()
     local_node = CorroPort.LocalNode.get_info()
 
@@ -160,14 +115,12 @@ defmodule CorroPortWeb.ClusterLive do
       # Data from clean domain modules
       expected_data: expected_data,
       active_data: active_data,
-      ack_data: ack_data,
       system_data: system_data,
       local_node: local_node,
 
       # Computed regions for map display (excluding our region)
       expected_regions: exclude_our_region(expected_data.regions, local_node.region),
       active_regions: exclude_our_region(active_data.regions, local_node.region),
-      ack_regions: ack_data.regions,
       our_regions: [local_node.region],
 
       last_updated: DateTime.utc_now()
@@ -250,13 +203,6 @@ defmodule CorroPortWeb.ClusterLive do
               <span :if={@system_data.cache_status.error} class="ml-1">⚠</span>
             </.button>
 
-            <.button phx-click="reset_tracking" class="btn btn-warning btn-outline btn-sm">
-              <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Reset
-            </.button>
-
-            <.button phx-click="send_message" variant="primary" class="btn-sm">
-              <.icon name="hero-paper-airplane" class="w-3 h-3 mr-1" /> Send
-            </.button>
 
             <.button phx-click="refresh_all" class="btn btn-sm">
               <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Refresh All
@@ -275,8 +221,6 @@ defmodule CorroPortWeb.ClusterLive do
         active_data={@active_data}
         our_regions={@our_regions}
         expected_regions={@expected_regions}
-        ack_regions={@ack_regions}
-        show_acknowledgment_progress={true}
       />
 
       <!-- CLI Members Display with clean data structure -->
