@@ -60,6 +60,7 @@ defmodule CorroPort.MixProject do
       {:ecto, "~> 3.12"},
       {:ecto_sql, "~> 3.12"},
       {:ecto_sqlite3, "~> 0.18"},
+      {:cors_plug, "~> 3.0"},
       {:tidewave, "~> 0.1", only: :dev}
     ]
   end

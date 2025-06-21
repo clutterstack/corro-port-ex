@@ -10,6 +10,11 @@ defmodule CorroPortWeb.Router do
     plug :put_secure_browser_headers
   end
 
+  pipeline :api do
+    plug :accepts, ["json"]
+    plug CORSPlug, origin: "*"
+  end
+
   scope "/", CorroPortWeb do
     pipe_through :browser
 
@@ -17,6 +22,18 @@ defmodule CorroPortWeb.Router do
     live "/cluster", ClusterLive
     live "/node", NodeLive
     live "/messages", MessagesLive
+    live "/analytics", AnalyticsLive
+  end
+
+  scope "/api", CorroPortWeb do
+    pipe_through :api
+
+    get "/analytics/health", AnalyticsApiController, :health
+    get "/analytics/experiments/:experiment_id/summary", AnalyticsApiController, :experiment_summary
+    get "/analytics/experiments/:experiment_id/timing", AnalyticsApiController, :timing_stats
+    get "/analytics/experiments/:experiment_id/metrics", AnalyticsApiController, :system_metrics
+    get "/analytics/experiments/:experiment_id/events", AnalyticsApiController, :message_events
+    get "/analytics/experiments/:experiment_id/topology", AnalyticsApiController, :topology_snapshots
   end
 
   # Enable LiveDashboard in development

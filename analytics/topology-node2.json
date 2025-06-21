@@ -1,9 +1,9 @@
 {
   "experiment_id": "cluster_20250621_181824",
-  "node_id": "node1",
-  "timestamp": "2025-06-21T22:18:24.3NZ",
+  "node_id": "node2",
+  "timestamp": "2025-06-21T22:18:26.3NZ",
   "bootstrap_peers": [
-  "127.0.0.1:8788",
+  "127.0.0.1:8787",
   "127.0.0.1:8789",
   "127.0.0.1:8790",
   "127.0.0.1:8791"
@@ -12,8 +12,8 @@
   "transaction_frequency_ms": 5000,
   "environment": "development",
   "corrosion_config": {
-    "api_port": 8081,
-    "gossip_port": 8787,
-    "db_path": "corrosion/dev-node1.db"
+    "api_port": 8082,
+    "gossip_port": 8788,
+    "db_path": "corrosion/dev-node2.db"
   }
 }

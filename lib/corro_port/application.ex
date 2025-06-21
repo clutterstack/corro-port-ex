@@ -30,6 +30,7 @@ defmodule CorroPort.Application do
       CorroPort.Analytics.Repo,
       CorroPort.AnalyticsStorage,
       CorroPort.SystemMetrics,
+      CorroPort.AnalyticsAggregator,
 
       # Web endpoints
       CorroPortWeb.Endpoint,
