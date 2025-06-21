@@ -1,6 +1,5 @@
 defmodule CorroPortWeb.WorldMapCard do
   use Phoenix.Component
-  import CorroPortWeb.CoreComponents
 
   @doc """
   Renders a world map card with regions, acknowledgment progress, and legend.

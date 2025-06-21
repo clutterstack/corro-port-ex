@@ -1,6 +1,5 @@
 defmodule CorroPortWeb.PropagationProgress do
   use Phoenix.Component
-  import CorroPortWeb.CoreComponents
 
   @doc """
   Renders real-time acknowledgment progress bar and region legend.

@@ -240,22 +240,4 @@ defmodule CorroPortWeb.ClusterCards do
     """
   end
 
-  # Helper functions - kept for backward compatibility but now deprecated
-  # These are replaced by the DisplayHelpers functions
-
-  defp format_error(reason) do
-    DisplayHelpers.format_error_reason(reason)
-  end
-
-  defp format_timestamp(nil), do: "Unknown"
-
-  defp format_timestamp(timestamp) when is_binary(timestamp) do
-    DisplayHelpers.format_timestamp(timestamp)
-  end
-
-  defp format_timestamp(%DateTime{} = dt) do
-    DisplayHelpers.format_timestamp(dt)
-  end
-
-  defp format_timestamp(_), do: "Unknown"
 end

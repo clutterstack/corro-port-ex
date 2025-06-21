@@ -174,14 +174,4 @@ defmodule CorroPortWeb.CLIMembersTable do
     """
   end
 
-  # Helper functions for CLI status display - moved to be used as fallback
-  # These are now deprecated in favor of DisplayHelpers functions
-
-  defp cli_status_badge_class(status) do
-    DisplayHelpers.cli_status_badge_class(status)
-  end
-
-  defp format_cli_status(status) do
-    DisplayHelpers.format_cli_status(status)
-  end
 end

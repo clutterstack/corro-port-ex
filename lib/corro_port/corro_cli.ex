@@ -208,39 +208,4 @@ defmodule CorroPort.CorroCLI do
     end
   end
 
-  @doc """
-  Parses cluster members JSON output into a structured format.
-
-  This is a helper function for processing the output of cluster_members/1.
-  Returns a list of member maps with parsed state information.
-
-  ## Parameters
-  - `json_output` - Raw JSON string output from cluster_members command
-
-  ## Returns
-  - `{:ok, members}` - List of parsed member maps
-  - `{:error, reason}` - Parse error details
-  """
-  defp add_parsed_address(member) do
-    case get_in(member, ["state", "addr"]) do
-      addr when is_binary(addr) ->
-        Map.put(member, "parsed_addr", addr)
-
-      _ ->
-        Map.put(member, "parsed_addr", "unknown")
-    end
-  end
-
-  defp add_member_status(member) do
-    # Add a computed status based on available data
-    # This is a placeholder - we'll refine based on actual corrosion output
-    status =
-      cond do
-        get_in(member, ["state", "last_sync_ts"]) != nil -> "active"
-        get_in(member, ["state", "ts"]) != nil -> "connected"
-        true -> "unknown"
-      end
-
-    Map.put(member, "computed_status", status)
-  end
 end

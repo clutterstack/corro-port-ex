@@ -231,7 +231,7 @@ defmodule CorroPort.NodeDiscovery do
   defp get_development_fallback do
     Logger.debug("NodeDiscovery: Using development fallback")
 
-    local_node_id = CorroPort.LocalNode.get_node_id()
+    _local_node_id = CorroPort.LocalNode.get_node_id()
     all_dev_nodes = ["dev-node1", "dev-node2", "dev-node3"]
 
     {:ok, all_dev_nodes}

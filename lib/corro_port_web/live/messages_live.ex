@@ -2,7 +2,7 @@ defmodule CorroPortWeb.MessagesLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPort.{CorroSubscriber, MessagesAPI}
+  alias CorroPort.MessagesAPI
   alias CorroPortWeb.{AllMessagesTable, AckStatusCard, NavTabs}
 
   def mount(_params, _session, socket) do
