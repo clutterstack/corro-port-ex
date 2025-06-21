@@ -473,7 +473,7 @@ defmodule CorroPortWeb.NodeLive do
                     {inspect(value)}
                   </div>
                   <div :if={!is_list(value) && !is_map(value)} class="font-mono text-xs">
-                    {value}
+                    {inspect(value)}
                   </div>
                 </div>
               </div>

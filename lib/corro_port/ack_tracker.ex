@@ -132,6 +132,11 @@ defmodule CorroPort.AckTracker do
     {:reply, status, state}
   end
 
+  def handle_call(:get_dns_nodes, _from, state) do
+    nodes = get_expected_nodes()
+    {:reply, nodes, state}
+  end
+
   def terminate(_reason, _state) do
     Logger.info("AckTracker shutting down")
     :ok
@@ -239,6 +244,9 @@ defmodule CorroPort.AckTracker do
       end)
       |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
 
+    # Get expected nodes from DNS-based node discovery
+    expected_nodes = get_expected_nodes()
+
     Logger.debug(
       "AckTracker: Found #{length(acknowledgments)} acknowledgments from #{inspect(Enum.map(acknowledgments, & &1.node_id))}"
     )
@@ -247,11 +255,20 @@ defmodule CorroPort.AckTracker do
       latest_message: latest_message,
       acknowledgments: acknowledgments,
       ack_count: length(acknowledgments),
+      expected_count: length(expected_nodes),
+      expected_nodes: expected_nodes
     }
   end
 
   defp broadcast_update do
     status = build_status()
     Phoenix.PubSub.broadcast(CorroPort.PubSub, "ack_events", {:ack_update, status})
+  end
+
+  defp get_expected_nodes do
+    case CorroPort.NodeDiscovery.get_expected_data() do
+      %{nodes: {:ok, nodes}} -> nodes
+      _ -> []
+    end
   end
 end

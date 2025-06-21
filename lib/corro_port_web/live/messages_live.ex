@@ -279,7 +279,7 @@ defmodule CorroPortWeb.MessagesLive do
       </.header>
 
     <!-- Acknowledgment Status -->
-      <AckStatusCard.ack_status_card ack_status={@ack_status} ack_sender_status={@ack_sender_status} expected_count={} />
+      <AckStatusCard.ack_status_card ack_status={@ack_status} ack_sender_status={@ack_sender_status} />
 
     <!-- Connectivity Test Results -->
       <div :if={@connectivity_test_results} class="card bg-base-200">
