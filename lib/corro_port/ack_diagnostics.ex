@@ -307,8 +307,8 @@ defmodule CorroPort.AckDiagnostics do
     IO.puts("Subscribing to PubSub topics...")
 
     # Subscribe to relevant topics
-    Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroPort.CorroSubscriber.subscription_topic())
-    Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroPort.AckTracker.get_pubsub_topic())
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, "message_updates")
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, "ack_events")
 
     monitor_loop()
   end

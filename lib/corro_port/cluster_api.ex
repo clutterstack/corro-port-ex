@@ -25,15 +25,11 @@ defmodule CorroPort.ClusterAPI do
   """
   def get_cluster_members(port \\ nil) do
     query = "SELECT * FROM __corro_members"
-
-    case CorrosionClient.execute_query(query, port) do
-      {:ok, response} ->
-        members = CorrosionClient.parse_query_response(response)
+    with {:ok, members} <- CorrosionClient.execute_query(query, port) do
         parsed_members = Enum.map(members, &parse_member_foca_state/1)
         {:ok, parsed_members}
-
-      error ->
-        error
+    else
+      error -> error
     end
   end
 
@@ -81,13 +77,7 @@ defmodule CorroPort.ClusterAPI do
   def get_local_member_status(port \\ nil) do
     case get_cluster_members(port) do
       {:ok, members} ->
-        local_gossip_port =
-          case Application.get_env(:corro_port, :node_config) do
-            %{corrosion_gossip_port: port} -> port
-            # or some default value
-            _ -> "error"
-          end
-
+        local_gossip_port = Application.get_env(:corro_port, :node_config)[:corrosion_gossip_port]
         # Find member whose gossip address matches our local gossip port
         local_member =
           Enum.find(members, fn member ->
@@ -167,14 +157,7 @@ defmodule CorroPort.ClusterAPI do
   """
   def get_tracked_peers(port \\ nil) do
     query = "SELECT * FROM crsql_tracked_peers"
-
-    case CorrosionClient.execute_query(query, port) do
-      {:ok, response} ->
-        {:ok, CorrosionClient.parse_query_response(response)}
-
-      error ->
-        error
-    end
+    CorrosionClient.execute_query(query, port)
   end
 
   ## System Introspection
@@ -189,14 +172,8 @@ defmodule CorroPort.ClusterAPI do
     ]
 
     Enum.reduce(queries, %{}, fn {key, query}, acc ->
-      case CorrosionClient.execute_query(query) do
-        {:ok, response} ->
-          result = CorrosionClient.parse_query_response(response)
-          Map.put(acc, key, result)
-
-        {:error, reason} ->
-          Map.put(acc, key, %{error: reason})
-      end
+      result = CorrosionClient.execute_query(query)
+          Map.put(acc, key, result) # regardless of whether the result is {:ok, result} or {:error, reason}, we assimilate it.
     end)
   end
 

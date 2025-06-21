@@ -32,7 +32,7 @@ Other tests:
 
 ```
 
-[info] CorrosionCLI: Raw output: ""
+[info] CorroCLI: Raw output: ""
 [debug] handling {:ok, ""} from task #Reference<0.0.84611.4079730995.595394561.97793>
 [lib/corro_port_web/live/cluster_live.ex:74: CorroPortWeb.ClusterLive.handle_info/2]
 CorroPort.CorrosionParser.parse_cluster_members(raw_output) #=> {:ok, []}

@@ -9,7 +9,6 @@ defmodule CorroPort.CorroSubscriber do
   use GenServer
   require Logger
 
-  @subscription_topic "message_updates"
   @max_reconnect_attempts 5
 
   def start_link(opts \\ []) do
@@ -201,8 +200,6 @@ defmodule CorroPort.CorroSubscriber do
     GenServer.call(__MODULE__, :restart)
   end
 
-  def subscription_topic, do: @subscription_topic
-
   # Private functions
 
   defp run_subscription_stream(parent_pid) do
@@ -358,7 +355,7 @@ defmodule CorroPort.CorroSubscriber do
   end
 
   defp broadcast_event(event) do
-    Phoenix.PubSub.broadcast(CorroPort.PubSub, @subscription_topic, event)
+    Phoenix.PubSub.broadcast(CorroPort.PubSub, "message_updates", event)
   end
 
   defp schedule_reconnect(state) do

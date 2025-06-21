@@ -9,8 +9,6 @@ defmodule CorroPort.MessagePropagation do
   use GenServer
   require Logger
 
-  @pubsub_topic "message_propagation"
-
   # Client API
 
   def start_link(opts \\ []) do
@@ -34,7 +32,6 @@ defmodule CorroPort.MessagePropagation do
   %{
     latest_message: %{pk: "...", timestamp: "..."} | nil,
     acks: [%{node_id: "...", timestamp: "..."}],
-    expected_count: 3,
     ack_count: 1,
     regions: ["ams"]  # Regions that have acknowledged
   }
@@ -55,7 +52,7 @@ defmodule CorroPort.MessagePropagation do
   Receives: {:ack_status_updated, ack_data}
   """
   def subscribe do
-    Phoenix.PubSub.subscribe(CorroPort.PubSub, @pubsub_topic)
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, "message_propagation")
   end
 
   # GenServer Implementation
@@ -64,7 +61,7 @@ defmodule CorroPort.MessagePropagation do
     Logger.info("MessagePropagation starting...")
 
     # Subscribe to AckTracker updates
-    Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroPort.AckTracker.get_pubsub_topic())
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, "ack_events")
 
     # Get initial state
     initial_ack_status = CorroPort.AckTracker.get_status()
@@ -162,14 +159,12 @@ defmodule CorroPort.MessagePropagation do
     %{
       latest_message: ack_status.latest_message,
       acks: ack_status.acknowledgments,
-      expected_count: ack_status.expected_count,
       ack_count: ack_status.ack_count,
-      expected_nodes: ack_status.expected_nodes,
       regions: ack_regions
     }
   end
 
   defp broadcast_update(state) do
-    Phoenix.PubSub.broadcast(CorroPort.PubSub, @pubsub_topic, {:ack_status_updated, state.ack_data})
+    Phoenix.PubSub.broadcast(CorroPort.PubSub, "message_propagation", {:ack_status_updated, state.ack_data})
   end
 end

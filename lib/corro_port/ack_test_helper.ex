@@ -135,7 +135,7 @@ defmodule CorroPort.AckTestHelper do
     IO.puts("🔍 Checking CorroSubscriber message flow...")
 
     # Subscribe to the subscription topic
-    Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroPort.CorroSubscriber.subscription_topic())
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, "message_updates")
 
     IO.puts("📡 Subscribed to CorroSubscriber events")
     IO.puts("💡 Now send a message from another node and watch for events...")
@@ -201,7 +201,7 @@ defmodule CorroPort.AckTestHelper do
     # Send the event that AckSender would normally receive
     Phoenix.PubSub.broadcast(
       CorroPort.PubSub,
-      CorroPort.CorroSubscriber.subscription_topic(),
+      "message_updates",
       {:new_message, fake_message}
     )
 

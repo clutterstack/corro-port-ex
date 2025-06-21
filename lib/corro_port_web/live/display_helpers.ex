@@ -443,4 +443,22 @@ defmodule CorroPortWeb.DisplayHelpers do
     end
   end
 
+  @doc """
+Formats CLI last updated timestamp for display.
+"""
+def format_cli_last_updated(nil), do: nil
+
+def format_cli_last_updated(timestamp) when is_binary(timestamp) do
+  case DateTime.from_iso8601(timestamp) do
+    {:ok, dt, _} -> Calendar.strftime(dt, "%H:%M:%S")
+    _ -> timestamp
+  end
+end
+
+def format_cli_last_updated(%DateTime{} = dt) do
+  Calendar.strftime(dt, "%H:%M:%S")
+end
+
+def format_cli_last_updated(_), do: nil
+
 end

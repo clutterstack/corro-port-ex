@@ -8,10 +8,10 @@ defmodule CorroPortWeb.MessagesLive do
   def mount(_params, _session, socket) do
     if connected?(socket) do
       # Subscribe to acknowledgment updates
-      Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroPort.AckTracker.get_pubsub_topic())
+      Phoenix.PubSub.subscribe(CorroPort.PubSub, "ack_events")
 
       # Subscribe to real-time message updates
-      Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroSubscriber.subscription_topic())
+      Phoenix.PubSub.subscribe(CorroPort.PubSub, "message_updates")
     end
 
     socket =
@@ -257,7 +257,7 @@ defmodule CorroPortWeb.MessagesLive do
     <div class="space-y-6">
       <!-- Navigation Tabs -->
       <NavTabs.nav_tabs active={:messages} />
-      
+
     <!-- Page Header -->
       <.header>
         Message Operations
@@ -277,10 +277,10 @@ defmodule CorroPortWeb.MessagesLive do
           </.button>
         </:actions>
       </.header>
-      
+
     <!-- Acknowledgment Status -->
-      <AckStatusCard.ack_status_card ack_status={@ack_status} ack_sender_status={@ack_sender_status} />
-      
+      <AckStatusCard.ack_status_card ack_status={@ack_status} ack_sender_status={@ack_sender_status} expected_count={} />
+
     <!-- Connectivity Test Results -->
       <div :if={@connectivity_test_results} class="card bg-base-200">
         <div class="card-body">
@@ -298,7 +298,7 @@ defmodule CorroPortWeb.MessagesLive do
           </div>
         </div>
       </div>
-      
+
     <!-- All Messages Table -->
       <AllMessagesTable.all_messages_table
         all_messages={@all_messages}
@@ -306,7 +306,7 @@ defmodule CorroPortWeb.MessagesLive do
         messages_error={@messages_error}
         local_node_id={@local_node_id}
       />
-      
+
     <!-- Last Updated -->
       <div :if={@last_updated} class="text-xs text-base-content/70 text-center">
         Last updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}

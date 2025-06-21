@@ -1,4 +1,4 @@
-defmodule CorroPort.CorrosionCLI do
+defmodule CorroPort.CorroCLI do
   @moduledoc """
   Interface for running Corrosion CLI commands using Elixir Ports.
 
@@ -19,7 +19,7 @@ defmodule CorroPort.CorrosionCLI do
   - `{:error, reason}` - Error with details
 
   ## Examples
-      iex> CorroPort.CorrosionCLI.cluster_members()
+      iex> CorroPort.CorroCLI.cluster_members()
       {:ok, "{\\"id\\": \\"94bfbec2...\\"..."}
   """
   def cluster_members(opts \\ []) do
@@ -33,7 +33,7 @@ defmodule CorroPort.CorrosionCLI do
   - `Task` that when awaited returns `{:ok, output}` or `{:error, reason}`
 
   ## Examples
-      iex> task = CorroPort.CorrosionCLI.cluster_members_async()
+      iex> task = CorroPort.CorroCLI.cluster_members_async()
       iex> Task.await(task, 10_000)
       {:ok, "{\\"id\\": \\"94bfbec2...\\"..."}
   """
@@ -84,10 +84,10 @@ defmodule CorroPort.CorrosionCLI do
   - `{:error, reason}` - Error details
 
   ## Examples
-      iex> CorroPort.CorrosionCLI.run_command(["cluster", "members"])
+      iex> CorroPort.CorroCLI.run_command(["cluster", "members"])
       {:ok, "{\\"id\\": \\"94bfbec2..."}
 
-      iex> CorroPort.CorrosionCLI.run_command(["invalid", "command"])
+      iex> CorroPort.CorroCLI.run_command(["invalid", "command"])
       {:error, {:exit_code, 1, "Error: unknown command..."}}
   """
   def run_command(args, opts \\ []) when is_list(args) do
@@ -98,7 +98,7 @@ defmodule CorroPort.CorrosionCLI do
     # Build the full command
     cmd_args = args ++ ["--config", config_path]
 
-    Logger.debug("CorrosionCLI: command #{binary_path} #{Enum.join(cmd_args, " ")}")
+    Logger.debug("CorroCLI: command #{binary_path} #{Enum.join(cmd_args, " ")}")
 
     # Validate that binary and config exist
     case validate_prerequisites(binary_path, config_path) do
@@ -121,15 +121,15 @@ defmodule CorroPort.CorrosionCLI do
   - `Task` that when awaited returns `{:ok, output}` or `{:error, reason}`
 
   ## Examples
-      iex> task = CorroPort.CorrosionCLI.run_command_async(["cluster", "members"])
+      iex> task = CorroPort.CorroCLI.run_command_async(["cluster", "members"])
       iex> result = Task.await(task, 10_000)
       {:ok, "{\\"id\\": \\"94bfbec2..."}
 
       # Run multiple commands concurrently
       iex> tasks = [
-      ...>   CorroPort.CorrosionCLI.cluster_members_async(),
-      ...>   CorroPort.CorrosionCLI.cluster_info_async(),
-      ...>   CorroPort.CorrosionCLI.cluster_status_async()
+      ...>   CorroPort.CorroCLI.cluster_members_async(),
+      ...>   CorroPort.CorroCLI.cluster_info_async(),
+      ...>   CorroPort.CorroCLI.cluster_status_async()
       ...> ]
       iex> results = Task.await_many(tasks, 10_000)
   """
@@ -145,19 +145,19 @@ defmodule CorroPort.CorrosionCLI do
 
     cond do
       not File.exists?(abs_binary_path) ->
-        Logger.error("CorrosionCLI: Binary not found at #{abs_binary_path}")
+        Logger.error("CorroCLI: Binary not found at #{abs_binary_path}")
         {:error, "Corrosion binary not found at: #{abs_binary_path}"}
 
       not is_executable?(abs_binary_path) ->
-        Logger.error("CorrosionCLI: Binary not executable at #{abs_binary_path}")
+        Logger.error("CorroCLI: Binary not executable at #{abs_binary_path}")
         {:error, "Corrosion binary is not executable: #{abs_binary_path}"}
 
       not File.exists?(abs_config_path) ->
-        Logger.error("CorrosionCLI: Config not found at #{abs_config_path}")
+        Logger.error("CorroCLI: Config not found at #{abs_config_path}")
         {:error, "Corrosion config not found at: #{abs_config_path}"}
 
       true ->
-        # Logger.debug("CorrosionCLI: Prerequisites validated successfully")
+        # Logger.debug("CorroCLI: Prerequisites validated successfully")
         :ok
     end
   end
@@ -180,30 +180,30 @@ defmodule CorroPort.CorrosionCLI do
     # Convert to absolute path to help with path resolution
     abs_binary_path = Path.absname(binary_path)
 
-    # Logger.debug("CorrosionCLI: Current working directory: #{File.cwd!()}")
-    # Logger.debug("CorrosionCLI: Full command: #{abs_binary_path} #{Enum.join(args, " ")}")
+    # Logger.debug("CorroCLI: Current working directory: #{File.cwd!()}")
+    # Logger.debug("CorroCLI: Full command: #{abs_binary_path} #{Enum.join(args, " ")}")
 
     try do
       # Use System.cmd with basic options (no timeout for now)
       case System.cmd(abs_binary_path, args, stderr_to_stdout: true) do
         {output, 0} ->
-          # Logger.debug("CorrosionCLI: Raw output: #{inspect(output)}")
+          # Logger.debug("CorroCLI: Raw output: #{inspect(output)}")
           {:ok, output}
 
         {error_output, exit_code} ->
-          Logger.warning("CorrosionCLI: Command failed with exit code #{exit_code}")
-          Logger.warning("CorrosionCLI: Error output: #{error_output}")
+          Logger.warning("CorroCLI: Command failed with exit code #{exit_code}")
+          Logger.warning("CorroCLI: Error output: #{error_output}")
           {:error, {:exit_code, exit_code, error_output}}
       end
     catch
       :exit, {:enoent, _} ->
-        Logger.error("CorrosionCLI: Binary not found at #{abs_binary_path}")
+        Logger.error("CorroCLI: Binary not found at #{abs_binary_path}")
 
         {:error,
          "Binary not found: #{abs_binary_path}. Check that the corrosion binary exists and is executable."}
 
       error ->
-        Logger.error("CorrosionCLI: Unexpected error: #{inspect(error)}")
+        Logger.error("CorroCLI: Unexpected error: #{inspect(error)}")
         {:error, {:unexpected_error, error}}
     end
   end

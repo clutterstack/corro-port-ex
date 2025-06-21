@@ -19,11 +19,10 @@ defmodule CorroPort.Application do
       CorroPort.CorroSubscriber,
       CorroPort.AckTracker,
       CorroPort.AckSender,
-      CorroPort.ClusterMemberStore,
+      CorroPort.CLIMemberStore,
 
       # Clean domain modules
       CorroPort.NodeDiscovery,
-      CorroPort.ClusterMembership,
       CorroPort.MessagePropagation,
       CorroPort.ClusterSystemInfo,
 

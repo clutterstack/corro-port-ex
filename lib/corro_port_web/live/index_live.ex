@@ -15,7 +15,7 @@ defmodule CorroPortWeb.IndexLive do
     if connected?(socket) do
       # Subscribe to the clean domain modules
       CorroPort.NodeDiscovery.subscribe()
-      CorroPort.ClusterMembership.subscribe()
+      CorroPort.CLIMemberStore.subscribe_active()
       CorroPort.MessagePropagation.subscribe()
     end
 
@@ -30,7 +30,7 @@ defmodule CorroPortWeb.IndexLive do
   end
 
   def handle_event("refresh_active", _params, socket) do
-    CorroPort.ClusterMembership.refresh_cache()
+    CorroPort.CLIMemberStore.refresh_members()
     {:noreply, put_flash(socket, :info, "CLI member refresh initiated...")}
   end
 
@@ -114,7 +114,7 @@ defmodule CorroPortWeb.IndexLive do
   defp fetch_all_data(socket) do
     # Fetch from clean domain modules - explicit success/error handling
     expected_data = CorroPort.NodeDiscovery.get_expected_data()
-    active_data = CorroPort.ClusterMembership.get_active_data()
+    active_data = CorroPort.CLIMemberStore.get_active_data()
     ack_data = CorroPort.MessagePropagation.get_ack_data()
     local_node = CorroPort.LocalNode.get_info()
 

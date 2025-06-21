@@ -11,7 +11,6 @@ defmodule CorroPort.ClusterSystemInfo do
 
   alias CorroPort.{ClusterAPI, MessagesAPI}
 
-  @pubsub_topic "cluster_system_info"
   @refresh_interval 60_000  # 1 minute for system info
 
   # Client API
@@ -47,7 +46,7 @@ defmodule CorroPort.ClusterSystemInfo do
   Receives: {:cluster_system_updated, system_data}
   """
   def subscribe do
-    Phoenix.PubSub.subscribe(CorroPort.PubSub, @pubsub_topic)
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, "cluster_system_info")
   end
 
   @doc """
@@ -269,7 +268,7 @@ defmodule CorroPort.ClusterSystemInfo do
 
   defp broadcast_update(state) do
     system_data = build_system_data(state)
-    Phoenix.PubSub.broadcast(CorroPort.PubSub, @pubsub_topic, {:cluster_system_updated, system_data})
+    Phoenix.PubSub.broadcast(CorroPort.PubSub, "cluster_system_info", {:cluster_system_updated, system_data})
 
     Logger.debug(
       "ClusterSystemInfo: Broadcasted update - cluster_info: #{!is_nil(state.cluster_info)}, " <>

@@ -12,24 +12,31 @@ defmodule CorroPort.CorrosionClient do
   require Logger
 
   @doc """
-  Execute a SQL query against Corrosion's query endpoint.
+  Execute a SQL query against Corrosion's query endpoint, return a
+  list of maps (one for each entry) on success.
 
   ## Parameters
   - `query`: SQL query string
   - `port`: API port (optional, defaults to configured port)
 
   ## Returns
-  - `{:ok, response_body}` on success
-  - `{:error, reason}` on failure
+  -
 
   ## Examples
-      iex> CorroPort.CorrosionClient.execute_query("SELECT 1", 8081)
-      {:ok, response_body}
+
   """
   def execute_query(query, port \\ nil) do
+    with {:ok, body} <- post_query(query, port) do
+      {:ok, parse_query_resp_body(body)}
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp post_query(query, port) do
     # TODO: set base_url using application environment vars, for both local and prod
-    port = port || get_corro_api_port()
-    base_url = "http://127.0.0.1:#{port}"
+    corro_port = port || get_corro_api_port()
+    base_url = "http://127.0.0.1:#{corro_port}"
 
     # Logger.debug("Executing query on port #{port}: #{query}")
 
@@ -46,16 +53,13 @@ defmodule CorroPort.CorrosionClient do
         {:error, "HTTP #{status}: #{inspect(body)}"}
 
       {:error, exception} ->
-        Logger.warning(
-          "Failed to connect to Corrosion API on port #{port}: #{inspect(exception)}"
-        )
-
-        {:error, "Connection failed: #{inspect(exception)}"}
+        Logger.warning("Failed to connect to Corrosion API on port #{port}: #{inspect(exception)}")
+        {:error, "Corrosion connection failed: #{inspect(exception)}"}
     end
   end
 
   @doc """
-  Execute a SQL transaction against Corrosion's transaction endpoint.
+  Execute a list of SQL transaction against Corrosion's transaction endpoint.
 
   ## Parameters
   - `transactions`: List of SQL statements to execute as a transaction
@@ -66,14 +70,14 @@ defmodule CorroPort.CorrosionClient do
   - `{:error, reason}` on failure
 
   ## Examples
-      iex> CorroPort.CorrosionClient.execute_transaction(["INSERT INTO users (name) VALUES ('Alice')"], 8081)
+      iex> CorroPort.CorrosionClient.execute_transactions(["INSERT INTO users (name) VALUES ('Alice')"], 8081)
       {:ok, response_body}
   """
-  def execute_transaction(transactions, port \\ nil) do
+def execute_transactions(transactions, port \\ nil) do
     port = port || get_corro_api_port()
     base_url = "http://127.0.0.1:#{port}"
 
-    Logger.debug("Executing transaction on port #{port}: #{inspect(transactions)}")
+    Logger.debug("Executing transactions on port #{port}: #{inspect(transactions)}")
 
     case Req.post("#{base_url}/v1/transactions",
            json: transactions,
@@ -122,10 +126,10 @@ defmodule CorroPort.CorrosionClient do
 
   ## Examples
       iex> response = ~s({"columns": ["id", "name"]}\\n{"row": [1, [1, "Alice"]]}\\n{"eoq": true})
-      iex> CorroPort.CorrosionClient.parse_query_response(response)
+      iex> CorroPort.CorrosionClient.parse_query_resp_body(response)
       [%{"id" => 1, "name" => "Alice"}]
   """
-  def parse_query_response(response) when is_binary(response) do
+  def parse_query_resp_body(response) when is_binary(response) do
     lines = String.split(response, "\n")
 
     {_columns, rows} =
@@ -155,12 +159,12 @@ defmodule CorroPort.CorrosionClient do
     Enum.reverse(rows)
   end
 
-  def parse_query_response(response) when is_list(response) do
+  def parse_query_resp_body(response) when is_list(response) do
     # Already parsed
     response
   end
 
-  def parse_query_response(_), do: []
+  def parse_query_resp_body(_), do: []
 
   @doc """
   Get the configured Corrosion API port for the current node.

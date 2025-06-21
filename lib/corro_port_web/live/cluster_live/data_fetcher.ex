@@ -1,13 +1,13 @@
 defmodule CorroPortWeb.ClusterLive.DataFetcher do
   require Logger
-  alias CorroPort.{ClusterAPI, DNSNodeDiscovery, ClusterMemberStore}
+  alias CorroPort.{ClusterAPI, DNSNodeDiscovery, CLIMemberStore}
 
   def fetch_all_data() do
     # DNS-based expected nodes
     expected_nodes_result = DNSNodeDiscovery.get_dns_nodes()
 
     # Get CLI members from centralized store
-    cli_member_data = ClusterMemberStore.get_members()
+    cli_member_data = CLIMemberStore.get_members()
 
     # Basic cluster info (keep for debugging)
     cluster_result = ClusterAPI.get_cluster_info()

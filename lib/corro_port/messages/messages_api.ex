@@ -31,7 +31,7 @@ defmodule CorroPort.MessagesAPI do
       "Inserting: node_id=#{node_id}, message=#{message}, originating_endpoint=#{originating_endpoint}, region=#{region}"
     )
 
-    case CorrosionClient.execute_transaction([sql]) do
+    case CorrosionClient.execute_transactions([sql]) do
       {:ok, _response} ->
         {:ok,
          %{
@@ -53,14 +53,7 @@ defmodule CorroPort.MessagesAPI do
   """
   def get_node_messages do
     query = "SELECT * FROM node_messages ORDER BY timestamp DESC"
-
-    case CorrosionClient.execute_query(query) do
-      {:ok, response} ->
-        {:ok, CorrosionClient.parse_query_response(response)}
-
-      error ->
-        error
-    end
+    CorrosionClient.execute_query(query)
   end
 
   @doc """
@@ -77,14 +70,7 @@ defmodule CorroPort.MessagesAPI do
     )
     ORDER BY timestamp DESC
     """
-
-    case CorrosionClient.execute_query(query) do
-      {:ok, response} ->
-        {:ok, CorrosionClient.parse_query_response(response)}
-
-      error ->
-        error
-    end
+    CorrosionClient.execute_query(query)
   end
 
   @doc """
@@ -104,12 +90,11 @@ defmodule CorroPort.MessagesAPI do
     """
 
     case CorrosionClient.execute_query(query) do
-      {:ok, response} ->
+      {:ok, result} ->
         regions =
-          CorrosionClient.parse_query_response(response)
+          result
           |> Enum.map(&Map.get(&1, "region"))
           |> Enum.reject(&is_nil/1)
-
         {:ok, regions}
 
       error ->
@@ -123,14 +108,7 @@ defmodule CorroPort.MessagesAPI do
   """
   def get_messages_by_region(region) do
     query = "SELECT * FROM node_messages WHERE region = '#{region}' ORDER BY timestamp DESC"
-
-    case CorrosionClient.execute_query(query) do
-      {:ok, response} ->
-        {:ok, CorrosionClient.parse_query_response(response)}
-
-      error ->
-        error
-    end
+    CorrosionClient.execute_query(query)
   end
 
   # Private functions
@@ -184,7 +162,7 @@ defmodule CorroPort.MessagesAPI do
     WHERE message IN ('8081', '8082', '8083', '8084', '8085')
     """
 
-    case CorrosionClient.execute_transaction([cleanup_sql]) do
+    case CorrosionClient.execute_transactions([cleanup_sql]) do
       {:ok, _} ->
         Logger.info("Cleaned up malformed messages")
         {:ok, :cleaned}

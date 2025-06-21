@@ -19,7 +19,7 @@ defmodule CorroPort.AckSender do
     Logger.info("AckSender starting...")
 
     # Subscribe to CorroSubscriber's message updates
-    Phoenix.PubSub.subscribe(CorroPort.PubSub, CorroPort.CorroSubscriber.subscription_topic())
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, "message_updates")
 
     {:ok,
      %{

@@ -1,6 +1,7 @@
 defmodule CorroPortWeb.CLIMembersTable do
   use Phoenix.Component
   import CorroPortWeb.CoreComponents
+  alias CorroPortWeb.DisplayHelpers
 
  def display(assigns) do
     # Pre-compute display content using helper functions
@@ -21,7 +22,7 @@ defmodule CorroPortWeb.CLIMembersTable do
             <.icon name="hero-command-line" class="w-5 h-5 mr-2" /> CLI cluster members
           </h3>
           <div class="flex gap-2">
-            <.button phx-click="refresh_cli_members" class="btn btn-primary btn-sm">
+            <.button phx-click="refresh_active" class="btn btn-primary btn-sm">
               <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Refresh CLI Data
             </.button>
             <span

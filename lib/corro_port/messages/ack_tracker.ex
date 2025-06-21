@@ -20,7 +20,7 @@ defmodule CorroPort.AckTracker do
 
   @doc """
   Track a new message as the "latest" message expecting acknowledgments.
-  Clears any previous acknowledgments and gets expected nodes from DNS.
+  Clears any previous acknowledgments
   """
   def track_latest_message(message_data) do
     GenServer.call(__MODULE__, {:track_latest_message, message_data})
@@ -55,13 +55,6 @@ defmodule CorroPort.AckTracker do
     GenServer.call(__MODULE__, :get_dns_nodes)
   end
 
-  @doc """
-  Force refresh of expected nodes from DNS.
-  """
-  def refresh_expected_nodes do
-    GenServer.cast(__MODULE__, :refresh_expected_nodes)
-  end
-
   def get_pubsub_topic, do: @pubsub_topic
 
   # GenServer Implementation
@@ -77,9 +70,6 @@ defmodule CorroPort.AckTracker do
         read_concurrency: true
       ])
 
-    # Initialize with empty expected nodes - will be populated on first message
-    :ets.insert(@table_name, {:expected_nodes, []})
-
     Logger.info("AckTracker ETS table created: #{@table_name}")
 
     {:ok, %{table: table}}
@@ -93,21 +83,6 @@ defmodule CorroPort.AckTracker do
 
     # Store the latest message
     :ets.insert(@table_name, {:latest_message, message_data})
-
-    # Get expected nodes from DNS
-    case CorroPort.DNSNodeDiscovery.get_dns_nodes() do
-      {:ok, expected_nodes} ->
-        :ets.insert(@table_name, {:expected_nodes, expected_nodes})
-
-        Logger.info(
-          "AckTracker: Expected acknowledgments from #{length(expected_nodes)} nodes: #{inspect(expected_nodes)}"
-        )
-
-      {:error, reason} ->
-        Logger.warning("AckTracker: Failed to get expected nodes from DNS: #{inspect(reason)}")
-        # Set empty list - it's fine if we don't track any expected nodes
-        :ets.insert(@table_name, {:expected_nodes, []})
-    end
 
     # Broadcast the update
     broadcast_update()
@@ -157,31 +132,6 @@ defmodule CorroPort.AckTracker do
   def handle_call(:get_status, _from, state) do
     status = build_status()
     {:reply, status, state}
-  end
-
-  def handle_call(:get_dns_nodes, _from, state) do
-    expected_nodes = get_cached_expected_nodes()
-    {:reply, expected_nodes, state}
-  end
-
-  def handle_cast(:refresh_expected_nodes, state) do
-    Logger.info("AckTracker: Manual refresh of expected nodes requested")
-
-    # Trigger DNS cache refresh
-    CorroPort.DNSNodeDiscovery.refresh_cache()
-
-    # Update our expected nodes
-    case CorroPort.DNSNodeDiscovery.get_dns_nodes() do
-      {:ok, expected_nodes} ->
-        :ets.insert(@table_name, {:expected_nodes, expected_nodes})
-        Logger.info("AckTracker: Updated expected nodes: #{inspect(expected_nodes)}")
-        broadcast_update()
-
-      {:error, reason} ->
-        Logger.warning("AckTracker: Failed to refresh expected nodes: #{inspect(reason)}")
-    end
-
-    {:noreply, state}
   end
 
   def terminate(_reason, _state) do
@@ -291,8 +241,6 @@ defmodule CorroPort.AckTracker do
       end)
       |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
 
-    expected_nodes = get_cached_expected_nodes()
-
     Logger.debug(
       "AckTracker: Found #{length(acknowledgments)} acknowledgments from #{inspect(Enum.map(acknowledgments, & &1.node_id))}"
     )
@@ -300,17 +248,8 @@ defmodule CorroPort.AckTracker do
     %{
       latest_message: latest_message,
       acknowledgments: acknowledgments,
-      expected_nodes: expected_nodes,
       ack_count: length(acknowledgments),
-      expected_count: length(expected_nodes)
     }
-  end
-
-  defp get_cached_expected_nodes do
-    case :ets.lookup(@table_name, :expected_nodes) do
-      [{:expected_nodes, nodes}] -> nodes
-      [] -> []
-    end
   end
 
   defp broadcast_update do

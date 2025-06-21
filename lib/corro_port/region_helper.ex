@@ -47,8 +47,8 @@ defmodule CorroPortWeb.RegionHelper do
     # Remove our region from list unless it's "dev"
     if our_region != "dev" do
 
-    expected_regions = Enum.reject(expected_regions, &(&1 == our_region))
-    active_regions = Enum.reject(active_regions, &(&1 == our_region))
+    ^expected_regions = Enum.reject(expected_regions, &(&1 == our_region))
+    ^active_regions = Enum.reject(active_regions, &(&1 == our_region))
     end
 
     our_regions = if our_region != "unknown", do: [our_region], else: []

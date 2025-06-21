@@ -9,7 +9,6 @@ defmodule CorroPort.NodeDiscovery do
   use GenServer
   require Logger
 
-  @pubsub_topic "node_discovery"
   @cache_duration 60_000  # 1 minute cache
   @dns_timeout 5_000
 
@@ -45,7 +44,7 @@ defmodule CorroPort.NodeDiscovery do
   Receives: {:expected_nodes_updated, expected_data}
   """
   def subscribe do
-    Phoenix.PubSub.subscribe(CorroPort.PubSub, @pubsub_topic)
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, "node_discovery")
   end
 
   @doc """
@@ -251,7 +250,7 @@ defmodule CorroPort.NodeDiscovery do
 
   defp broadcast_update(state) do
     expected_data = build_expected_data(state)
-    Phoenix.PubSub.broadcast(CorroPort.PubSub, @pubsub_topic, {:expected_nodes_updated, expected_data})
+    Phoenix.PubSub.broadcast(CorroPort.PubSub, "node_discovery", {:expected_nodes_updated, expected_data})
   end
 
   defp is_cache_fresh?(nil), do: false
