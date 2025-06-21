@@ -6,21 +6,25 @@ defmodule CorroPortWeb.WorldMapCard do
   Renders a world map card with regions, acknowledgment progress, and legend.
 
   ## Attributes
-  - `active_regions` - List of active region codes (yellow markers)
+  - `active_data` - Active member data from CLIMemberStore (contains regions and error state)
   - `our_regions` - List of our node's regions (blue animated markers)
   - `expected_regions` - List of expected regions from DNS (orange animated markers)
   - `ack_regions` - List of regions that acknowledged latest message (violet animated markers)
   - `show_acknowledgment_progress` - Whether to show the acknowledgment progress bar (default: false)
-  - `cli_members_stale` - Whether CLI member data is stale (default: false)
   """
-  attr :active_regions, :list, default: []
+  attr :active_data, :map, required: true
   attr :our_regions, :list, default: []
   attr :expected_regions, :list, default: []
   attr :ack_regions, :list, default: []
   attr :show_acknowledgment_progress, :boolean, default: false
-  attr :cli_members_stale, :boolean, default: false
 
   def world_map_card(assigns) do
+    # Extract active regions from the same data source as CLI members table
+    active_regions = get_active_regions_from_data(assigns.active_data, assigns.our_regions)
+    cli_members_stale = has_cli_error?(assigns.active_data)
+    
+    assigns = assign(assigns, active_regions: active_regions, cli_members_stale: cli_members_stale)
+    
     ~H"""
     <div class="card bg-base-100">
       <div class="card-body">
@@ -121,6 +125,27 @@ defmodule CorroPortWeb.WorldMapCard do
         format_regions_display(expected_regions, "(none found)")
       _ ->
         "(none; no DNS in dev)"
+    end
+  end
+
+  # Extract active regions from the same data source as CLI members table
+  defp get_active_regions_from_data(active_data, our_regions) do
+    our_region = List.first(our_regions)
+    
+    # In development, don't exclude "dev" region since all nodes share it
+    if our_region == "dev" do
+      active_data.regions
+    else
+      # In production, exclude our region as usual
+      Enum.reject(active_data.regions, &(&1 == our_region))
+    end
+  end
+
+  # Check if CLI data has errors (same logic as CLI members table)
+  defp has_cli_error?(active_data) do
+    case active_data.members do
+      {:error, _} -> true
+      {:ok, _} -> active_data.cache_status.error != nil
     end
   end
 end

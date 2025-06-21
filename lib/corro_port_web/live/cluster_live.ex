@@ -272,12 +272,11 @@ defmodule CorroPortWeb.ClusterLive do
 
       <!-- Enhanced World Map with Regions -->
       <CorroPortWeb.WorldMapCard.world_map_card
-        active_regions={@active_regions}
+        active_data={@active_data}
         our_regions={@our_regions}
         expected_regions={@expected_regions}
         ack_regions={@ack_regions}
         show_acknowledgment_progress={true}
-        cli_members_stale={DisplayHelpers.has_error?(@active_data)}
       />
 
       <!-- CLI Members Display with clean data structure -->

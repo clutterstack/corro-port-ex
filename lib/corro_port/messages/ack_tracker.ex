@@ -10,7 +10,6 @@ defmodule CorroPort.AckTracker do
   require Logger
 
   @table_name :ack_tracker
-  @pubsub_topic "ack_events"
 
   # Client API
 
@@ -55,7 +54,6 @@ defmodule CorroPort.AckTracker do
     GenServer.call(__MODULE__, :get_dns_nodes)
   end
 
-  def get_pubsub_topic, do: @pubsub_topic
 
   # GenServer Implementation
 
@@ -254,6 +252,6 @@ defmodule CorroPort.AckTracker do
 
   defp broadcast_update do
     status = build_status()
-    Phoenix.PubSub.broadcast(CorroPort.PubSub, @pubsub_topic, {:ack_update, status})
+    Phoenix.PubSub.broadcast(CorroPort.PubSub, "ack_events", {:ack_update, status})
   end
 end

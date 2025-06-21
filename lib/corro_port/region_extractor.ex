@@ -23,12 +23,20 @@ defmodule CorroPort.RegionExtractor do
   Always returns a list, empty on error.
   """
   def extract_from_members({:ok, members}) when is_list(members) do
-    members
-    |> Enum.map(&CorroPort.AckTracker.member_to_node_id/1)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.map(&CorroPort.CorrosionParser.extract_region_from_node_id/1)
-    |> Enum.reject(&(&1 in ["unknown", ""]))
-    |> Enum.uniq()
+    case CorroPort.NodeConfig.production?() do
+      true ->
+        # Production: extract from member data
+        members
+        |> Enum.map(&CorroPort.AckTracker.member_to_node_id/1)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.map(&CorroPort.CorrosionParser.extract_region_from_node_id/1)
+        |> Enum.reject(&(&1 in ["unknown", ""]))
+        |> Enum.uniq()
+      
+      false ->
+        # Development: if we have CLI members, they're all in "dev" region
+        if length(members) > 0, do: ["dev"], else: []
+    end
   end
 
   def extract_from_members({:error, _reason}), do: []
