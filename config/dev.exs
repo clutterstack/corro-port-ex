@@ -49,6 +49,10 @@ config :corro_port, :node_config,
   # Add this for development
   fly_region: "dev"
 
+# Configure Analytics Repo with node-specific database
+config :corro_port, CorroPort.Analytics.Repo,
+  database: "analytics/analytics_node#{node_id}.db"
+
 # Watch static and templates for browser reloading.
 config :corro_port, CorroPortWeb.Endpoint,
   live_reload: [

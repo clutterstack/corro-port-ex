@@ -59,6 +59,12 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# Configure Analytics Repo
+config :corro_port, CorroPort.Analytics.Repo,
+  adapter: Ecto.Adapters.SQLite3,
+  pool_size: 5,
+  priv: "priv/analytics_repo"
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

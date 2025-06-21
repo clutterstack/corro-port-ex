@@ -1,0 +1,14 @@
+{
+  "experiment_id": "script_test",
+  "node_id": "node1",
+  "timestamp": "2025-06-21T20:46:49.3NZ",
+  "bootstrap_peers": [
+  "127.0.0.1:8788",
+  "127.0.0.1:8789",
+  "127.0.0.1:8790",
+  "127.0.0.1:8791"
+],
+  "transaction_size_bytes": 1500,
+  "transaction_frequency_ms": 2000,
+  "environment": "development"
+}

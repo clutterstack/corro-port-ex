@@ -28,13 +28,16 @@ CORROSION_GOSSIP_PORT=$((8786 + NODE_ID))
 
 # Generate bootstrap list (exclude current node)
 BOOTSTRAP_PORTS=""
+BOOTSTRAP_PEERS_ARRAY=()
 for i in {1..5}; do
     if [ $i -ne $NODE_ID ]; then
         PORT=$((8786 + i))
+        PEER_ADDR="127.0.0.1:$PORT"
+        BOOTSTRAP_PEERS_ARRAY+=("$PEER_ADDR")
         if [ -n "$BOOTSTRAP_PORTS" ]; then
             BOOTSTRAP_PORTS="$BOOTSTRAP_PORTS, "
         fi
-        BOOTSTRAP_PORTS="$BOOTSTRAP_PORTS\"127.0.0.1:$PORT\""
+        BOOTSTRAP_PORTS="$BOOTSTRAP_PORTS\"$PEER_ADDR\""
     fi
 done
 BOOTSTRAP_LIST="[$BOOTSTRAP_PORTS]"
@@ -43,6 +46,12 @@ BOOTSTRAP_LIST="[$BOOTSTRAP_PORTS]"
 CONFIG_PATH="corrosion/config-node${NODE_ID}.toml"
 DB_PATH="corrosion/dev-node${NODE_ID}.db"
 ADMIN_SOCKET="/tmp/corrosion/node${NODE_ID}_admin.sock"
+TOPOLOGY_METADATA_PATH="analytics/topology-node${NODE_ID}.json"
+
+# Experiment parameters (can be overridden via environment variables)
+EXPERIMENT_ID=${EXPERIMENT_ID:-$(date +%Y%m%d_%H%M%S)_dev}
+TRANSACTION_SIZE_BYTES=${TRANSACTION_SIZE_BYTES:-1024}
+TRANSACTION_FREQUENCY_MS=${TRANSACTION_FREQUENCY_MS:-5000}
 
 echo "📋 Node Configuration:"
 echo "   Node ID: $NODE_ID"
@@ -52,10 +61,17 @@ echo "   Corrosion Gossip: 127.0.0.1:$CORROSION_GOSSIP_PORT"
 echo "   Database: $DB_PATH"
 echo "   Config: $CONFIG_PATH"
 echo ""
+echo "🧪 Experiment Configuration:"
+echo "   Experiment ID: $EXPERIMENT_ID"
+echo "   Transaction Size: ${TRANSACTION_SIZE_BYTES} bytes"
+echo "   Transaction Frequency: ${TRANSACTION_FREQUENCY_MS} ms"
+echo "   Bootstrap Peers: ${BOOTSTRAP_PEERS_ARRAY[@]}"
+echo ""
 
 # Ensure directories exist
 mkdir -p corrosion
 mkdir -p /tmp/corrosion
+mkdir -p analytics
 
 # Check if corrosion binary exists
 if [ ! -f "corrosion/corrosion-mac" ]; then
@@ -89,10 +105,34 @@ EOF
 
 echo "✅ Config generated successfully"
 
+# Generate topology metadata for analytics
+echo "⚙️  Generating topology metadata: $TOPOLOGY_METADATA_PATH"
+cat > "$TOPOLOGY_METADATA_PATH" << EOF
+{
+  "experiment_id": "$EXPERIMENT_ID",
+  "node_id": "node$NODE_ID",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)",
+  "bootstrap_peers": $(printf '%s\n' "${BOOTSTRAP_PEERS_ARRAY[@]}" | jq -R . | jq -s .),
+  "transaction_size_bytes": $TRANSACTION_SIZE_BYTES,
+  "transaction_frequency_ms": $TRANSACTION_FREQUENCY_MS,
+  "environment": "development",
+  "corrosion_config": {
+    "api_port": $CORROSION_API_PORT,
+    "gossip_port": $CORROSION_GOSSIP_PORT,
+    "db_path": "$DB_PATH"
+  }
+}
+EOF
+
+echo "✅ Topology metadata generated"
+
 # Set environment variables for the Elixir app
 export NODE_ID="$NODE_ID"
 export PHX_SERVER=true
 export MIX_ENV=dev
+export EXPERIMENT_ID="$EXPERIMENT_ID"
+export TRANSACTION_SIZE_BYTES="$TRANSACTION_SIZE_BYTES"
+export TRANSACTION_FREQUENCY_MS="$TRANSACTION_FREQUENCY_MS"
 
 echo "🔧 Starting services with Overmind..."
 echo "   Press Ctrl+C to stop all services"

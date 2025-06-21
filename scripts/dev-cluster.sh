@@ -13,6 +13,9 @@ set -e
 # Default values
 NUM_NODES=3
 VERBOSE=false
+EXPERIMENT_ID=""
+TRANSACTION_SIZE_BYTES=1024
+TRANSACTION_FREQUENCY_MS=5000
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -25,19 +28,36 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
+        --experiment-id|-e)
+            EXPERIMENT_ID="$2"
+            shift 2
+            ;;
+        --transaction-size)
+            TRANSACTION_SIZE_BYTES="$2"
+            shift 2
+            ;;
+        --transaction-frequency)
+            TRANSACTION_FREQUENCY_MS="$2"
+            shift 2
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS] [NUM_NODES]"
             echo ""
             echo "Start multiple CorroPort development nodes for cluster testing"
             echo ""
             echo "OPTIONS:"
-            echo "  -n, --nodes NUM    Number of nodes to start (default: 3)"
-            echo "  -v, --verbose      Enable verbose output"
-            echo "  -h, --help         Show this help message"
+            echo "  -n, --nodes NUM              Number of nodes to start (default: 3)"
+            echo "  -v, --verbose                Enable verbose output"
+            echo "  -e, --experiment-id ID       Set experiment ID for analytics"
+            echo "      --transaction-size BYTES Set transaction size in bytes (default: 1024)"
+            echo "      --transaction-frequency MS Set transaction frequency in ms (default: 5000)"
+            echo "  -h, --help                   Show this help message"
             echo ""
             echo "EXAMPLES:"
-            echo "  $0 3               Start 3 nodes"
-            echo "  $0 --nodes 5       Start 5 nodes"
+            echo "  $0 3                                    Start 3 nodes"
+            echo "  $0 --nodes 5                            Start 5 nodes"
+            echo "  $0 --experiment-id high_load_test       Start with custom experiment ID"
+            echo "  $0 --transaction-size 2048 --nodes 3    Start 3 nodes with 2KB transactions"
             echo ""
             exit 0
             ;;
@@ -60,7 +80,17 @@ if ! [[ "$NUM_NODES" =~ ^[0-9]+$ ]] || [ "$NUM_NODES" -lt 1 ] || [ "$NUM_NODES" 
     exit 1
 fi
 
+# Generate experiment ID if not provided
+if [ -z "$EXPERIMENT_ID" ]; then
+    EXPERIMENT_ID="cluster_$(date +%Y%m%d_%H%M%S)"
+fi
+
 echo "🚀 Starting $NUM_NODES-node CorroPort development cluster..."
+echo ""
+echo "🧪 Experiment Configuration:"
+echo "   Experiment ID: $EXPERIMENT_ID"
+echo "   Transaction Size: ${TRANSACTION_SIZE_BYTES} bytes"
+echo "   Transaction Frequency: ${TRANSACTION_FREQUENCY_MS} ms"
 echo ""
 
 # Show cluster information
@@ -112,9 +142,9 @@ for i in $(seq 1 $NUM_NODES); do
     
     # Start in background with output redirected to log files
     if [ "$VERBOSE" = true ]; then
-        NODE_ID=$i ./scripts/dev-start.sh > "logs/node$i.log" 2>&1 &
+        EXPERIMENT_ID=$EXPERIMENT_ID TRANSACTION_SIZE_BYTES=$TRANSACTION_SIZE_BYTES TRANSACTION_FREQUENCY_MS=$TRANSACTION_FREQUENCY_MS NODE_ID=$i ./scripts/dev-start.sh > "logs/node$i.log" 2>&1 &
     else
-        NODE_ID=$i ./scripts/dev-start.sh > /dev/null 2>&1 &
+        EXPERIMENT_ID=$EXPERIMENT_ID TRANSACTION_SIZE_BYTES=$TRANSACTION_SIZE_BYTES TRANSACTION_FREQUENCY_MS=$TRANSACTION_FREQUENCY_MS NODE_ID=$i ./scripts/dev-start.sh > /dev/null 2>&1 &
     fi
     
     pid=$!

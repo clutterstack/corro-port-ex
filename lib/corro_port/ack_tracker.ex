@@ -94,11 +94,15 @@ defmodule CorroPort.AckTracker do
     Logger.info("AckTracker: Adding acknowledgment from #{ack_node_id}")
 
     case :ets.lookup(@table_name, :latest_message) do
-      [{:latest_message, _message_data}] ->
+      [{:latest_message, message_data}] ->
         ack_key = {:ack, ack_node_id}
         ack_value = %{timestamp: current_time, node_id: ack_node_id}
 
         :ets.insert(@table_name, {ack_key, ack_value})
+        
+        # Record acknowledgment event in analytics if experiment is active
+        record_ack_event(message_data.pk, message_data.node_id, ack_node_id, current_time)
+        
         broadcast_update()
 
         {:reply, :ok, state}
@@ -269,6 +273,40 @@ defmodule CorroPort.AckTracker do
     case CorroPort.NodeDiscovery.get_expected_data() do
       %{nodes: {:ok, nodes}} -> nodes
       _ -> []
+    end
+  end
+
+  defp record_ack_event(message_id, originating_node, ack_node_id, timestamp) do
+    # Only record if SystemMetrics has an active experiment
+    case CorroPort.SystemMetrics.get_experiment_id() do
+      nil -> 
+        # No active experiment, skip analytics
+        :ok
+        
+      experiment_id ->
+        # Extract region from ack_node_id if possible
+        region = extract_region_from_node_id(ack_node_id)
+        
+        # Record the acknowledgment event
+        CorroPort.AnalyticsStorage.record_message_event(
+          message_id,
+          experiment_id,
+          originating_node,
+          ack_node_id,  # target_node is the ack sender
+          :acked,
+          timestamp,
+          region
+        )
+    end
+  end
+
+  defp extract_region_from_node_id(node_id) do
+    # Try to extract region information from node_id
+    # This is a basic implementation - you might want to enhance this
+    # based on your actual node naming conventions
+    case String.split(node_id, "-") do
+      [region | _] -> region
+      _ -> nil
     end
   end
 end

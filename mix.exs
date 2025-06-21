@@ -57,6 +57,9 @@ defmodule CorroPort.MixProject do
       {:req, "~> 0.5.10"},
       {:finch, "~> 0.19.0"},
       {:ex_doc, "~> 0.38.2"},
+      {:ecto, "~> 3.12"},
+      {:ecto_sql, "~> 3.12"},
+      {:ecto_sqlite3, "~> 0.18"},
       {:tidewave, "~> 0.1", only: :dev}
     ]
   end

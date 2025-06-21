@@ -26,6 +26,11 @@ defmodule CorroPort.Application do
       CorroPort.MessagePropagation,
       CorroPort.ClusterSystemInfo,
 
+      # Analytics modules
+      CorroPort.Analytics.Repo,
+      CorroPort.AnalyticsStorage,
+      CorroPort.SystemMetrics,
+
       # Web endpoints
       CorroPortWeb.Endpoint,
       CorroPortWeb.APIEndpoint
