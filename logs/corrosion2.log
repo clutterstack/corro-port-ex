@@ -212,3 +212,40 @@ USE TEMP B-TREE FOR ORDER BY
 2025-06-22T15:43:06.599256Z ERROR corro_agent::transport: error=deadline has elapsed
 2025-06-22T15:43:06.599279Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8790: deadline has elapsed
 2025-06-22T15:45:48.272142Z  INFO corro_types::pubsub: Deleted 0 old changes row in 316.208µs sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:47:25.093431Z  WARN corro_agent::api::public::pubsub: body sender was closed or errored, stopping event broadcast sends sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4 error=channel closed
+2025-06-22T15:48:06.591882Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:48:06.592079Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:48:06.592129Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8791: deadline has elapsed
+2025-06-22T15:48:06.591882Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:48:06.592240Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:48:06.592276Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8790: deadline has elapsed
+2025-06-22T15:48:06.591902Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:48:06.592389Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:48:06.592442Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:48:15.338655Z  INFO corro_agent::agent::handlers: Member Down Actor { id: ActorId(5ba177ea-b3ae-49a1-968e-10dd41c2b09a), addr: 127.0.0.1:8787, ts: Timestamp(685821c1a8d056c6), cluster_id: ClusterId(0) } (removed: true)
+2025-06-22T15:48:15.338716Z  WARN corro_agent::agent::handlers: Current node is considered IDLE
+
+2025-06-22T15:48:22.261522Z  INFO corro_agent::agent::run_root: corrosion handle changes loop is done
+2025-06-22T15:48:22.261577Z  INFO corro_agent::agent::handlers: shutting down handle empties loop
+2025-06-22T15:48:22.261612Z  INFO corro_agent::agent::run_root: corrosion handle emptyset loop is done
+2025-06-22T15:48:22.261639Z  INFO corro_agent::broadcast: tripped runtime loop, breaking    
+2025-06-22T15:48:22.261675Z  INFO corro_agent::agent::util: corrosion api http tripped 127.0.0.1:8082
+2025-06-22T15:48:22.261528Z  INFO corro_admin: Admin tripped!
+2025-06-22T15:48:22.261800Z  INFO corro_admin: Admin is done.
+2025-06-22T15:48:22.261862Z  INFO corro_agent::agent::run_root: corrosion agent sync loop is done
+2025-06-22T15:48:22.261934Z  INFO corro_agent::agent::util: corrosion api is done
+2025-06-22T15:48:22.261965Z  INFO corro_types::pubsub: tripped cmd_loop, returning sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:48:22.261589Z  WARN corro_agent::broadcast: tripped broadcast loop
+2025-06-22T15:48:22.262705Z  INFO corro_agent::broadcast: broadcasts are done    
+2025-06-22T15:48:22.261693Z  INFO corro_agent::agent::util: fully_buffered_changes_loop ended
+2025-06-22T15:48:22.262770Z  INFO corro_agent::agent::run_root: corrosion buffered changes loop is done
+2025-06-22T15:48:23.178186Z  INFO spawn: Waiting on 1 spawned futures before exiting
+2025-06-22T15:48:24.197094Z  INFO spawn: Waiting on 1 spawned futures before exiting
+2025-06-22T15:48:25.215098Z  INFO spawn: Waiting on 1 spawned futures before exiting
+2025-06-22T15:48:26.233676Z  INFO spawn: Waiting on 1 spawned futures before exiting
+2025-06-22T15:48:27.253787Z  INFO spawn: Waiting on 1 spawned futures before exiting
+2025-06-22T15:48:27.263825Z  INFO corro_agent::broadcast: Scheduling cluster membership state update for 1 members (delete: 0)    
+2025-06-22T15:48:27.263901Z  INFO corro_agent::broadcast: Waiting on task to update member states...    
+2025-06-22T15:48:27.264346Z  INFO corro_agent::broadcast: Membership states changed! upserted: 1, deleted 0    
+2025-06-22T15:48:27.264404Z  INFO corro_agent::broadcast: foca runtime loop is done, leaving cluster    
+2025-06-22T15:48:27.355674Z  INFO spawn: All spawned futures done!

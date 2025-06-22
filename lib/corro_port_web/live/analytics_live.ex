@@ -1,13 +1,13 @@
 defmodule CorroPortWeb.AnalyticsLive do
   @moduledoc """
   Real-time analytics dashboard for monitoring cluster experiments.
-  
+
   This LiveView provides a comprehensive dashboard for tracking:
   - Experiment progress and status
   - Cluster-wide message timing statistics
   - System metrics from all nodes
   - Real-time aggregated data updates
-  
+
   The dashboard automatically refreshes with data from the AnalyticsAggregator
   and subscribes to PubSub updates for real-time monitoring.
   """
@@ -23,12 +23,12 @@ defmodule CorroPortWeb.AnalyticsLive do
     if connected?(socket) do
       # Note: We'll subscribe to specific experiment when one is selected
       # Phoenix.PubSub doesn't support wildcard subscriptions directly
-      
+
       # Start periodic refresh
       schedule_refresh()
     end
 
-    socket = 
+    socket =
       socket
       |> assign(:page_title, "Analytics Dashboard")
       |> assign(:current_experiment, nil)
@@ -47,14 +47,14 @@ defmodule CorroPortWeb.AnalyticsLive do
   @impl true
   def handle_params(params, _url, socket) do
     experiment_id = Map.get(params, "experiment_id")
-    
-    socket = 
+
+    socket =
       if experiment_id && experiment_id != socket.assigns.current_experiment do
         # Subscribe to this specific experiment's updates
         if connected?(socket) and experiment_id do
           Phoenix.PubSub.subscribe(CorroPort.PubSub, "analytics:#{experiment_id}")
         end
-        
+
         socket
         |> assign(:current_experiment, experiment_id)
         |> load_experiment_data()
@@ -73,8 +73,8 @@ defmodule CorroPortWeb.AnalyticsLive do
         if connected?(socket) do
           Phoenix.PubSub.subscribe(CorroPort.PubSub, "analytics:#{experiment_id}")
         end
-        
-        socket = 
+
+        socket =
           socket
           |> assign(:current_experiment, experiment_id)
           |> assign(:aggregation_status, :running)
@@ -82,7 +82,7 @@ defmodule CorroPortWeb.AnalyticsLive do
           |> push_patch(to: ~p"/analytics?experiment_id=#{experiment_id}")
 
         {:noreply, socket}
-      
+
       {:error, reason} ->
         socket = put_flash(socket, :error, "Failed to start aggregation: #{inspect(reason)}")
         {:noreply, socket}
@@ -93,14 +93,14 @@ defmodule CorroPortWeb.AnalyticsLive do
   def handle_event("stop_aggregation", _params, socket) do
     case AnalyticsAggregator.stop_experiment_aggregation() do
       :ok ->
-        socket = 
+        socket =
           socket
           |> assign(:aggregation_status, :stopped)
           |> assign(:current_experiment, nil)
           |> put_flash(:info, "Stopped experiment aggregation")
 
         {:noreply, socket}
-      
+
       {:error, reason} ->
         socket = put_flash(socket, :error, "Failed to stop aggregation: #{inspect(reason)}")
         {:noreply, socket}
@@ -120,7 +120,7 @@ defmodule CorroPortWeb.AnalyticsLive do
         socket = assign(socket, :refresh_interval, interval)
         schedule_refresh(interval)
         {:noreply, socket}
-      
+
       _ ->
         socket = put_flash(socket, :error, "Invalid refresh interval")
         {:noreply, socket}
@@ -170,18 +170,18 @@ defmodule CorroPortWeb.AnalyticsLive do
       <!-- Experiment Controls -->
       <div class="bg-white rounded-lg shadow p-6 mb-6">
         <h3 class="text-lg font-semibold mb-4">Experiment Control</h3>
-        
+
         <div class="flex items-center gap-4">
           <form phx-submit="start_aggregation" class="flex items-center gap-2">
-            <input 
-              type="text" 
-              name="experiment_id" 
+            <input
+              type="text"
+              name="experiment_id"
               placeholder="Enter experiment ID"
               value={@current_experiment}
               class="border rounded px-3 py-2 w-64"
               required
             />
-            <button 
+            <button
               type="submit"
               class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
               disabled={@aggregation_status == :running}
@@ -190,7 +190,7 @@ defmodule CorroPortWeb.AnalyticsLive do
             </button>
           </form>
 
-          <button 
+          <button
             phx-click="stop_aggregation"
             class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
             disabled={@aggregation_status == :stopped}
@@ -198,7 +198,7 @@ defmodule CorroPortWeb.AnalyticsLive do
             Stop
           </button>
 
-          <button 
+          <button
             phx-click="refresh_now"
             class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
           >
@@ -219,7 +219,7 @@ defmodule CorroPortWeb.AnalyticsLive do
 
           <div class="flex items-center gap-2">
             <span class="text-sm text-gray-600">Refresh:</span>
-            <select 
+            <select
               phx-change="set_refresh_interval"
               name="interval"
               class="border rounded px-2 py-1 text-sm"
@@ -245,7 +245,7 @@ defmodule CorroPortWeb.AnalyticsLive do
           <h3 class="text-lg font-semibold mb-4">
             Experiment: <%= @current_experiment %>
           </h3>
-          
+
           <%= if @cluster_summary do %>
             <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
               <div class="text-center">
@@ -262,8 +262,9 @@ defmodule CorroPortWeb.AnalyticsLive do
               </div>
               <div class="text-center">
                 <div class="text-2xl font-bold text-orange-600">
-                  <%= if @cluster_summary.send_count && @cluster_summary.send_count > 0 do %>
-                    <%= Float.round(@cluster_summary.ack_count / @cluster_summary.send_count * 100, 1) %>%
+                  <%= if @cluster_summary.send_count && @cluster_summary.send_count > 0 && @cluster_summary.node_count > 1 do %>
+                    <% expected_acks = @cluster_summary.send_count * @cluster_summary.node_count %>
+                    <%= Float.round(@cluster_summary.ack_count / expected_acks * 100, 1) %>%
                   <% else %>
                     0%
                   <% end %>
@@ -289,7 +290,7 @@ defmodule CorroPortWeb.AnalyticsLive do
         <!-- Active Nodes -->
         <div class="bg-white rounded-lg shadow p-6 mb-6">
           <h3 class="text-lg font-semibold mb-4">Active Nodes</h3>
-          
+
           <%= if @active_nodes != [] do %>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <%= for node <- @active_nodes do %>
@@ -321,7 +322,7 @@ defmodule CorroPortWeb.AnalyticsLive do
         <!-- Timing Statistics -->
         <div class="bg-white rounded-lg shadow p-6 mb-6">
           <h3 class="text-lg font-semibold mb-4">Message Timing Statistics</h3>
-          
+
           <%= if @timing_stats != [] do %>
             <div class="overflow-x-auto">
               <table class="min-w-full table-auto">
@@ -379,7 +380,7 @@ defmodule CorroPortWeb.AnalyticsLive do
         <!-- System Metrics Chart -->
         <div class="bg-white rounded-lg shadow p-6">
           <h3 class="text-lg font-semibold mb-4">System Metrics</h3>
-          
+
           <%= if @system_metrics != [] do %>
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <!-- Memory Usage -->
@@ -429,25 +430,25 @@ defmodule CorroPortWeb.AnalyticsLive do
   defp load_experiment_data(socket) do
     if socket.assigns.current_experiment do
       experiment_id = socket.assigns.current_experiment
-      
+
       # Get data from aggregator
       cluster_summary = case AnalyticsAggregator.get_cluster_experiment_summary(experiment_id) do
         {:ok, summary} -> summary
         _ -> nil
       end
-      
+
       timing_stats = case AnalyticsAggregator.get_cluster_timing_stats(experiment_id) do
         {:ok, stats} -> stats
         _ -> []
       end
-      
+
       system_metrics = case AnalyticsAggregator.get_cluster_system_metrics(experiment_id) do
         {:ok, metrics} -> Enum.sort_by(metrics, & &1.inserted_at, {:desc, DateTime})
         _ -> []
       end
-      
+
       active_nodes = AnalyticsAggregator.get_active_nodes()
-      
+
       socket
       |> assign(:cluster_summary, cluster_summary)
       |> assign(:timing_stats, timing_stats)
@@ -469,13 +470,13 @@ defmodule CorroPortWeb.AnalyticsLive do
     |> DateTime.truncate(:second)
     |> DateTime.to_string()
   end
-  
+
   defp format_datetime(%NaiveDateTime{} = ndt) do
     ndt
     |> NaiveDateTime.truncate(:second)
     |> NaiveDateTime.to_string()
   end
-  
+
   defp format_datetime(nil), do: "-"
   defp format_datetime(other), do: to_string(other)
 
@@ -485,6 +486,6 @@ defmodule CorroPortWeb.AnalyticsLive do
     |> DateTime.to_time()
     |> Time.to_string()
   end
-  
+
   defp format_time(_), do: "-"
 end

@@ -121,6 +121,12 @@ defmodule CorroPort.AnalyticsAggregator do
       Process.cancel_timer(state.timer_ref)
     end
 
+    # Set experiment ID in SystemMetrics so message operations get recorded
+    CorroPort.SystemMetrics.set_experiment_id(experiment_id)
+    
+    # Also set in MessagePropagation for consistency
+    CorroPort.MessagePropagation.set_experiment_id(experiment_id)
+
     # Start periodic collection
     timer_ref = Process.send_after(self(), :collect_data, 1000)  # Start quickly
 
@@ -146,6 +152,12 @@ defmodule CorroPort.AnalyticsAggregator do
       Process.cancel_timer(state.timer_ref)
     end
 
+    # Clear experiment ID from SystemMetrics
+    CorroPort.SystemMetrics.set_experiment_id(nil)
+    
+    # Also clear from MessagePropagation
+    CorroPort.MessagePropagation.set_experiment_id(nil)
+
     new_state = %{state |
       aggregating: false,
       timer_ref: nil,
@@ -158,7 +170,12 @@ defmodule CorroPort.AnalyticsAggregator do
 
   def handle_call({:get_cluster_summary, experiment_id}, _from, state) do
     case get_cached_or_collect(:summary, experiment_id, state) do
-      {:ok, data, new_state} -> {:reply, {:ok, data}, new_state}
+      {:ok, data, new_state} -> 
+        # CLIMemberStore excludes local node, so add 1 for total cluster size
+        # This gives us the complete cluster size for display
+        total_cluster_nodes = length(state.active_nodes) + 1
+        updated_data = Map.put(data, :node_count, total_cluster_nodes)
+        {:reply, {:ok, updated_data}, new_state}
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
@@ -366,11 +383,15 @@ defmodule CorroPort.AnalyticsAggregator do
       # Extract members from the active data structure
       members = case active_data.members do
         {:ok, member_list} -> member_list
-        {:error, _reason} -> []
+        {:error, reason} -> 
+          Logger.warning("AnalyticsAggregator: Failed to get members from CLIMemberStore: #{inspect(reason)}")
+          []
       end
 
+      Logger.info("AnalyticsAggregator: Discovered #{length(members)} cluster nodes")
+
       # Convert to node info format
-      Enum.map(members, fn member ->
+      nodes = Enum.map(members, fn member ->
         %{
           node_id: member.node_id,
           region: member.region,
@@ -379,6 +400,9 @@ defmodule CorroPort.AnalyticsAggregator do
           is_local: member.node_id == LocalNode.get_node_id()
         }
       end)
+
+      Logger.debug("AnalyticsAggregator: Node details: #{inspect(nodes)}")
+      nodes
     catch
       _type, error ->
         Logger.warning("Failed to discover cluster nodes: #{inspect(error)}")

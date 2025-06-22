@@ -133,7 +133,7 @@ CorroPort is an Elixir Phoenix application that provides a web interface for mon
 
 The application is designed for multi-node cluster testing:
 
-1. Start 3-node cluster: `./scripts/dev-cluster.sh`
+1. Start 3-node cluster: `./scripts/dev-cluster-iex.sh --verbose 3`
 2. Access nodes at:
    - Node 1: http://localhost:4001/cluster
    - Node 2: http://localhost:4002/cluster  
@@ -152,8 +152,8 @@ The application is designed for multi-node cluster testing:
 
 ### Development Notes
 
-- The codebase is transitioning from legacy modules to clean domain architecture
 - LiveViews use PubSub for real-time updates without polling
 - Error handling focuses on graceful degradation when nodes are unavailable
 - All HTTP clients use configurable timeouts and retry logic
 - The application can run in single-node mode but is optimized for clusters
+

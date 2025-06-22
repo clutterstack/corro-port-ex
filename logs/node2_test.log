@@ -244,3 +244,5 @@ Done in 1ms
 [debug] Found 3 total members, 1 active
 [debug] ClusterSystemInfo: Fetch task completed
 [debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: false, messages: 3
+[notice] SIGTERM received - shutting down
+

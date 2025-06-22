@@ -2,7 +2,7 @@ defmodule CorroPortWeb.MessagesLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPort.MessagesAPI
+  alias CorroPort.{MessagesAPI, MessagePropagation, NodeConfig, AckTracker, AckSender}
   alias CorroPortWeb.{AllMessagesTable, AckStatusCard, NavTabs}
 
   def mount(_params, _session, socket) do
@@ -22,7 +22,7 @@ defmodule CorroPortWeb.MessagesLive do
         messages_error: nil,
         ack_status: nil,
         ack_sender_status: nil,
-        local_node_id: CorroPort.NodeConfig.get_corrosion_node_id(),
+        local_node_id: NodeConfig.get_corrosion_node_id(),
         last_updated: nil,
         connectivity_test_results: nil
       })
@@ -86,21 +86,14 @@ defmodule CorroPortWeb.MessagesLive do
 
   # Event handlers
   def handle_event("send_message", _params, socket) do
-    case CorroPortWeb.ClusterLive.MessageHandler.send_message() do
-      {:ok, success_message, message_data} ->
+    node_id = NodeConfig.get_corrosion_node_id()
+    message_content = "Hello from #{node_id} at #{DateTime.utc_now() |> DateTime.to_iso8601()}"
+    
+    case MessagePropagation.send_message(message_content) do
+      {:ok, message_data} ->
         Logger.debug("MessagesLive: ✅ Message sent successfully: #{inspect(message_data)}")
 
-        # Track this message for acknowledgment monitoring
-        track_message_data = %{
-          pk: message_data.pk,
-          timestamp: message_data.timestamp,
-          node_id: message_data.node_id
-        }
-
-        CorroPort.AckTracker.track_latest_message(track_message_data)
-        Logger.debug("MessagesLive: Now tracking message #{message_data.pk} for acknowledgments")
-
-        socket = put_flash(socket, :info, success_message)
+        socket = put_flash(socket, :info, "Message sent successfully! Now tracking acknowledgments...")
         {:noreply, socket}
 
       {:error, error} ->
@@ -116,7 +109,7 @@ defmodule CorroPortWeb.MessagesLive do
   end
 
   def handle_event("reset_tracking", _params, socket) do
-    case CorroPort.AckTracker.reset_tracking() do
+    case AckTracker.reset_tracking() do
       :ok ->
         Logger.info("MessagesLive: ✅ Message tracking reset successfully")
 
@@ -170,8 +163,8 @@ defmodule CorroPortWeb.MessagesLive do
   end
 
   defp fetch_ack_data(socket) do
-    ack_status = CorroPort.AckTracker.get_status()
-    ack_sender_status = CorroPort.AckSender.get_status()
+    ack_status = AckTracker.get_status()
+    ack_sender_status = AckSender.get_status()
 
     assign(socket, %{
       ack_status: ack_status,

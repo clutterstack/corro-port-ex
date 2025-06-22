@@ -230,3 +230,26 @@ USE TEMP B-TREE FOR ORDER BY
 2025-06-22T15:43:30.300218Z ERROR corro_agent::transport: error=deadline has elapsed
 2025-06-22T15:43:30.300225Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8791: deadline has elapsed
 2025-06-22T15:45:40.577564Z  INFO corro_types::pubsub: Deleted 0 old changes row in 168.667µs sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:47:25.100656Z  WARN corro_agent::api::public::pubsub: body sender was closed or errored, stopping event broadcast sends sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4 error=channel closed
+
+2025-06-22T15:48:15.338001Z  INFO corro_agent::agent::run_root: corrosion agent sync loop is done
+2025-06-22T15:48:15.338055Z  INFO corro_agent::agent::util: corrosion api http tripped 127.0.0.1:8081
+2025-06-22T15:48:15.338075Z  INFO corro_agent::agent::handlers: shutting down handle empties loop
+2025-06-22T15:48:15.338102Z  INFO corro_agent::agent::run_root: corrosion handle emptyset loop is done
+2025-06-22T15:48:15.338131Z  INFO corro_agent::broadcast: tripped runtime loop, breaking    
+2025-06-22T15:48:15.337990Z  INFO corro_types::pubsub: tripped cmd_loop, returning sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:48:15.338205Z  INFO corro_agent::agent::util: corrosion api is done
+2025-06-22T15:48:15.338229Z  INFO corro_agent::agent::run_root: corrosion handle changes loop is done
+2025-06-22T15:48:15.338249Z  INFO corro_admin: Admin tripped!
+2025-06-22T15:48:15.338260Z  INFO corro_admin: Admin is done.
+2025-06-22T15:48:15.338359Z  WARN corro_agent::broadcast: tripped broadcast loop
+2025-06-22T15:48:15.338375Z  INFO corro_agent::broadcast: broadcasts are done    
+2025-06-22T15:48:15.338103Z  INFO corro_agent::agent::util: fully_buffered_changes_loop ended
+2025-06-22T15:48:15.338451Z  INFO corro_agent::agent::run_root: corrosion buffered changes loop is done
+2025-06-22T15:48:16.256109Z  INFO spawn: Waiting on 1 spawned futures before exiting
+2025-06-22T15:48:17.274182Z  INFO spawn: Waiting on 1 spawned futures before exiting
+2025-06-22T15:48:18.293234Z  INFO spawn: Waiting on 1 spawned futures before exiting
+2025-06-22T15:48:19.312610Z  INFO spawn: Waiting on 1 spawned futures before exiting
+2025-06-22T15:48:20.330155Z  INFO spawn: Waiting on 1 spawned futures before exiting
+2025-06-22T15:48:20.340214Z  INFO corro_agent::broadcast: foca runtime loop is done, leaving cluster    
+2025-06-22T15:48:20.432392Z  INFO spawn: All spawned futures done!

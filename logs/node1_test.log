@@ -450,3 +450,11 @@ Generated corro_port app
 [debug] Found 3 total members, 1 active
 [debug] ClusterSystemInfo: Fetch task completed
 [debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: false, messages: 3
+[debug] ClusterSystemInfo: Starting fetch task
+[debug] Found 3 total members, 1 active
+[debug] ClusterSystemInfo: Fetch task completed
+[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: false, messages: 3
+[notice] SIGTERM received - shutting down
+
+[info] DRAINING 2 of 2 total connection(s) for socket Phoenix.LiveView.Socket every 2000ms - round 1 of 1
+[info] DRAINING 2 of 2 total connection(s) for socket Phoenix.LiveReloader.Socket every 2000ms - round 1 of 1

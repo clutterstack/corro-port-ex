@@ -88,7 +88,21 @@ check_corrosion_agents() {
     
     for i in $(seq 1 $NODES); do
         local port=$((8080 + i))
-        if curl -s -f "http://127.0.0.1:$port/v1/cluster/info" > /dev/null 2>&1; then
+        
+        # Use CorrosionClient.test_corro_conn/1 to check agent connectivity
+        cat > /tmp/test_corro_conn.exs << EOF
+result = CorroPort.CorrosionClient.test_corro_conn($port)
+case result do
+  :ok -> 
+    IO.puts("✅ Corrosion agent $i (port $port) is running")
+    System.halt(0)
+  error -> 
+    IO.puts("❌ Corrosion agent $i (port $port) failed: #{inspect(error)}")
+    System.halt(1)
+end
+EOF
+        
+        if NODE_ID=1 mix run /tmp/test_corro_conn.exs > /dev/null 2>&1; then
             print_success "Corrosion agent $i (port $port) is running"
             ((agents_running++))
         else
