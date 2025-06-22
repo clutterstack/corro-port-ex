@@ -193,6 +193,138 @@ defmodule CorroPortWeb.AnalyticsApiController do
   end
 
   @doc """
+  POST /api/analytics/aggregation/start
+  
+  Start analytics aggregation for an experiment.
+  """
+  def start_aggregation(conn, %{"experiment_id" => experiment_id}) do
+    try do
+      result = CorroPort.AnalyticsAggregator.start_experiment_aggregation(experiment_id)
+      
+      json(conn, %{
+        status: "success",
+        result: result,
+        experiment_id: experiment_id,
+        node_id: CorroPort.LocalNode.get_node_id(),
+        timestamp: DateTime.utc_now()
+      })
+    rescue
+      error ->
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{
+          status: "error",
+          error: "Failed to start aggregation: #{inspect(error)}",
+          timestamp: DateTime.utc_now()
+        })
+    end
+  end
+
+  @doc """
+  POST /api/analytics/aggregation/stop
+  
+  Stop analytics aggregation.
+  """
+  def stop_aggregation(conn, _params) do
+    try do
+      result = CorroPort.AnalyticsAggregator.stop_experiment_aggregation()
+      
+      json(conn, %{
+        status: "success",
+        result: result,
+        node_id: CorroPort.LocalNode.get_node_id(),
+        timestamp: DateTime.utc_now()
+      })
+    rescue
+      error ->
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{
+          status: "error",
+          error: "Failed to stop aggregation: #{inspect(error)}",
+          timestamp: DateTime.utc_now()
+        })
+    end
+  end
+
+  @doc """
+  POST /api/messages/send
+  
+  Send a test message for analytics tracking.
+  """
+  def send_message(conn, %{"content" => content}) do
+    try do
+      case CorroPort.MessagePropagation.send_message(content) do
+        {:ok, message_data} ->
+          json(conn, %{
+            status: "success",
+            message: %{
+              pk: message_data.pk,
+              timestamp: format_datetime(message_data.timestamp),
+              node_id: message_data.node_id,
+              sequence: message_data.sequence
+            },
+            node_id: CorroPort.LocalNode.get_node_id(),
+            timestamp: DateTime.utc_now()
+          })
+        
+        {:error, reason} ->
+          conn
+          |> put_status(:bad_request)
+          |> json(%{
+            status: "error",
+            error: "Failed to send message: #{inspect(reason)}",
+            timestamp: DateTime.utc_now()
+          })
+      end
+    rescue
+      error ->
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{
+          status: "error",
+          error: "Exception sending message: #{inspect(error)}",
+          timestamp: DateTime.utc_now()
+        })
+    end
+  end
+
+  @doc """
+  GET /api/analytics/aggregation/status
+  
+  Get the current aggregation status and active nodes.
+  """
+  def aggregation_status(conn, _params) do
+    try do
+      active_nodes = CorroPort.AnalyticsAggregator.get_active_nodes()
+      
+      json(conn, %{
+        status: "success",
+        active_nodes: Enum.map(active_nodes, fn node ->
+          %{
+            node_id: node.node_id,
+            region: node.region,
+            phoenix_port: node.phoenix_port,
+            is_local: node.is_local
+          }
+        end),
+        node_count: length(active_nodes),
+        local_node_id: CorroPort.LocalNode.get_node_id(),
+        timestamp: DateTime.utc_now()
+      })
+    rescue
+      error ->
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{
+          status: "error",
+          error: "Failed to get aggregation status: #{inspect(error)}",
+          timestamp: DateTime.utc_now()
+        })
+    end
+  end
+
+  @doc """
   GET /api/analytics/health
   
   Health check endpoint to verify the analytics system is working.

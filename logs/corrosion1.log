@@ -1,0 +1,232 @@
+2025-06-22T15:30:40.486794Z  INFO corrosion::command::agent: Starting Corrosion Agent v0.2.0-beta.0
+2025-06-22T15:30:40.653200Z  INFO corro_agent::agent::setup: Actor ID: 5ba177eab3ae49a1968e10dd41c2b09a
+2025-06-22T15:30:40.656936Z  INFO corro_types::pubsub: Initializing subscription at corrosion/subscriptions/6d86f58dbff04148ba1db30c945254f4 sql_hash=c4377991991088d4 sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:30:40.657238Z  INFO corro_types::pubsub: modified query for table 'node_messages': SELECT node_messages.pk AS __corro_pk_node_messages_pk, pk AS col_0, node_id AS col_1, message AS col_2, sequence AS col_3, timestamp AS col_4, originating_endpoint AS col_5, region AS col_6 FROM node_messages WHERE (node_messages.pk) IN __corro_sub.temp_node_messages ORDER BY timestamp DESC sql_hash=c4377991991088d4 sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:30:40.657264Z  INFO corro_agent::agent::setup: Restored subscription sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:30:40.657282Z  INFO corro_types::pubsub: Restoring subscription sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:30:40.657410Z  INFO corro_types::pubsub: Attaching __corro_sub to state db sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:30:40.657620Z  INFO corro_types::pubsub: Attached __corro_sub to state db sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:30:40.657686Z  INFO corro_types::pubsub: query plan for table 'node_messages':
+SEARCH node_messages USING INDEX sqlite_autoindex_node_messages_1 (pk=?)
+LIST SUBQUERY 1
+SCAN __corro_sub.temp_node_messages
+USE TEMP B-TREE FOR ORDER BY
+ sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4 sql_hash=c4377991991088d4
+2025-06-22T15:30:40.657832Z  INFO corro_types::pubsub: Starting loop to run the subscription sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:30:40.657838Z  INFO corro_types::pubsub: Notified condvar that the subscription is 'running' sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:30:40.657849Z  INFO corro_agent::agent::setup: Cluster ID: 0
+2025-06-22T15:30:40.658195Z  INFO corro_agent::transport: Transport (0) for outgoing connections bound to socket [::]:57939
+2025-06-22T15:30:40.658228Z  INFO corro_agent::transport: Transport (1) for outgoing connections bound to socket [::]:64628
+2025-06-22T15:30:40.658252Z  INFO corro_agent::transport: Transport (2) for outgoing connections bound to socket [::]:63972
+2025-06-22T15:30:40.658274Z  INFO corro_agent::transport: Transport (3) for outgoing connections bound to socket [::]:63494
+2025-06-22T15:30:40.658297Z  INFO corro_agent::transport: Transport (4) for outgoing connections bound to socket [::]:60707
+2025-06-22T15:30:40.658316Z  INFO corro_agent::transport: Transport (5) for outgoing connections bound to socket [::]:52477
+2025-06-22T15:30:40.658336Z  INFO corro_agent::transport: Transport (6) for outgoing connections bound to socket [::]:50682
+2025-06-22T15:30:40.658359Z  INFO corro_agent::transport: Transport (7) for outgoing connections bound to socket [::]:49531
+2025-06-22T15:30:40.658976Z  INFO corro_agent::agent::util: Starting API listener on tcp/127.0.0.1:8081
+2025-06-22T15:30:40.658984Z  INFO corro_types::pubsub: Deleted 0 old changes row in 53.125µs sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:30:40.659014Z  INFO corro_agent::broadcast: Scheduling cluster membership state update for 3 members (delete: 0)    
+2025-06-22T15:30:40.659290Z  INFO corro_agent::agent::run_root: Bookkeeping fully loaded in 197µs
+2025-06-22T15:30:40.659302Z  INFO corro_agent::agent::run_root: Starting peer API on udp/127.0.0.1:8787 (QUIC)
+2025-06-22T15:30:40.659309Z  INFO corro_agent::agent::handlers: gossipserver_handler is done
+2025-06-22T15:30:40.659250Z  INFO corro_agent::agent::handlers: Member Up Actor { id: ActorId(d469a597-8c7d-4343-9914-ba13c7c70cb2), addr: 127.0.0.1:8788, ts: Timestamp(68581bad60ee9dd8), cluster_id: ClusterId(0) } (result: NewMember)
+2025-06-22T15:30:40.659335Z  INFO corro_agent::agent::util: Starting apply_fully_buffered_changes loop
+2025-06-22T15:30:40.659393Z  INFO corro_agent::agent::handlers: Member Up Actor { id: ActorId(8b8d7839-789f-42a7-865e-94c46eabe59f), addr: 127.0.0.1:8789, ts: Timestamp(68581bbb119eb63a), cluster_id: ClusterId(0) } (result: NewMember)
+2025-06-22T15:30:40.659648Z  INFO corro_agent::broadcast: Membership states changed! upserted: 3, deleted 0    
+2025-06-22T15:30:40.659657Z  INFO corro_agent::agent::handlers: Current node is considered ACTIVE
+2025-06-22T15:30:40.659751Z  INFO corro_admin: Starting Corrosion admin socket at /tmp/corrosion/node1_admin.sock
+2025-06-22T15:30:40.660482Z  INFO corro_agent::api::public: getting write connection to update schema
+2025-06-22T15:30:40.660511Z  INFO corro_agent::api::public: got write connection to update schema
+2025-06-22T15:30:40.660544Z  INFO corro_types::schema: new columns: {}
+2025-06-22T15:30:40.660578Z  INFO corro_agent::api::public: Updated 1 rows in __corro_schema for table node_messages
+2025-06-22T15:30:40.660678Z  INFO corrosion::command::agent: Applied schema in 0.000162458s
+2025-06-22T15:30:45.660438Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:30:45.660434Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:30:45.660681Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:30:45.660724Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8791: deadline has elapsed
+2025-06-22T15:30:45.660529Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:30:45.660816Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:30:45.660437Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:30:45.660889Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:30:45.660918Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:30:45.660857Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8788: deadline has elapsed
+2025-06-22T15:30:45.660616Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:30:45.661079Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8790: deadline has elapsed
+2025-06-22T15:30:46.616163Z  INFO corro_agent::api::public::pubsub: Received subscription request for query: SELECT * FROM node_messages ORDER BY timestamp DESC
+2025-06-22T15:30:46.617979Z  INFO corro_agent::api::public::pubsub: minimum expected change id: ChangeId(23) sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:30:46.618075Z  INFO corro_agent::api::public::pubsub: last change id sent by subscription: ChangeId(22) sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:30:46.618099Z  INFO corro_agent::api::public::pubsub: subscription is caught up, no gaps in change id. last change id: ChangeId(22), last_sub_change_id: None sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:30:46.618126Z  INFO corro_agent::api::public::pubsub: forwarding subscription events to a sender sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:30:48.354312Z  INFO corro_agent::agent::handlers: Member Up Actor { id: ActorId(d469a597-8c7d-4343-9914-ba13c7c70cb2), addr: 127.0.0.1:8788, ts: Timestamp(685821a85a53c9a0), cluster_id: ClusterId(0) } (result: Updated)
+2025-06-22T15:30:50.661894Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:30:50.661894Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:30:50.661894Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:30:50.662158Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:30:50.662136Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:30:50.662217Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8791: deadline has elapsed
+2025-06-22T15:30:50.662185Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8790: deadline has elapsed
+2025-06-22T15:30:50.662068Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:30:50.662285Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:30:55.664248Z ERROR parallel_sync:sync_client_handshake{actor_id=8b8d7839789f42a7865e94c46eabe59f addr=127.0.0.1:8789}: corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:30:55.664388Z ERROR parallel_sync:sync_client_handshake{actor_id=8b8d7839789f42a7865e94c46eabe59f addr=127.0.0.1:8789}: corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:00.665484Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:00.665642Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:00.665675Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:31:02.363170Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:02.363345Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:02.363381Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8791: deadline has elapsed
+2025-06-22T15:31:02.363170Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:02.363475Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:02.363497Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8790: deadline has elapsed
+2025-06-22T15:31:05.668107Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:05.668266Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:05.668299Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:31:10.669700Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:10.669775Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:10.669791Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:31:13.659493Z  INFO corro_agent::broadcast: New identity: Ok(())    
+2025-06-22T15:31:13.949583Z  INFO corro_agent::agent::handlers: Current node is considered ACTIVE
+2025-06-22T15:31:15.354752Z  INFO corro_agent::agent::handlers: Member Up Actor { id: ActorId(d469a597-8c7d-4343-9914-ba13c7c70cb2), addr: 127.0.0.1:8788, ts: Timestamp(685821c35a9ae4f4), cluster_id: ClusterId(0) } (result: Updated)
+2025-06-22T15:31:15.354865Z  INFO corro_agent::agent::handlers: Member Down Actor { id: ActorId(d469a597-8c7d-4343-9914-ba13c7c70cb2), addr: 127.0.0.1:8788, ts: Timestamp(685821a85a53c9a0), cluster_id: ClusterId(0) } (removed: false)
+2025-06-22T15:31:15.670599Z ERROR parallel_sync:sync_client_handshake{actor_id=8b8d7839789f42a7865e94c46eabe59f addr=127.0.0.1:8789}: corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:15.670801Z ERROR parallel_sync:sync_client_handshake{actor_id=8b8d7839789f42a7865e94c46eabe59f addr=127.0.0.1:8789}: corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:20.671617Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:20.671803Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:20.671839Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:31:21.564186Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:21.564331Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:21.564363Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8791: deadline has elapsed
+2025-06-22T15:31:21.565325Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:21.565371Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:21.565390Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8790: deadline has elapsed
+2025-06-22T15:31:25.672856Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:25.672985Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:25.673009Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:31:30.675649Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:30.675792Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:30.675820Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:31:35.677213Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:35.677367Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:35.677396Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:31:40.658580Z  INFO corro_agent::broadcast: Scheduling cluster membership state update for 3 members (delete: 0)    
+2025-06-22T15:31:40.659820Z  INFO corro_agent::broadcast: Membership states changed! upserted: 3, deleted 0    
+2025-06-22T15:31:40.678635Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:40.678738Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:40.678751Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:31:45.680539Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:45.680797Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:45.680856Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:31:50.625908Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:50.626068Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:50.626102Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:31:52.709710Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:52.709710Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:52.709882Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:52.709849Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:52.709917Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8791: deadline has elapsed
+2025-06-22T15:31:52.709898Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8790: deadline has elapsed
+2025-06-22T15:31:53.898137Z  INFO corro_agent::agent::handlers: Member Down Actor { id: ActorId(d469a597-8c7d-4343-9914-ba13c7c70cb2), addr: 127.0.0.1:8788, ts: Timestamp(68581bad60ee9dd8), cluster_id: ClusterId(0) } (removed: false)
+2025-06-22T15:31:55.627615Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:55.627787Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:31:55.627822Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:31:58.900472Z  INFO corro_agent::agent::handlers: Member Down Actor { id: ActorId(8b8d7839-789f-42a7-865e-94c46eabe59f), addr: 127.0.0.1:8789, ts: Timestamp(68581bbb119eb63a), cluster_id: ClusterId(0) } (removed: true)
+2025-06-22T15:32:00.630528Z ERROR parallel_sync:sync_client_handshake{actor_id=8b8d7839789f42a7865e94c46eabe59f addr=127.0.0.1:8789}: corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:00.630692Z ERROR parallel_sync:sync_client_handshake{actor_id=8b8d7839789f42a7865e94c46eabe59f addr=127.0.0.1:8789}: corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:05.632840Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:05.632999Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:05.633030Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:32:10.634545Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:10.634630Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:10.634660Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:32:15.636884Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:15.637064Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:15.637092Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:32:20.638762Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:20.638910Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:20.638933Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:32:25.639774Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:25.639932Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:25.639960Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:32:30.640883Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:30.641016Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:30.641038Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:32:35.642836Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:35.643019Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:35.643051Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:32:40.599996Z  INFO corro_agent::broadcast: Scheduling cluster membership state update for 1 members (delete: 0)    
+2025-06-22T15:32:40.600871Z  INFO corro_agent::broadcast: Membership states changed! upserted: 1, deleted 0    
+2025-06-22T15:32:40.644160Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:40.644219Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:40.644232Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:32:45.646095Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:45.646278Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:45.646333Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:32:50.648498Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:50.648647Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:50.648683Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:32:55.650658Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:55.650851Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:32:55.650887Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:33:00.651600Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:33:00.651715Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:33:00.651741Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:33:05.653028Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:33:05.653176Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:33:05.653208Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:33:30.309771Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:33:30.309864Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:33:30.309887Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8790: deadline has elapsed
+2025-06-22T15:33:30.309762Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:33:30.309762Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:33:30.309971Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:33:30.309987Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8791: deadline has elapsed
+2025-06-22T15:33:30.309944Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:33:30.310044Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:35:30.307845Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:35:30.308025Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:35:30.308064Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8790: deadline has elapsed
+2025-06-22T15:35:30.307845Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:35:30.308163Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:35:30.308197Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:35:30.307883Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:35:30.308279Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:35:30.308306Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8791: deadline has elapsed
+2025-06-22T15:35:40.595820Z  INFO corro_types::pubsub: Deleted 0 old changes row in 298.917µs sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:37:30.305345Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:37:30.305346Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:37:30.305586Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:37:30.305531Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:37:30.305632Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:37:30.305616Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8791: deadline has elapsed
+2025-06-22T15:37:30.305356Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:37:30.305696Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:37:30.305710Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8790: deadline has elapsed
+2025-06-22T15:39:30.303778Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:39:30.303778Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:39:30.303961Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:39:30.303922Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:39:30.304003Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:39:30.303981Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8790: deadline has elapsed
+2025-06-22T15:39:30.303778Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:39:30.304062Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:39:30.304074Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8791: deadline has elapsed
+2025-06-22T15:40:40.586464Z  INFO corro_types::pubsub: Deleted 0 old changes row in 179.375µs sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4
+2025-06-22T15:41:30.300134Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:41:30.300299Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:41:30.300134Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:41:30.300359Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:41:30.300373Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:41:30.300143Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:41:30.300413Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:41:30.300428Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8790: deadline has elapsed
+2025-06-22T15:41:30.300326Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8791: deadline has elapsed
+2025-06-22T15:43:30.299922Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:43:30.300026Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:43:30.300064Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8790: deadline has elapsed
+2025-06-22T15:43:30.299953Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:43:30.300145Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:43:30.300153Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8789: deadline has elapsed
+2025-06-22T15:43:30.299931Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:43:30.300218Z ERROR corro_agent::transport: error=deadline has elapsed
+2025-06-22T15:43:30.300225Z ERROR corro_agent::agent::handlers: could not write datagram 127.0.0.1:8791: deadline has elapsed
+2025-06-22T15:45:40.577564Z  INFO corro_types::pubsub: Deleted 0 old changes row in 168.667µs sub_id=6d86f58d-bff0-4148-ba1d-b30c945254f4

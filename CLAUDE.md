@@ -48,6 +48,40 @@ mix docs
 mix assets.deploy
 ```
 
+### Analytics Demonstration
+```bash
+# Automated analytics demo (recommended)
+./scripts/analytics-demo.sh
+
+# Custom demo with 3 nodes, 5 messages
+./scripts/analytics-demo.sh 3 my_experiment 5 15
+
+# Quick 2-node demo
+./scripts/analytics-demo.sh 2
+
+# See all options
+./scripts/analytics-demo.sh --help
+```
+
+### API Testing
+```bash
+# Start analytics aggregation
+curl -X POST http://localhost:4001/api/analytics/aggregation/start \
+  -H "Content-Type: application/json" \
+  -d '{"experiment_id": "test_exp"}'
+
+# Send test message
+curl -X POST http://localhost:4001/api/messages/send \
+  -H "Content-Type: application/json" \
+  -d '{"content": "API test message"}'
+
+# Check aggregation status
+curl http://localhost:4001/api/analytics/aggregation/status | jq
+
+# Get experiment results
+curl http://localhost:4001/api/analytics/experiments/test_exp/summary | jq
+```
+
 ## Architecture Overview
 
 CorroPort is an Elixir Phoenix application that provides a web interface for monitoring and interacting with Corrosion database clusters. Corrosion is a SQLite-based distributed database.

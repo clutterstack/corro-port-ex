@@ -1,0 +1,96 @@
+    warning: module attribute @cpu_sample_interval_ms was set but never used
+    │
+ 20 │   @cpu_sample_interval_ms 1_000  # CPU sampling interval
+    │   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    │
+    └─ lib/corro_port/system_metrics.ex:20: CorroPort.SystemMetrics (module)
+
+     warning: Logger.warn/1 is deprecated. Use Logger.warning/2 instead
+     │
+ 336 │             Logger.warn("Failed to collect from node #{node_info.node_id}: #{inspect(error)}")
+     │                    ~
+     │
+     └─ lib/corro_port/analytics_aggregator.ex:336:20: CorroPort.AnalyticsAggregator.collect_from_all_nodes/3
+
+     warning: variable "experiment_id" is unused (if the variable is not meant to be used, prefix it with an underscore)
+     │
+ 311 │   defp collect_from_all_nodes(experiment_id, nodes, collector_fn) do
+     │                               ~~~~~~~~~~~~~
+     │
+     └─ lib/corro_port/analytics_aggregator.ex:311:31: CorroPort.AnalyticsAggregator.collect_from_all_nodes/3
+
+     warning: Logger.warn/1 is deprecated. Use Logger.warning/2 instead
+     │
+ 435 │         Logger.warn("HTTP #{status} from node #{node_info.node_id}")
+     │                ~
+     │
+     └─ lib/corro_port/analytics_aggregator.ex:435:16: CorroPort.AnalyticsAggregator.get_node_experiment_summary/2
+
+     warning: Logger.warn/1 is deprecated. Use Logger.warning/2 instead
+     │
+ 439 │         Logger.warn("HTTP error from node #{node_info.node_id}: #{inspect(reason)}")
+     │                ~
+     │
+     └─ lib/corro_port/analytics_aggregator.ex:439:16: CorroPort.AnalyticsAggregator.get_node_experiment_summary/2
+
+     warning: variable "task" is unused (if the variable is not meant to be used, prefix it with an underscore)
+     │
+ 559 │   defp get_task_data_type(task) do
+     │                           ~~~~
+     │
+     └─ lib/corro_port/analytics_aggregator.ex:559:27: CorroPort.AnalyticsAggregator.get_task_data_type/1
+
+    warning: unused alias ClusterMembership
+    │
+ 26 │   alias CorroPort.{ClusterMembership, LocalNode, Analytics}
+    │   ~
+    │
+    └─ lib/corro_port/analytics_aggregator.ex:26:3
+
+    warning: unused alias Analytics
+    │
+ 18 │   alias CorroPort.{AnalyticsAggregator, Analytics, LocalNode}
+    │   ~
+    │
+    └─ lib/corro_port_web/live/analytics_live.ex:18:3
+
+[info] AckTracker starting...
+[info] AckTracker ETS table created: ack_tracker
+[info] AckSender starting...
+[info] CLIMemberStore starting with 300000ms refresh interval
+[info] NodeDiscovery starting...
+[info] MessagePropagation starting...
+[debug] AckTracker: Found 0 acknowledgments from []
+[info] ClusterSystemInfo starting with 60000ms refresh interval
+[info] AnalyticsStorage starting...
+[info] SystemMetrics starting...
+[info] AnalyticsAggregator starting...
+[info] Running CorroPortWeb.Endpoint with Bandit 1.7.0 at 127.0.0.1:4002 (http)
+[info] Access CorroPortWeb.Endpoint at http://localhost:4002
+[info] Running CorroPortWeb.APIEndpoint with Bandit 1.7.0 at 127.0.0.1:5002 (http)
+[info] Access CorroPortWeb.APIEndpoint at http://localhost:5002
+[watch] build finished, watching for changes...
+/*! 🌼 daisyUI 5.0.8 */
+≈ tailwindcss v4.0.9
+
+Done in 109ms
+[debug] CLIMemberStore: Starting CLI fetch task
+[info] NodeDiscovery: Performing initial DNS fetch
+[debug] NodeDiscovery: Not in Fly.io environment, using development fallback
+[debug] NodeDiscovery: Using development fallback
+[debug] ClusterSystemInfo: Starting fetch task
+[debug] CorroCLI: command corrosion/corrosion-mac cluster members --config corrosion/config-node2.toml
+[info] CorroSubscriber: Starting subscription stream to http://127.0.0.1:8082/v1/subscriptions
+[info] NodeDiscovery: Successfully fetched 2 expected nodes
+[debug] CLIMemberStore: CLI fetch completed successfully
+[info] CLIMemberStore: Parsed 2 cluster members
+[debug] CLIMemberStore: Broadcasted update - 2 members, status: ok
+[debug] CLIMemberStore: Broadcasted active update - 1 regions, status: ok
+[info] CorroSubscriber: Connected with watch_id: 6d86f58d-bff0-4148-ba1d-b30c945254f4
+[debug] Found 3 total members, 2 active
+[debug] ClusterSystemInfo: Fetch task completed
+[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: false, messages: 3
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: End of initial query - subscription is now live
+[notice] SIGTERM received - shutting down
+

@@ -1,7 +1,7 @@
 {
-  "experiment_id": "cluster_20250621_181824",
+  "experiment_id": "cluster_20250622_112933",
   "node_id": "node2",
-  "timestamp": "2025-06-21T22:18:26.3NZ",
+  "timestamp": "2025-06-22T15:29:35.3NZ",
   "bootstrap_peers": [
   "127.0.0.1:8787",
   "127.0.0.1:8789",
