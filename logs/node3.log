@@ -5,40 +5,54 @@
     │
     └─ lib/corro_port/system_metrics.ex:20: CorroPort.SystemMetrics (module)
 
-     warning: Logger.warn/1 is deprecated. Use Logger.warning/2 instead
-     │
- 353 │             Logger.warn("Failed to collect from node #{node_info.node_id}: #{inspect(error)}")
-     │                    ~
-     │
-     └─ lib/corro_port/analytics_aggregator.ex:353:20: CorroPort.AnalyticsAggregator.collect_from_all_nodes/3
-
      warning: variable "experiment_id" is unused (if the variable is not meant to be used, prefix it with an underscore)
      │
- 328 │   defp collect_from_all_nodes(experiment_id, nodes, collector_fn) do
+ 362 │   defp collect_from_all_nodes(experiment_id, nodes, collector_fn) do
      │                               ~~~~~~~~~~~~~
      │
-     └─ lib/corro_port/analytics_aggregator.ex:328:31: CorroPort.AnalyticsAggregator.collect_from_all_nodes/3
-
-     warning: Logger.warn/1 is deprecated. Use Logger.warning/2 instead
-     │
- 459 │         Logger.warn("HTTP #{status} from node #{node_info.node_id}")
-     │                ~
-     │
-     └─ lib/corro_port/analytics_aggregator.ex:459:16: CorroPort.AnalyticsAggregator.get_node_experiment_summary/2
-
-     warning: Logger.warn/1 is deprecated. Use Logger.warning/2 instead
-     │
- 463 │         Logger.warn("HTTP error from node #{node_info.node_id}: #{inspect(reason)}")
-     │                ~
-     │
-     └─ lib/corro_port/analytics_aggregator.ex:463:16: CorroPort.AnalyticsAggregator.get_node_experiment_summary/2
+     └─ lib/corro_port/analytics_aggregator.ex:362:31: CorroPort.AnalyticsAggregator.collect_from_all_nodes/3
 
      warning: variable "task" is unused (if the variable is not meant to be used, prefix it with an underscore)
      │
- 583 │   defp get_task_data_type(task) do
+ 631 │   defp get_task_data_type(task) do
      │                           ~~~~
      │
-     └─ lib/corro_port/analytics_aggregator.ex:583:27: CorroPort.AnalyticsAggregator.get_task_data_type/1
+     └─ lib/corro_port/analytics_aggregator.ex:631:27: CorroPort.AnalyticsAggregator.get_task_data_type/1
+
+     warning: function collect_specific_data_from_all_nodes/3 is unused
+     │
+ 332 │   defp collect_specific_data_from_all_nodes(:summary, experiment_id, state) do
+     │        ~
+     │
+     └─ lib/corro_port/analytics_aggregator.ex:332:8: CorroPort.AnalyticsAggregator (module)
+
+     warning: function collect_from_all_nodes/3 is unused
+     │
+ 362 │   defp collect_from_all_nodes(experiment_id, nodes, collector_fn) do
+     │        ~
+     │
+     └─ lib/corro_port/analytics_aggregator.ex:362:8: CorroPort.AnalyticsAggregator (module)
+
+     warning: function aggregate_timing_stats/1 is unused
+     │
+ 577 │   defp aggregate_timing_stats(timing_stats_lists) do
+     │        ~
+     │
+     └─ lib/corro_port/analytics_aggregator.ex:577:8: CorroPort.AnalyticsAggregator (module)
+
+     warning: function aggregate_message_timing/2 is unused
+     │
+ 588 │   defp aggregate_message_timing(message_id, stats) do
+     │        ~
+     │
+     └─ lib/corro_port/analytics_aggregator.ex:588:8: CorroPort.AnalyticsAggregator (module)
+
+     warning: function aggregate_experiment_summaries/1 is unused
+     │
+ 546 │   defp aggregate_experiment_summaries(summaries) do
+     │        ~
+     │
+     └─ lib/corro_port/analytics_aggregator.ex:546:8: CorroPort.AnalyticsAggregator (module)
 
     warning: unused alias ClusterMembership
     │
@@ -46,6 +60,25 @@
     │   ~
     │
     └─ lib/corro_port/analytics_aggregator.ex:26:3
+
+     warning: the following clause will never match:
+
+         {:error, reason}
+
+     because it attempts to match on the result of:
+
+         collect_specific_data(data_type, experiment_id, state)
+
+     which has type:
+
+         dynamic({:ok, term()})
+
+     typing violation found at:
+     │
+ 254 │           {:error, reason} ->
+     │           ~~~~~~~~~~~~~~~~~~~
+     │
+     └─ lib/corro_port/analytics_aggregator.ex:254: CorroPort.AnalyticsAggregator.get_cached_or_collect/3
 
     warning: unused alias Analytics
     │
@@ -56,12 +89,14 @@
 
 [info] AckTracker starting...
 [info] AckTracker ETS table created: ack_tracker
+[info] CorroSubscriber: Starting subscription
 [info] AckSender starting...
 [info] CLIMemberStore starting with 300000ms refresh interval
 [info] NodeDiscovery starting...
 [info] MessagePropagation starting...
 [debug] AckTracker: Found 0 acknowledgments from []
 [info] ClusterSystemInfo starting with 60000ms refresh interval
+[info] CorroSubscriber: Subscription started successfully
 [info] AnalyticsStorage starting...
 [info] SystemMetrics starting...
 [info] AnalyticsAggregator starting...
@@ -73,175 +108,426 @@
 /*! 🌼 daisyUI 5.0.8 */
 ≈ tailwindcss v4.0.9
 
-Done in 77ms
+Done in 74ms
 [debug] CLIMemberStore: Starting CLI fetch task
 [info] NodeDiscovery: Performing initial DNS fetch
 [debug] NodeDiscovery: Not in Fly.io environment, using development fallback
 [debug] NodeDiscovery: Using development fallback
-[debug] ClusterSystemInfo: Starting fetch task
 [debug] CorroCLI: command corrosion/corrosion-mac cluster members --config corrosion/config-node3.toml
-[info] CorroSubscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[debug] ClusterSystemInfo: Starting fetch task
 [info] NodeDiscovery: Successfully fetched 2 expected nodes
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
 [debug] CLIMemberStore: CLI fetch completed successfully
 [info] CLIMemberStore: Parsed 2 cluster members
 [debug] CLIMemberStore: Broadcasted update - 2 members, status: ok
 [debug] CLIMemberStore: Broadcasted active update - 1 regions, status: ok
-[info] CorroSubscriber: Connected with watch_id: eb91f377-4b45-4dfd-bc4a-5b5ccc6b9c84
-[debug] Found 3 total members, 2 active
+[info] CorroClient.Subscriber: Connected with watch_id: a9006e38-2218-4219-885d-1a7528770a9d
+[info] CorroSubscriber: Connected with watch_id: a9006e38-2218-4219-885d-1a7528770a9d
+[debug] Found 3 total members, 0 active
 [debug] ClusterSystemInfo: Fetch task completed
-[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: false, messages: 3
+[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: true, messages: 3
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
 [info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
 [info] CorroSubscriber: End of initial query - subscription is now live
-[info] CONNECTED TO Phoenix.LiveView.Socket in 31µs
-  Transport: :longpoll
+[debug] Live reload: priv/static/assets/js/app.js
+[info] GET /
+[debug] Processing with CorroPortWeb.IndexLive.__live__/0
+  Parameters: %{}
+  Pipelines: [:browser]
+[info] Sent 200 in 51ms
+[info] CONNECTED TO Phoenix.LiveView.Socket in 11µs
+  Transport: :websocket
   Serializer: Phoenix.Socket.V2.JSONSerializer
-  Parameters: %{"_csrf_token" => "CRU3I1NTASQ_Ci0HBy43UHQfPgU0ERgMslNo9duunzEpkcs7BPQ0pWbH", "_live_referer" => "undefined", "_mount_attempts" => "0", "_mounts" => "0", "_track_static" => %{"0" => "http://localhost:4003/assets/css/app.css", "1" => "http://localhost:4003/assets/js/app.js"}, "vsn" => "2.0.0"}
+  Parameters: %{"_csrf_token" => "H0pOJlN9NykWBlBGJQgFOEUYA3xwNBYLe37j9JCxGv81IEA_sWlI4rlO", "_live_referer" => "undefined", "_mount_attempts" => "0", "_mounts" => "0", "_track_static" => %{"0" => "http://localhost:4003/assets/css/app.css", "1" => "http://localhost:4003/assets/js/app.js"}, "vsn" => "2.0.0"}
 [debug] MOUNT CorroPortWeb.IndexLive
   Parameters: %{}
   Session: %{"_csrf_token" => "zyyLj7tQQphwlMDg6Oo5DFzD"}
-[debug] Replied in 3ms
-[debug] ClusterSystemInfo: Starting fetch task
-[debug] Found 3 total members, 2 active
-[debug] ClusterSystemInfo: Fetch task completed
-[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: false, messages: 3
-[debug] ClusterSystemInfo: Starting fetch task
-[debug] Found 3 total members, 2 active
-[debug] ClusterSystemInfo: Fetch task completed
-[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: false, messages: 3
-[debug] ClusterSystemInfo: Starting fetch task
-[debug] Found 3 total members, 2 active
-[debug] ClusterSystemInfo: Fetch task completed
-[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: false, messages: 3
-Compiling 1 file (.ex)
-    warning: undefined module attribute @max_reconnect_attempts, please remove access to @max_reconnect_attempts or explicitly set it before access
-    │
- 89 │          attempts_left: @max_reconnect_attempts,
-    │          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    │
-    └─ lib/corro_port/corro_subscriber.ex:89: CorroPort.CorroSubscriber (module)
-
-     warning: undefined module attribute @max_reconnect_attempts, please remove access to @max_reconnect_attempts or explicitly set it before access
-     │
- 183 │         attempts_left: @max_reconnect_attempts,
-     │         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-     │
-     └─ lib/corro_port/corro_subscriber.ex:183: CorroPort.CorroSubscriber (module)
-
-     warning: undefined module attribute @max_reconnect_attempts, please remove access to @max_reconnect_attempts or explicitly set it before access
-     │
- 373 │     attempts_made = @max_reconnect_attempts - state.attempts_left
-     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-     │
-     └─ lib/corro_port/corro_subscriber.ex:373: CorroPort.CorroSubscriber (module)
-
-     warning: function run_subscription_stream/1 is unused
-     │
- 215 │   defp run_subscription_stream(parent_pid) do
-     │        ~
-     │
-     └─ lib/corro_port/corro_subscriber.ex:215:8: CorroPort.CorroSubscriber (module)
-
-    error: undefined function handle_subscription_disconnect/1 (expected CorroPort.CorroSubscriber to define such a function or for it to be imported, but none are available)
-    │
- 45 │       on_disconnect: &handle_subscription_disconnect/1
-    │                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    │
-    └─ (corro_port 0.1.0) lib/corro_port/corro_subscriber.ex:45:23: CorroPort.CorroSubscriber.handle_info/2
-
-    error: undefined function handle_subscription_error/1 (expected CorroPort.CorroSubscriber to define such a function or for it to be imported, but none are available)
-    │
- 44 │       on_error: &handle_subscription_error/1,
-    │                  ^^^^^^^^^^^^^^^^^^^^^^^^^
-    │
-    └─ (corro_port 0.1.0) lib/corro_port/corro_subscriber.ex:44:18: CorroPort.CorroSubscriber.handle_info/2
-
-    error: undefined function handle_subscription_connect/1 (expected CorroPort.CorroSubscriber to define such a function or for it to be imported, but none are available)
-    │
- 43 │       on_connect: &handle_subscription_connect/1,
-    │                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    │
-    └─ (corro_port 0.1.0) lib/corro_port/corro_subscriber.ex:43:20: CorroPort.CorroSubscriber.handle_info/2
-
-    error: undefined function handle_subscription_event/1 (expected CorroPort.CorroSubscriber to define such a function or for it to be imported, but none are available)
-    │
- 42 │       on_event: &handle_subscription_event/1,
-    │                  ^^^^^^^^^^^^^^^^^^^^^^^^^
-    │
-    └─ (corro_port 0.1.0) lib/corro_port/corro_subscriber.ex:42:18: CorroPort.CorroSubscriber.handle_info/2
-
-
-== Compilation error in file lib/corro_port/corro_subscriber.ex ==
-** (CompileError) lib/corro_port/corro_subscriber.ex: cannot compile module CorroPort.CorroSubscriber (errors have been logged)
-
-[debug] ClusterSystemInfo: Starting fetch task
-[debug] Found 3 total members, 2 active
-[debug] ClusterSystemInfo: Fetch task completed
-[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: false, messages: 3
-Compiling 1 file (.ex)
-[info] DRAINING 1 of 1 total connection(s) for socket Phoenix.LiveView.Socket every 2000ms - round 1 of 1
-[info] DRAINING 1 of 1 total connection(s) for socket Phoenix.LiveReloader.Socket every 2000ms - round 1 of 1
-    warning: undefined module attribute @max_reconnect_attempts, please remove access to @max_reconnect_attempts or explicitly set it before access
-    │
- 89 │          attempts_left: @max_reconnect_attempts,
-    │          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    │
-    └─ lib/corro_port/corro_subscriber.ex:89: CorroPort.CorroSubscriber (module)
-
-     warning: undefined module attribute @max_reconnect_attempts, please remove access to @max_reconnect_attempts or explicitly set it before access
-     │
- 183 │         attempts_left: @max_reconnect_attempts,
-     │         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-     │
-     └─ lib/corro_port/corro_subscriber.ex:183: CorroPort.CorroSubscriber (module)
-
-     warning: undefined module attribute @max_reconnect_attempts, please remove access to @max_reconnect_attempts or explicitly set it before access
-     │
- 373 │     attempts_made = @max_reconnect_attempts - state.attempts_left
-     │     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-     │
-     └─ lib/corro_port/corro_subscriber.ex:373: CorroPort.CorroSubscriber (module)
-
-     warning: function run_subscription_stream/1 is unused
-     │
- 215 │   defp run_subscription_stream(parent_pid) do
-     │        ~
-     │
-     └─ lib/corro_port/corro_subscriber.ex:215:8: CorroPort.CorroSubscriber (module)
-
-    error: undefined function handle_subscription_disconnect/1 (expected CorroPort.CorroSubscriber to define such a function or for it to be imported, but none are available)
-    │
- 45 │       on_disconnect: &handle_subscription_disconnect/1
-    │                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    │
-    └─ (corro_port 0.1.0) lib/corro_port/corro_subscriber.ex:45:23: CorroPort.CorroSubscriber.handle_info/2
-
-    error: undefined function handle_subscription_error/1 (expected CorroPort.CorroSubscriber to define such a function or for it to be imported, but none are available)
-    │
- 44 │       on_error: &handle_subscription_error/1,
-    │                  ^^^^^^^^^^^^^^^^^^^^^^^^^
-    │
-    └─ (corro_port 0.1.0) lib/corro_port/corro_subscriber.ex:44:18: CorroPort.CorroSubscriber.handle_info/2
-
-    error: undefined function handle_subscription_connect/1 (expected CorroPort.CorroSubscriber to define such a function or for it to be imported, but none are available)
-    │
- 43 │       on_connect: &handle_subscription_connect/1,
-    │                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    │
-    └─ (corro_port 0.1.0) lib/corro_port/corro_subscriber.ex:43:20: CorroPort.CorroSubscriber.handle_info/2
-
-    error: undefined function handle_subscription_event/1 (expected CorroPort.CorroSubscriber to define such a function or for it to be imported, but none are available)
-    │
- 42 │       on_event: &handle_subscription_event/1,
-    │                  ^^^^^^^^^^^^^^^^^^^^^^^^^
-    │
-    └─ (corro_port 0.1.0) lib/corro_port/corro_subscriber.ex:42:18: CorroPort.CorroSubscriber.handle_info/2
-
-
-== Compilation error in file lib/corro_port/corro_subscriber.ex ==
-** (CompileError) lib/corro_port/corro_subscriber.ex: cannot compile module CorroPort.CorroSubscriber (errors have been logged)
-
-[info] CONNECTED TO Phoenix.LiveView.Socket in 17µs
-  Transport: :longpoll
+[debug] Replied in 322µs
+[debug] HANDLE EVENT "refresh_active" in CorroPortWeb.IndexLive
+  Parameters: %{"value" => ""}
+[debug] Replied in 1ms
+[info] CLIMemberStore: Manual refresh requested
+[debug] CLIMemberStore: Starting CLI fetch task
+[debug] CorroCLI: command corrosion/corrosion-mac cluster members --config corrosion/config-node3.toml
+[debug] CLIMemberStore: CLI fetch completed successfully
+[info] CLIMemberStore: Parsed 2 cluster members
+[debug] CLIMemberStore: Broadcasted update - 2 members, status: ok
+[debug] CLIMemberStore: Broadcasted active update - 1 regions, status: ok
+[debug] IndexLive: Received active members update
+[debug] HANDLE EVENT "refresh_expected" in CorroPortWeb.IndexLive
+  Parameters: %{"value" => ""}
+[debug] Replied in 97µs
+[info] NodeDiscovery: Manual cache refresh requested
+[debug] NodeDiscovery: Not in Fly.io environment, using development fallback
+[debug] NodeDiscovery: Using development fallback
+[info] NodeDiscovery: Successfully fetched 2 expected nodes
+[debug] IndexLive: Received expected nodes update
+[info] GET /
+[debug] Processing with CorroPortWeb.IndexLive.__live__/0
+  Parameters: %{}
+  Pipelines: [:browser]
+[info] Sent 200 in 3ms
+[info] CONNECTED TO Phoenix.LiveView.Socket in 14µs
+  Transport: :websocket
   Serializer: Phoenix.Socket.V2.JSONSerializer
-  Parameters: %{"_csrf_token" => "CRU3I1NTASQ_Ci0HBy43UHQfPgU0ERgMslNo9duunzEpkcs7BPQ0pWbH", "_live_referer" => "undefined", "_mount_attempts" => "0", "_mounts" => "0", "_track_static" => %{"0" => "http://localhost:4003/assets/css/app.css", "1" => "http://localhost:4003/assets/js/app.js"}, "token" => "SFMyNTY.g2gDaAR3AnYxbQAAABZoUzRtR0JBeURWeTA4R3RGUlAwaWh3WHcNbm9ub2RlQG5vaG9zdAAAA-4AAAAAAAAAAG0AAAAscGh4OmxwOkhhRHFFY2hqdkpvWjZTWmlEbjVQdkE9PTE3NTA2NDYyMTY1MTluBgBOV6WalwFiABJ1AA.v2DznpSYuegooG-1Q78TyPhpkZyucynYdVbrNIMhtww", "vsn" => "2.0.0"}
-[notice] Application corro_port exited: shutdown
+  Parameters: %{"_csrf_token" => "Mw1ICgBFBxYdQgcPHQoXAn4cKVkhHgsnIt1FjrsGL2oxqGSeHSFleXqc", "_live_referer" => "undefined", "_mount_attempts" => "0", "_mounts" => "0", "_track_static" => %{"0" => "http://localhost:4003/assets/css/app.css", "1" => "http://localhost:4003/assets/js/app.js"}, "vsn" => "2.0.0"}
+[debug] MOUNT CorroPortWeb.IndexLive
+  Parameters: %{}
+  Session: %{"_csrf_token" => "zyyLj7tQQphwlMDg6Oo5DFzD"}
+[debug] Replied in 163µs
+[warning] CorroClient.Subscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[error] CorroClient.Subscriber: Exception in subscription: %Mint.TransportError{reason: :timeout}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 5000ms (4 attempts left)
+[warning] CorroClient.Subscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroSubscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 10000ms (3 attempts left)
+[warning] CorroSubscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[debug] HANDLE EVENT "send_message" in CorroPortWeb.IndexLive
+  Parameters: %{"value" => ""}
+[debug] Inserting: node_id=dev-node3, message=Test propagation message (from dev-node3 at 2025-06-23T12:52:50.088067Z), originating_endpoint=127.0.0.1:5003, region=dev
+[info] MessagePropagation: Successfully sent message: %{message: "Test propagation message (from dev-node3 at 2025-06-23T12:52:50.088067Z)", timestamp: "2025-06-23T12:52:50.088082Z", node_id: "dev-node3", sequence: 1750683170088, region: "dev", originating_endpoint: "127.0.0.1:5003"}
+[info] AckTracker: Tracking new message dev-node3_1750683170088
+[debug] AckTracker: Found 0 acknowledgments from []
+[debug] Replied in 3ms
+[debug] MessagePropagation: Received ack update from AckTracker
+[debug] IndexLive: Received ack status update
+[debug] Processing with CorroPortWeb.AcknowledgmentController.acknowledge/2
+  Parameters: %{"ack_node_id" => "dev-node1", "message_pk" => "dev-node3_1750683170088", "message_timestamp" => "2025-06-23T12:52:50.088082Z"}
+  Pipelines: [:api]
+[info] AcknowledgmentController: Received acknowledgment from dev-node1 for message dev-node3_1750683170088
+[info] AckTracker: Adding acknowledgment from dev-node1
+[debug] AckTracker: Found 1 acknowledgments from ["dev-node1"]
+[debug] MessagePropagation: Received ack update from AckTracker
+[info] AcknowledgmentController: Successfully recorded acknowledgment from dev-node1
+[debug] IndexLive: Received ack status update
+[warning] CorroClient.Subscriber: Attempting to reconnect (3 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: a9006e38-2218-4219-885d-1a7528770a9d
+[info] CorroSubscriber: Connected with watch_id: a9006e38-2218-4219-885d-1a7528770a9d
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[warning] CorroClient.Subscriber: Attempting to reconnect (5 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroSubscriber: Starting subscription
+[info] CorroSubscriber: Subscription started successfully
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: a9006e38-2218-4219-885d-1a7528770a9d
+[info] CorroSubscriber: Connected with watch_id: a9006e38-2218-4219-885d-1a7528770a9d
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[debug] ClusterSystemInfo: Starting fetch task
+[debug] Found 3 total members, 2 active
+[debug] ClusterSystemInfo: Fetch task completed
+[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: true, messages: 3
+[warning] CorroClient.Subscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[error] CorroClient.Subscriber: Exception in subscription: %Mint.TransportError{reason: :timeout}
+[warning] CorroSubscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 5000ms (4 attempts left)
+[warning] CorroClient.Subscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 10000ms (3 attempts left)
+[warning] CorroSubscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Attempting to reconnect (3 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: a9006e38-2218-4219-885d-1a7528770a9d
+[info] CorroSubscriber: Connected with watch_id: a9006e38-2218-4219-885d-1a7528770a9d
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[warning] CorroClient.Subscriber: Attempting to reconnect (5 attempts remain)
+[info] CorroSubscriber: Starting subscription
+[info] CorroSubscriber: Subscription started successfully
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: a9006e38-2218-4219-885d-1a7528770a9d
+[info] CorroSubscriber: Connected with watch_id: a9006e38-2218-4219-885d-1a7528770a9d
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[warning] CorroClient.Subscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 5000ms (4 attempts left)
+[error] CorroClient.Subscriber: Exception in subscription: %Mint.TransportError{reason: :timeout}
+[warning] CorroSubscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 10000ms (3 attempts left)
+[warning] CorroSubscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Attempting to reconnect (3 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[debug] ClusterSystemInfo: Starting fetch task
+[debug] Found 3 total members, 2 active
+[debug] ClusterSystemInfo: Fetch task completed
+[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: true, messages: 3
+[warning] CorroClient.Subscriber: Attempting to reconnect (5 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroSubscriber: Starting subscription
+[info] CorroSubscriber: Subscription started successfully
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[warning] CorroClient.Subscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroSubscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[error] CorroClient.Subscriber: Exception in subscription: %Mint.TransportError{reason: :timeout}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 5000ms (4 attempts left)
+[warning] CorroClient.Subscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroSubscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 10000ms (3 attempts left)
+[warning] CorroClient.Subscriber: Attempting to reconnect (3 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[warning] CorroClient.Subscriber: Attempting to reconnect (5 attempts remain)
+[info] CorroSubscriber: Starting subscription
+[info] CorroSubscriber: Subscription started successfully
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[debug] ClusterSystemInfo: Starting fetch task
+[debug] Found 3 total members, 2 active
+[debug] ClusterSystemInfo: Fetch task completed
+[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: true, messages: 3
+[warning] CorroClient.Subscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[error] CorroClient.Subscriber: Exception in subscription: %Mint.TransportError{reason: :timeout}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 5000ms (4 attempts left)
+[warning] CorroSubscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 10000ms (3 attempts left)
+[warning] CorroSubscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Attempting to reconnect (3 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[warning] CorroClient.Subscriber: Attempting to reconnect (5 attempts remain)
+[info] CorroSubscriber: Starting subscription
+[info] CorroSubscriber: Subscription started successfully
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[warning] CorroClient.Subscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 5000ms (4 attempts left)
+[error] CorroClient.Subscriber: Exception in subscription: %Mint.TransportError{reason: :timeout}
+[warning] CorroClient.Subscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroSubscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 10000ms (3 attempts left)
+[warning] CorroSubscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[debug] ClusterSystemInfo: Starting fetch task
+[debug] Found 3 total members, 2 active
+[debug] ClusterSystemInfo: Fetch task completed
+[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: true, messages: 3
+[warning] CorroClient.Subscriber: Attempting to reconnect (3 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[warning] CorroClient.Subscriber: Attempting to reconnect (5 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroSubscriber: Starting subscription
+[info] CorroSubscriber: Subscription started successfully
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[warning] CorroClient.Subscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 5000ms (4 attempts left)
+[error] CorroClient.Subscriber: Exception in subscription: %Mint.TransportError{reason: :timeout}
+[warning] CorroSubscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 10000ms (3 attempts left)
+[warning] CorroSubscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Attempting to reconnect (3 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[warning] CorroClient.Subscriber: Attempting to reconnect (5 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroSubscriber: Starting subscription
+[info] CorroSubscriber: Subscription started successfully
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[debug] CLIMemberStore: Starting CLI fetch task
+[debug] CorroCLI: command corrosion/corrosion-mac cluster members --config corrosion/config-node3.toml
+[debug] ClusterSystemInfo: Starting fetch task
+[debug] Found 3 total members, 2 active
+[debug] ClusterSystemInfo: Fetch task completed
+[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: true, messages: 3
+[debug] CLIMemberStore: CLI fetch completed successfully
+[info] CLIMemberStore: Parsed 2 cluster members
+[debug] CLIMemberStore: Broadcasted update - 2 members, status: ok
+[debug] CLIMemberStore: Broadcasted active update - 1 regions, status: ok
+[debug] IndexLive: Received active members update
+[error] CorroClient.Subscriber: Exception in subscription: %Mint.TransportError{reason: :timeout}
+[warning] CorroClient.Subscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroSubscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 5000ms (4 attempts left)
+[warning] CorroClient.Subscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 10000ms (3 attempts left)
+[warning] CorroSubscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Attempting to reconnect (3 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[warning] CorroClient.Subscriber: Attempting to reconnect (5 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroSubscriber: Starting subscription
+[info] CorroSubscriber: Subscription started successfully
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[warning] CorroClient.Subscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[error] CorroClient.Subscriber: Exception in subscription: %Mint.TransportError{reason: :timeout}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 5000ms (4 attempts left)
+[warning] CorroClient.Subscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 10000ms (3 attempts left)
+[warning] CorroSubscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroSubscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[debug] ClusterSystemInfo: Starting fetch task
+[debug] Found 3 total members, 2 active
+[debug] ClusterSystemInfo: Fetch task completed
+[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: true, messages: 3
+[warning] CorroClient.Subscriber: Attempting to reconnect (3 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[warning] CorroClient.Subscriber: Attempting to reconnect (5 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroSubscriber: Starting subscription
+[info] CorroSubscriber: Subscription started successfully
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[error] CorroClient.Subscriber: Exception in subscription: %Mint.TransportError{reason: :timeout}
+[warning] CorroClient.Subscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 5000ms (4 attempts left)
+[warning] CorroSubscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 10000ms (3 attempts left)
+[warning] CorroSubscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Attempting to reconnect (3 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[warning] CorroClient.Subscriber: Attempting to reconnect (5 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroSubscriber: Starting subscription
+[info] CorroSubscriber: Subscription started successfully
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[debug] ClusterSystemInfo: Starting fetch task
+[debug] Found 3 total members, 2 active
+[debug] ClusterSystemInfo: Fetch task completed
+[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: true, messages: 3
+[warning] CorroClient.Subscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[error] CorroClient.Subscriber: Exception in subscription: %Mint.TransportError{reason: :timeout}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 5000ms (4 attempts left)
+[warning] CorroClient.Subscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroSubscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroSubscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 10000ms (3 attempts left)
+[warning] CorroClient.Subscriber: Attempting to reconnect (3 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[warning] CorroClient.Subscriber: Attempting to reconnect (5 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroSubscriber: Starting subscription
+[info] CorroSubscriber: Subscription started successfully
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live
+[debug] ClusterSystemInfo: Starting fetch task
+[debug] Found 3 total members, 2 active
+[debug] ClusterSystemInfo: Fetch task completed
+[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: true, messages: 3
+[warning] CorroClient.Subscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 5000ms (4 attempts left)
+[error] CorroClient.Subscriber: Exception in subscription: %Mint.TransportError{reason: :timeout}
+[warning] CorroClient.Subscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Scheduling reconnect in 10000ms (3 attempts left)
+[warning] CorroSubscriber: Subscription error: {:finch_error, %Mint.TransportError{reason: :timeout}}
+[warning] CorroSubscriber: Subscription error: {:exception, %Mint.TransportError{reason: :timeout}}
+[warning] CorroClient.Subscriber: Attempting to reconnect (3 attempts remain)
+[info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8083/v1/subscriptions
+[info] CorroClient.Subscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroSubscriber: Connected with watch_id: b9c45ed3-05c1-4604-8f2d-e96f195295a4
+[info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
+[info] CorroClient.Subscriber: End of initial query - subscription is now live
+[info] CorroSubscriber: End of initial query - subscription is now live

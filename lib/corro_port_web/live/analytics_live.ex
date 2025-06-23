@@ -364,7 +364,7 @@ defmodule CorroPortWeb.AnalyticsLive do
                           <span class="text-gray-400">-</span>
                         <% end %>
                       </td>
-                      <td class="px-4 py-2 text-sm"><%= stat.node_count || 1 %></td>
+                      <td class="px-4 py-2 text-sm"><%= length(stat.acknowledgments) %></td>
                     </tr>
                   <% end %>
                 </tbody>

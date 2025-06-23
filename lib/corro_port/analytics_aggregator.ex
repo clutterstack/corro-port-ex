@@ -295,7 +295,41 @@ defmodule CorroPort.AnalyticsAggregator do
     end
   end
 
-  defp collect_specific_data(:summary, experiment_id, state) do
+  defp collect_specific_data(:summary, experiment_id, _state) do
+    # Only query local node for now - avoid 500s from remote nodes
+    local_node = get_local_node_info()
+    summary = get_node_experiment_summary(local_node, experiment_id)
+    {:ok, summary}
+  end
+
+  defp collect_specific_data(:timing, experiment_id, _state) do
+    # Only query local node for now - avoid 500s from remote nodes  
+    local_node = get_local_node_info()
+    timing_stats = get_node_timing_stats(local_node, experiment_id)
+    {:ok, timing_stats}
+  end
+
+  defp collect_specific_data(:metrics, experiment_id, _state) do
+    # Only query local node for now - avoid 500s from remote nodes
+    local_node = get_local_node_info()
+    metrics = get_node_system_metrics(local_node, experiment_id)
+    {:ok, metrics}
+  end
+
+  defp get_local_node_info do
+    local_node_id = LocalNode.get_node_id()
+    local_phoenix_port = calculate_phoenix_port(%{node_id: local_node_id, api_port: nil})
+    
+    %{
+      node_id: local_node_id,
+      region: LocalNode.get_region(),
+      phoenix_port: local_phoenix_port,
+      is_local: true
+    }
+  end
+
+  # Legacy function for when we want to collect from all nodes again
+  defp collect_specific_data_from_all_nodes(:summary, experiment_id, state) do
     collect_from_all_nodes(experiment_id, state.active_nodes, fn node_info ->
       get_node_experiment_summary(node_info, experiment_id)
     end)
@@ -305,7 +339,7 @@ defmodule CorroPort.AnalyticsAggregator do
     end
   end
 
-  defp collect_specific_data(:timing, experiment_id, state) do
+  defp collect_specific_data_from_all_nodes(:timing, experiment_id, state) do
     collect_from_all_nodes(experiment_id, state.active_nodes, fn node_info ->
       get_node_timing_stats(node_info, experiment_id)
     end)
@@ -315,7 +349,7 @@ defmodule CorroPort.AnalyticsAggregator do
     end
   end
 
-  defp collect_specific_data(:metrics, experiment_id, state) do
+  defp collect_specific_data_from_all_nodes(:metrics, experiment_id, state) do
     collect_from_all_nodes(experiment_id, state.active_nodes, fn node_info ->
       get_node_system_metrics(node_info, experiment_id)
     end)
@@ -350,7 +384,7 @@ defmodule CorroPort.AnalyticsAggregator do
           collector_fn.(node_info)
         catch
           _type, error ->
-            Logger.warn("Failed to collect from node #{node_info.node_id}: #{inspect(error)}")
+            Logger.warning("Failed to collect from node #{node_info.node_id}: #{inspect(error)}")
             []
         end
       end)
@@ -392,14 +426,18 @@ defmodule CorroPort.AnalyticsAggregator do
 
       # Convert to node info format
       nodes = Enum.map(members, fn member ->
+        node_id = CorroPort.AckTracker.member_to_node_id(member)
+        region = CorroPort.CorrosionParser.extract_region_from_node_id(node_id)
+        
         %{
-          node_id: member.node_id,
-          region: member.region,
-          api_port: member.api_port,
+          node_id: node_id,
+          region: region,
+          api_port: nil,  # Not available in member structure, will be calculated
           phoenix_port: calculate_phoenix_port(member),
-          is_local: member.node_id == LocalNode.get_node_id()
+          is_local: node_id == LocalNode.get_node_id()
         }
       end)
+      |> Enum.reject(fn node -> is_nil(node.node_id) end)  # Filter out nodes with nil node_id
 
       Logger.debug("AnalyticsAggregator: Node details: #{inspect(nodes)}")
       nodes
@@ -420,15 +458,13 @@ defmodule CorroPort.AnalyticsAggregator do
   end
 
   defp calculate_phoenix_port(member) do
-    # Try to determine Phoenix port from member info
-    # This might need adjustment based on your port mapping strategy
+    # Extract node_id from member to determine Phoenix port
+    node_id = CorroPort.AckTracker.member_to_node_id(member)
+    
     cond do
-      member.api_port && member.api_port > 4000 ->
-        member.api_port  # Assume Phoenix and API are same port
-
-      member.node_id =~ ~r/node(\d+)/ ->
-        # Development pattern: node1 -> 4001, node2 -> 4002, etc.
-        case Regex.run(~r/node(\d+)/, member.node_id) do
+      # Development pattern: node1 -> 4001, node2 -> 4002, etc.
+      is_binary(node_id) and node_id =~ ~r/node(\d+)/ ->
+        case Regex.run(~r/node(\d+)/, node_id) do
           [_, num_str] ->
             case Integer.parse(num_str) do
               {num, _} -> 4000 + num
@@ -456,13 +492,25 @@ defmodule CorroPort.AnalyticsAggregator do
         atomize_keys(data)
 
       {:ok, %{status: status}} ->
-        Logger.warn("HTTP #{status} from node #{node_info.node_id}")
-        %{}
+        Logger.warning("HTTP #{status} from node #{node_info.node_id}")
+        default_empty_summary()
 
       {:error, reason} ->
-        Logger.warn("HTTP error from node #{node_info.node_id}: #{inspect(reason)}")
-        %{}
+        Logger.warning("HTTP error from node #{node_info.node_id}: #{inspect(reason)}")
+        default_empty_summary()
     end
+  end
+
+  defp default_empty_summary do
+    %{
+      experiment_id: nil,
+      topology_snapshots_count: 0,
+      message_count: 0,
+      send_count: 0,
+      ack_count: 0,
+      system_metrics_count: 0,
+      node_count: 0
+    }
   end
 
   defp get_node_timing_stats(%{is_local: true}, experiment_id) do

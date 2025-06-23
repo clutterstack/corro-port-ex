@@ -31,6 +31,25 @@ defmodule CorroPort.ConnectionManager do
       headers: [{"content-type", "application/json"}]
     )
   end
+
+  @doc """
+  Get a connection optimized for long-running subscriptions.
+  
+  Uses extended timeouts and keepalive settings suitable for streaming
+  connections that may have periods of inactivity.
+  
+  ## Returns
+  - Connection object optimized for subscriptions
+  """
+  def get_subscription_connection do
+    api_port = get_corro_api_port()
+    base_url = "http://127.0.0.1:#{api_port}"
+    
+    CorroClient.connect(base_url,
+      receive_timeout: 30_000,  # 30 seconds for subscription setup
+      headers: [{"content-type", "application/json"}]
+    )
+  end
   
   @doc """
   Get a connection to a specific Corrosion node by port.
