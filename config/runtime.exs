@@ -72,6 +72,10 @@ if config_env() == :prod do
       server: true
   end
 
+  # Configure Analytics Repo for production
+  config :corro_port, CorroPort.Analytics.Repo,
+    database: "/opt/data/analytics/analytics.db"
+
   # Update node config with production settings
   if fly_app_name && fly_private_ip && fly_machine_id do
     # Get region from environment

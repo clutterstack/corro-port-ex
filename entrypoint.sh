@@ -7,6 +7,11 @@ set -e
 
 echo "🚀 Starting CorroPort production setup..."
 
+# Wipe volume clean for ephemeral state
+echo "🧹 Wiping volume clean (ephemeral state)..."
+rm -rf /opt/data/*
+echo "✅ Volume cleaned"
+
 # Ensure we have required environment variables
 if [ -z "$FLY_APP_NAME" ] || [ -z "$FLY_PRIVATE_IP" ] || [ -z "$FLY_MACHINE_ID" ]; then
     echo "❌ Missing required fly.io environment variables:"
@@ -21,11 +26,16 @@ echo "   App: $FLY_APP_NAME"
 echo "   Machine: $FLY_MACHINE_ID"
 echo "   Private IP: $FLY_PRIVATE_IP"
 
+# Ensure database directories exist
+echo "📁 Creating database directories..."
+mkdir -p /opt/data/corrosion
+mkdir -p /opt/data/analytics
+
 # Generate the final corrosion config with dynamic values
 cat > /app/corrosion.toml << EOF
 # Generated production config for fly.io machine: $FLY_MACHINE_ID
 [db]
-path = "/var/lib/corrosion/state.db"
+path = "/opt/data/corrosion/state.db"
 schema_paths = ["/app/schemas"]
 
 [gossip]
@@ -50,15 +60,12 @@ EOF
 
 echo "✅ Corrosion config generated at /app/corrosion.toml"
 
-# Ensure data directory exists
-# Don't have to do this since this is the mount point of the fly volume
-# mkdir -p /var/lib/corrosion
+# Clean up any lost+found directories that might be created by the filesystem
+rm -rf '/opt/data/lost+found'
 
-# In case fly volumes put something there
-# rm -rf '/var/lib/corrosion/lost+found'
-
-# Set ownership
-# chown -R corrosion:corrosion /var/lib/corrosion
+echo "✅ Database directories prepared:
+   Corrosion: /opt/data/corrosion/
+   Analytics: /opt/data/analytics/"
 
 echo "🔧 Starting services with Overmind..."
 

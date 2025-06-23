@@ -14,7 +14,7 @@ kill_signal = "SIGTERM"
 
 [mounts]
 source = "corro_data"
-destination = "/var/lib/corrosion"
+destination = "/opt/data"
 
 # [deploy]
 #   strategy = "immediate"

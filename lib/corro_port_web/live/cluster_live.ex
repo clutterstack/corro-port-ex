@@ -30,10 +30,8 @@ defmodule CorroPortWeb.ClusterLive do
         system_data: nil,
         local_node: CorroPort.LocalNode.get_info(),
 
-        # Computed regions for map display
-        expected_regions: [],
-        active_regions: [],
-        our_regions: [],
+        # Computed region groups for map display
+        region_groups: [],
 
         # General state
         last_updated: nil
@@ -70,11 +68,12 @@ defmodule CorroPortWeb.ClusterLive do
   def handle_info({:expected_nodes_updated, expected_data}, socket) do
     Logger.debug("ClusterLive: Received expected nodes update")
 
-    new_expected_regions = exclude_our_region(expected_data.regions, socket.assigns.local_node.region)
+    # Recreate region groups with updated expected data
+    region_groups = create_region_groups(expected_data, socket.assigns.active_data, socket.assigns.local_node)
 
     socket = assign(socket, %{
       expected_data: expected_data,
-      expected_regions: new_expected_regions
+      region_groups: region_groups
     })
 
     {:noreply, socket}
@@ -83,11 +82,12 @@ defmodule CorroPortWeb.ClusterLive do
   def handle_info({:active_members_updated, active_data}, socket) do
     Logger.debug("ClusterLive: Received active members update")
 
-    new_active_regions = exclude_our_region(active_data.regions, socket.assigns.local_node.region)
+    # Recreate region groups with updated active data
+    region_groups = create_region_groups(socket.assigns.expected_data, active_data, socket.assigns.local_node)
 
     socket = assign(socket, %{
       active_data: active_data,
-      active_regions: new_active_regions
+      region_groups: region_groups
     })
 
     {:noreply, socket}
@@ -111,6 +111,9 @@ defmodule CorroPortWeb.ClusterLive do
     system_data = CorroPort.ClusterSystemInfo.get_system_data()
     local_node = CorroPort.LocalNode.get_info()
 
+    # Create region groups for the new API
+    region_groups = create_region_groups(expected_data, active_data, local_node)
+
     assign(socket, %{
       # Data from clean domain modules
       expected_data: expected_data,
@@ -118,10 +121,8 @@ defmodule CorroPortWeb.ClusterLive do
       system_data: system_data,
       local_node: local_node,
 
-      # Computed regions for map display (excluding our region)
-      expected_regions: exclude_our_region(expected_data.regions, local_node.region),
-      active_regions: exclude_our_region(active_data.regions, local_node.region),
-      our_regions: [local_node.region],
+      # Computed region groups for map display
+      region_groups: region_groups,
 
       last_updated: DateTime.utc_now()
     })
@@ -129,6 +130,37 @@ defmodule CorroPortWeb.ClusterLive do
 
   defp exclude_our_region(regions, our_region) do
     Enum.reject(regions, &(&1 == our_region))
+  end
+
+  defp create_region_groups(expected_data, active_data, local_node) do
+    # Build region groups for the new FlyMapEx API
+    groups = []
+
+    # Our region (primary/local node)
+    groups = if local_node.region != "unknown" do
+      [%{regions: [local_node.region], style_key: :primary, label: "Our Node"} | groups]
+    else
+      groups
+    end
+
+    # Active regions (excluding our region)
+    active_regions = exclude_our_region(active_data.regions, local_node.region)
+    groups = if !Enum.empty?(active_regions) do
+      [%{regions: active_regions, style_key: :active, label: "Active Regions"} | groups]
+    else
+      groups
+    end
+
+    # Expected regions (excluding our region) 
+    expected_regions = exclude_our_region(expected_data.regions, local_node.region)
+    groups = if !Enum.empty?(expected_regions) do
+      [%{regions: expected_regions, style_key: :expected, label: "Expected Regions"} | groups]
+    else
+      groups
+    end
+
+    # Return groups in reverse order (since we prepended)
+    Enum.reverse(groups)
   end
 
   def render(assigns) do
@@ -141,8 +173,8 @@ defmodule CorroPortWeb.ClusterLive do
       assigns.expected_data,
       assigns.active_data,
       assigns.system_data,
-      assigns.expected_regions,
-      assigns.active_regions
+      assigns.expected_data.regions,
+      assigns.active_data.regions
     )
 
     system_info = DisplayHelpers.system_info_details(assigns.system_data)
@@ -217,10 +249,9 @@ defmodule CorroPortWeb.ClusterLive do
       <.error_alert :if={@system_alert} config={@system_alert} />
 
       <!-- Enhanced World Map with Regions -->
-      <CorroPortWeb.WorldMapCard.world_map_card
-        active_data={@active_data}
-        our_regions={@our_regions}
-        expected_regions={@expected_regions}
+      <FlyMapEx.render
+        region_groups={@region_groups}
+        theme={:monitoring}
       />
 
       <!-- CLI Members Display with clean data structure -->

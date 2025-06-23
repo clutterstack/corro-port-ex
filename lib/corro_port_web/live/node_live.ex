@@ -9,7 +9,7 @@ defmodule CorroPortWeb.NodeLive do
     if connected?(socket) do
       # Subscribe to any relevant updates
       Phoenix.PubSub.subscribe(CorroPort.PubSub, "node_updates")
-      Phoenix.PubSub.subscribe(CorroPort.PubSub, "cluster_system_info")
+      CorroPort.ClusterSystemInfo.subscribe()
     end
 
     socket =
@@ -69,7 +69,8 @@ defmodule CorroPortWeb.NodeLive do
     end
   end
 
-  def handle_info({:system_data_update, system_data}, socket) do
+  def handle_info({:cluster_system_updated, system_data}, socket) do
+    Logger.debug("NodeLive: Received cluster system update")
     {:noreply, assign(socket, :system_data, system_data)}
   end
 
