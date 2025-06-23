@@ -10,7 +10,9 @@ defmodule CorroPort.CLIMemberStore do
   use GenServer
   require Logger
 
-  alias CorroPort.{CorroCLI, CorrosionParser, RegionExtractor}
+  alias CorroPort.RegionExtractor
+  alias CorroPort.CorroCliAdapter, as: CorroCLI
+  alias CorroPort.CorrosionParserAdapter, as: CorrosionParser
 
   # Default refresh interval: 5 minutes
   @default_refresh_interval 300_000

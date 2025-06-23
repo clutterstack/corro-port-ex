@@ -427,7 +427,7 @@ defmodule CorroPort.AnalyticsAggregator do
       # Convert to node info format
       nodes = Enum.map(members, fn member ->
         node_id = CorroPort.AckTracker.member_to_node_id(member)
-        region = CorroPort.CorrosionParser.extract_region_from_node_id(node_id)
+        region = CorroPort.CorrosionParserAdapter.extract_region_from_node_id(node_id)
         
         %{
           node_id: node_id,

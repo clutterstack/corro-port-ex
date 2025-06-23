@@ -10,7 +10,7 @@ defmodule CorroPort.RegionExtractor do
   """
   def extract_from_nodes({:ok, nodes}) when is_list(nodes) do
     nodes
-    |> Enum.map(&CorroPort.CorrosionParser.extract_region_from_node_id/1)
+    |> Enum.map(&CorroPort.CorrosionParserAdapter.extract_region_from_node_id/1)
     |> Enum.reject(&(&1 in ["unknown", ""]))
     |> Enum.uniq()
   end
@@ -29,7 +29,7 @@ defmodule CorroPort.RegionExtractor do
         members
         |> Enum.map(&CorroPort.AckTracker.member_to_node_id/1)
         |> Enum.reject(&is_nil/1)
-        |> Enum.map(&CorroPort.CorrosionParser.extract_region_from_node_id/1)
+        |> Enum.map(&CorroPort.CorrosionParserAdapter.extract_region_from_node_id/1)
         |> Enum.reject(&(&1 in ["unknown", ""]))
         |> Enum.uniq()
       
@@ -49,7 +49,7 @@ defmodule CorroPort.RegionExtractor do
   def extract_from_acks(acks) when is_list(acks) do
     acks
     |> Enum.map(& &1.node_id)
-    |> Enum.map(&CorroPort.CorrosionParser.extract_region_from_node_id/1)
+    |> Enum.map(&CorroPort.CorrosionParserAdapter.extract_region_from_node_id/1)
     |> Enum.reject(&(&1 in ["unknown", ""]))
     |> Enum.uniq()
   end
@@ -61,7 +61,7 @@ defmodule CorroPort.RegionExtractor do
   """
   def extract_our_region do
     node_id = CorroPort.NodeConfig.get_corrosion_node_id()
-    region = CorroPort.CorrosionParser.extract_region_from_node_id(node_id)
+    region = CorroPort.CorrosionParserAdapter.extract_region_from_node_id(node_id)
 
     if region in ["unknown", ""], do: "local", else: region
   end

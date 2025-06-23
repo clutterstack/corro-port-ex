@@ -62,7 +62,8 @@ defmodule CorroPort.MixProject do
       {:ecto_sqlite3, "~> 0.18"},
       {:cors_plug, "~> 3.0"},
       {:tidewave, "~> 0.1", only: :dev},
-      {:corro_client, git: "https://github.com/clutterstack/corro_client.git", branch: "main", override: true}
+      {:corro_client, git: "https://github.com/clutterstack/corro_client.git", branch: "main", override: true},
+      {:corro_cli, git: "https://github.com/clutterstack/corro_cli.git", branch: "main", override: true}
     ]
   end
 
