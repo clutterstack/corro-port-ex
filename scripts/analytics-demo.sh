@@ -89,9 +89,9 @@ check_corrosion_agents() {
     for i in $(seq 1 $NODES); do
         local port=$((8080 + i))
         
-        # Use CorrosionClient.test_corro_conn/1 to check agent connectivity
+        # Use CorroClient.test_corro_conn/1 to check agent connectivity
         cat > /tmp/test_corro_conn.exs << EOF
-result = CorroPort.CorrosionClient.test_corro_conn($port)
+result = CorroPort.CorroClient.test_corro_conn($port)
 case result do
   :ok -> 
     IO.puts("✅ Corrosion agent $i (port $port) is running")

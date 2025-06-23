@@ -2,7 +2,7 @@ defmodule CorroPortWeb.NodeLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPort.{NodeConfig, CorrosionClient, ClusterAPI}
+  alias CorroPort.{NodeConfig, ConnectionManager}
   alias CorroPortWeb.NavTabs
 
   def mount(_params, _session, socket) do
@@ -72,7 +72,7 @@ defmodule CorroPortWeb.NodeLive do
   defp perform_local_connectivity_test do
     start_time = System.monotonic_time(:millisecond)
 
-    if CorrosionClient.test_corro_conn() == :ok do
+    if ConnectionManager.test_connection() == :ok do
       end_time = System.monotonic_time(:millisecond)
       response_time = end_time - start_time
 
@@ -105,7 +105,11 @@ defmodule CorroPortWeb.NodeLive do
     node_info = get_node_info()
 
     config_info = get_config_info()
-    db_info = ClusterAPI.get_database_info()
+    conn = ConnectionManager.get_connection()
+    db_info = case CorroClient.get_database_info(conn) do
+      {:ok, info} -> info
+      {:error, _} -> %{}
+    end
     process_info = get_process_info()
     file_info = get_file_info()
     local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
@@ -305,7 +309,7 @@ defmodule CorroPortWeb.NodeLive do
           </.button>
         </:actions>
       </.header>
-      
+
     <!-- Connectivity Test Results -->
       <div :if={@connectivity_test} class="card bg-base-200">
         <div class="card-body">
@@ -340,22 +344,22 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- Loading State -->
       <div :if={@loading} class="flex items-center justify-center py-8">
         <div class="loading loading-spinner loading-lg"></div>
         <span class="ml-4">Loading node information...</span>
       </div>
-      
+
     <!-- Error State -->
       <div :if={@error} class="alert alert-error">
         <.icon name="hero-exclamation-circle" class="w-5 h-5" />
         <span>{@error}</span>
       </div>
-      
+
     <!-- Node Information Cards -->
       <div :if={!@loading} class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
+
     <!-- The Elixir Application -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -386,7 +390,7 @@ defmodule CorroPortWeb.NodeLive do
             </div>
           </div>
         </div>
-        
+
     <!-- Config from Application Environment -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -399,7 +403,7 @@ defmodule CorroPortWeb.NodeLive do
             </div>
           </div>
         </div>
-        
+
     <!-- Corrosion Config File -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -415,7 +419,7 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- Process Information -->
       <div class="card bg-base-100">
         <div class="card-body">
@@ -428,7 +432,7 @@ defmodule CorroPortWeb.NodeLive do
               <div><strong>Memory Usage by :erlang.memory():</strong></div>
               <div>{format_memory(@process_info.memory_usage[:total])}</div>
             </div>
-            
+
     <!-- Supervisor Children -->
             <div :if={@process_info.supervisors != []} class="mt-4">
               <h4 class="font-semibold text-sm mb-2">Supervisor Children:</h4>
@@ -451,7 +455,7 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- Database Information -->
       <div :if={@db_info} class="card bg-base-100">
         <div class="card-body">
@@ -481,7 +485,7 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- File Information -->
       <div :if={@file_info && !@loading} class="card bg-base-100">
         <div class="card-body">
@@ -522,7 +526,7 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- Last Updated -->
       <div :if={@last_updated} class="text-xs text-base-content/70 text-center">
         Last updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}

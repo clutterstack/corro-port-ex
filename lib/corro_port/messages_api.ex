@@ -4,7 +4,7 @@ defmodule CorroPort.MessagesAPI do
   Now includes originating_endpoint and region fields for geographic tracking.
   """
   require Logger
-  alias CorroPort.CorrosionClient
+  alias CorroPort.ConnectionManager
 
   @doc """
   Inserts a new message into the node_messages table with originating endpoint and region.
@@ -31,7 +31,8 @@ defmodule CorroPort.MessagesAPI do
       "Inserting: node_id=#{node_id}, message=#{message}, originating_endpoint=#{originating_endpoint}, region=#{region}"
     )
 
-    case CorrosionClient.execute_transactions([sql]) do
+    conn = ConnectionManager.get_connection()
+    case CorroClient.transaction(conn, [sql]) do
       {:ok, _response} ->
         {:ok,
          %{
@@ -53,7 +54,11 @@ defmodule CorroPort.MessagesAPI do
   """
   def get_node_messages do
     query = "SELECT * FROM node_messages ORDER BY timestamp DESC"
-    CorrosionClient.execute_query(query)
+    conn = ConnectionManager.get_connection()
+    case CorroClient.query(conn, query) do
+      {:ok, results} -> {:ok, results}
+      error -> error
+    end
   end
 
   @doc """
@@ -70,7 +75,11 @@ defmodule CorroPort.MessagesAPI do
     )
     ORDER BY timestamp DESC
     """
-    CorrosionClient.execute_query(query)
+    conn = ConnectionManager.get_connection()
+    case CorroClient.query(conn, query) do
+      {:ok, results} -> {:ok, results}
+      error -> error
+    end
   end
 
   @doc """
@@ -89,7 +98,8 @@ defmodule CorroPort.MessagesAPI do
     ORDER BY region
     """
 
-    case CorrosionClient.execute_query(query) do
+    conn = ConnectionManager.get_connection()
+    case CorroClient.query(conn, query) do
       {:ok, result} ->
         regions =
           result
@@ -108,7 +118,11 @@ defmodule CorroPort.MessagesAPI do
   """
   def get_messages_by_region(region) do
     query = "SELECT * FROM node_messages WHERE region = '#{region}' ORDER BY timestamp DESC"
-    CorrosionClient.execute_query(query)
+    conn = ConnectionManager.get_connection()
+    case CorroClient.query(conn, query) do
+      {:ok, results} -> {:ok, results}
+      error -> error
+    end
   end
 
   # Private functions
@@ -162,7 +176,8 @@ defmodule CorroPort.MessagesAPI do
     WHERE message IN ('8081', '8082', '8083', '8084', '8085')
     """
 
-    case CorrosionClient.execute_transactions([cleanup_sql]) do
+    conn = ConnectionManager.get_connection()
+    case CorroClient.transaction(conn, [cleanup_sql]) do
       {:ok, _} ->
         Logger.info("Cleaned up malformed messages")
         {:ok, :cleaned}

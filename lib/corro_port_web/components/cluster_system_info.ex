@@ -9,7 +9,7 @@ defmodule CorroPort.ClusterSystemInfo do
   use GenServer
   require Logger
 
-  alias CorroPort.{ClusterAPI, MessagesAPI}
+  alias CorroPort.{ConnectionManager, MessagesAPI}
 
   @refresh_interval 60_000  # 1 minute for system info
 
@@ -179,8 +179,14 @@ defmodule CorroPort.ClusterSystemInfo do
 
   defp fetch_all_system_data do
     # Fetch all cluster system data concurrently
-    cluster_task = Task.async(fn -> ClusterAPI.get_cluster_info() end)
-    database_task = Task.async(fn -> ClusterAPI.get_database_info() end)
+    cluster_task = Task.async(fn ->
+      conn = ConnectionManager.get_connection()
+      CorroClient.get_cluster_info(conn)
+    end)
+    database_task = Task.async(fn ->
+      conn = ConnectionManager.get_connection()
+      CorroClient.get_database_info(conn)
+    end)
     messages_task = Task.async(fn -> MessagesAPI.get_latest_node_messages() end)
 
     # Wait for all results with timeout

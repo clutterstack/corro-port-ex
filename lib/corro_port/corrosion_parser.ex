@@ -269,7 +269,7 @@ defmodule CorroPort.CorrosionParser do
   Note: Despite the "NTP64" name, uhlc uses Unix epoch, not NTP epoch.
 
   ## Examples
-      iex> CorroPort.ClusterAPI.format_corrosion_timestamp(7517054269677675168)
+      iex> CorroPort.CorrosionParser.format_corrosion_timestamp(7517054269677675168)
       "2025-06-17 22:49:43 UTC"
   """
   def format_corrosion_timestamp(nil), do: "Never"

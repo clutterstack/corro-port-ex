@@ -5,7 +5,7 @@
 ### 1. **Corrosion Database Cluster**
 - **Source**: Corrosion SQLite-based distributed database nodes
 - **API Access**: HTTP REST API (ports 8081, 8082, 8083+)
-- **Client Module**: `CorroPort.CorrosionClient` (low-level HTTP client)
+- **Client Module**: `CorroPort.CorroClient` (low-level HTTP client)
 - **High-level Interface**: `CorroPort.ClusterAPI`
 - **Data Types**: 
   - Cluster member information (`__corro_members` table)

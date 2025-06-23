@@ -101,7 +101,7 @@ CorroPort is an Elixir Phoenix application that provides a web interface for mon
 - `CorroPort.CLIMemberStore` - CLI member data caching
 
 **API Layer**
-- `CorroPort.CorrosionClient` - Low-level HTTP client for Corrosion API
+- `CorroPort.CorroClient` - Low-level HTTP client for Corrosion API
 - `CorroPort.ClusterAPI` - High-level cluster information queries
 
 **Web Layer**
@@ -146,7 +146,7 @@ The application is designed for multi-node cluster testing:
 
 - `lib/corro_port/application.ex` - Application supervision tree
 - `lib/corro_port_web/live/cluster_live.ex` - Main monitoring interface
-- `lib/corro_port/corrosion_client.ex` - Database client implementation
+- `lib/corro_port/corro_client.ex` - Database client implementation
 - `lib/corro_port/cluster_api.ex` - High-level cluster queries
 - `scripts/dev-cluster.sh` - Multi-node development setup
 
@@ -157,3 +157,6 @@ The application is designed for multi-node cluster testing:
 - All HTTP clients use configurable timeouts and retry logic
 - The application can run in single-node mode but is optimized for clusters
 
+## Development Guidelines
+
+- Use Tidewave tools if possible before resorting to unix tools

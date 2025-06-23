@@ -53,3 +53,7 @@ overmind-*
 !/rel/env.sh.eex
 .DS_Store
 
+
+CLAUDE.md 
+
+

@@ -22,7 +22,7 @@ defmodule CorroPortWeb.ClusterLive do
         page_title: "Cluster Status",
         local_node_id: local_node_id,
         phoenix_port: phoenix_port,
-        corro_api_port: CorroPort.CorrosionClient.get_corro_api_port(),
+        corro_api_port: CorroPort.ConnectionManager.get_corro_api_port(),
 
         # Data from clean domain modules
         expected_data: nil,
