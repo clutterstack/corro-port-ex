@@ -3,12 +3,13 @@ defmodule CorroPortWeb.NodeLive do
   require Logger
 
   alias CorroPort.{NodeConfig, ConnectionManager}
-  alias CorroPortWeb.NavTabs
+  alias CorroPortWeb.{NavTabs, MembersTable}
 
   def mount(_params, _session, socket) do
     if connected?(socket) do
       # Subscribe to any relevant updates
       Phoenix.PubSub.subscribe(CorroPort.PubSub, "node_updates")
+      Phoenix.PubSub.subscribe(CorroPort.PubSub, "cluster_system_info")
     end
 
     socket =
@@ -23,7 +24,8 @@ defmodule CorroPortWeb.NodeLive do
         connectivity_test: nil,
         error: nil,
         loading: true,
-        last_updated: nil
+        last_updated: nil,
+        system_data: %{cluster_info: %{}}
       })
 
     {:ok, fetch_node_data(socket)}
@@ -65,6 +67,10 @@ defmodule CorroPortWeb.NodeLive do
         socket = put_flash(socket, :error, "Failed to read config: #{inspect(reason)}")
         {:noreply, socket}
     end
+  end
+
+  def handle_info({:system_data_update, system_data}, socket) do
+    {:noreply, assign(socket, :system_data, system_data)}
   end
 
   # Private functions
@@ -113,6 +119,7 @@ defmodule CorroPortWeb.NodeLive do
     process_info = get_process_info()
     file_info = get_file_info()
     local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
+    system_data = CorroPort.ClusterSystemInfo.get_system_data()
 
     socket
     |> assign(%{
@@ -124,7 +131,8 @@ defmodule CorroPortWeb.NodeLive do
       file_info: file_info,
       loading: false,
       last_updated: DateTime.utc_now(),
-      error: nil
+      error: nil,
+      system_data: system_data
     })
   end
 
@@ -483,6 +491,14 @@ defmodule CorroPortWeb.NodeLive do
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+    <!-- Cluster Members from local __corro_members table -->
+      <div :if={@system_data.cluster_info != %{}} class="card bg-base-100">
+        <div class="card-body">
+          <h3 class="card-title text-lg">Cluster Members (from local __corro_members table)</h3>
+          <MembersTable.cluster_members_table cluster_info={@system_data.cluster_info} />
         </div>
       </div>
 

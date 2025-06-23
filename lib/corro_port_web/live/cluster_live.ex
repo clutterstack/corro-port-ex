@@ -2,7 +2,7 @@ defmodule CorroPortWeb.ClusterLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPortWeb.{MembersTable, DebugSection, NavTabs, CLIMembersTable}
+  alias CorroPortWeb.{DebugSection, NavTabs, CLIMembersTable}
   alias CorroPortWeb.DisplayHelpers
   alias CorroPort.NodeConfig
 
@@ -229,8 +229,6 @@ defmodule CorroPortWeb.ClusterLive do
         cli_error={@cli_error}
       />
 
-      <!-- System Members Table using clean data -->
-      <MembersTable.cluster_members_table cluster_info={@system_data.cluster_info} />
 
       <!-- Enhanced Cluster Summary using pre-computed stats -->
       <.cluster_summary
