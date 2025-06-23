@@ -76,10 +76,12 @@ defmodule CorroPortWeb.IndexLive do
     Logger.debug("IndexLive: Received expected nodes update")
 
     new_expected_regions = exclude_our_region(expected_data.regions, socket.assigns.local_node.region)
+    region_groups = create_region_groups(expected_data, socket.assigns.active_data, socket.assigns.ack_data, socket.assigns.local_node)
 
     socket = assign(socket, %{
       expected_data: expected_data,
-      expected_regions: new_expected_regions
+      expected_regions: new_expected_regions,
+      region_groups: region_groups
     })
 
     {:noreply, socket}
@@ -89,10 +91,12 @@ defmodule CorroPortWeb.IndexLive do
     Logger.debug("IndexLive: Received active members update")
 
     new_active_regions = exclude_our_region(active_data.regions, socket.assigns.local_node.region)
+    region_groups = create_region_groups(socket.assigns.expected_data, active_data, socket.assigns.ack_data, socket.assigns.local_node)
 
     socket = assign(socket, %{
       active_data: active_data,
-      active_regions: new_active_regions
+      active_regions: new_active_regions,
+      region_groups: region_groups
     })
 
     {:noreply, socket}
@@ -101,9 +105,12 @@ defmodule CorroPortWeb.IndexLive do
   def handle_info({:ack_status_updated, ack_data}, socket) do
     Logger.debug("IndexLive: Received ack status update")
 
+    region_groups = create_region_groups(socket.assigns.expected_data, socket.assigns.active_data, ack_data, socket.assigns.local_node)
+
     socket = assign(socket, %{
       ack_data: ack_data,
-      ack_regions: ack_data.regions
+      ack_regions: ack_data.regions,
+      region_groups: region_groups
     })
 
     {:noreply, socket}
@@ -117,6 +124,8 @@ defmodule CorroPortWeb.IndexLive do
     active_data = CorroPort.CLIMemberStore.get_active_data()
     ack_data = CorroPort.MessagePropagation.get_ack_data()
     local_node = CorroPort.LocalNode.get_info()
+
+    region_groups = create_region_groups(expected_data, active_data, ack_data, local_node)
 
     assign(socket, %{
       page_title: "Geographic Distribution",
@@ -132,6 +141,9 @@ defmodule CorroPortWeb.IndexLive do
       active_regions: exclude_our_region(active_data.regions, local_node.region),
       ack_regions: ack_data.regions,
       our_regions: [local_node.region],
+
+      # Region groups for FlyMapEx
+      region_groups: region_groups,
 
       last_updated: DateTime.utc_now()
     })
@@ -153,6 +165,44 @@ defmodule CorroPortWeb.IndexLive do
     end
   end
 
+  defp create_region_groups(expected_data, active_data, ack_data, local_node) do
+    # Build region groups for the new FlyMapEx API
+    groups = []
+
+    # Our region (primary/local node)
+    groups = if local_node.region != "unknown" do
+      [%{regions: [local_node.region], style_key: :primary, label: "Our Node"} | groups]
+    else
+      groups
+    end
+
+    # Active regions (excluding our region)
+    active_regions = exclude_our_region(active_data.regions, local_node.region)
+    groups = if !Enum.empty?(active_regions) do
+      [%{regions: active_regions, style_key: :active, label: "Active Regions"} | groups]
+    else
+      groups
+    end
+
+    # Expected regions (excluding our region) 
+    expected_regions = exclude_our_region(expected_data.regions, local_node.region)
+    groups = if !Enum.empty?(expected_regions) do
+      [%{regions: expected_regions, style_key: :expected, label: "Expected Regions"} | groups]
+    else
+      groups
+    end
+
+    # Acknowledged regions (includes all that acknowledged, including our region)
+    groups = if !Enum.empty?(ack_data.regions) do
+      [%{regions: ack_data.regions, style_key: :acknowledged, label: "Acknowledged Messages"} | groups]
+    else
+      groups
+    end
+
+    # Return groups in reverse order (since we prepended)
+    Enum.reverse(groups)
+  end
+
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
@@ -172,26 +222,19 @@ defmodule CorroPortWeb.IndexLive do
       />
 
       <!-- Enhanced World Map with Regions -->
-      <div class="card bg-base-100">
-        <div class="card-body">
-          <div class="rounded-lg border">
-            <CorroPortWeb.WorldMap.world_map_svg
-              regions={@active_regions}
-              our_regions={@our_regions}
-              expected_regions={@expected_regions}
-              ack_regions={@ack_regions}
-            />
-          </div>
+      <FlyMapEx.render
+        region_groups={@region_groups}
+        theme={:monitoring}
+        show_progress={true}
+      />
 
-          <!-- Progress and Legend -->
-          <PropagationProgress.propagation_progress
-            expected_regions={@expected_regions}
-            active_regions={@active_regions}
-            ack_regions={@ack_regions}
-            our_regions={@our_regions}
-          />
-        </div>
-      </div>
+      <!-- Legacy Progress Component (keeping for now) -->
+      <PropagationProgress.propagation_progress
+        expected_regions={@expected_regions}
+        active_regions={@active_regions}
+        ack_regions={@ack_regions}
+        our_regions={@our_regions}
+      />
 
       <!-- Summary Stats -->
       <PropagationStats.propagation_stats

@@ -157,6 +157,36 @@ The application is designed for multi-node cluster testing:
 - All HTTP clients use configurable timeouts and retry logic
 - The application can run in single-node mode but is optimized for clusters
 
+## LiveView Module Responsibilities
+
+**IMPORTANT**: Do not confuse these two main LiveView modules:
+
+### IndexLive (`/` route)
+- **Purpose**: Message propagation testing and geographic visualization
+- **Key Features**: 
+  - "Send Message" button for testing database change propagation
+  - "Reset Tracking" functionality
+  - Real-time acknowledgment tracking with colored map regions
+  - MessagePropagation subscription and interaction
+- **URL**: `http://localhost:4001/` (root)
+- **Nav Tab**: "Geographic Distribution" (propagation)
+
+### ClusterLive (`/cluster` route)  
+- **Purpose**: Comprehensive cluster health monitoring and node connectivity
+- **Key Features**:
+  - Cluster summary statistics (Expected/Active nodes)
+  - System health monitoring (API health, message counts)
+  - CLI member tables and debugging information
+- **URL**: `http://localhost:4001/cluster`
+- **Nav Tab**: "Cluster Status"
+
+### Quick Reference
+- **For message propagation features** → IndexLive
+- **For cluster monitoring features** → ClusterLive
+- **When in doubt**, check the router.ex routes and page_title assigns
+
+This distinction is critical since both modules handle similar data sources but serve different user workflows.
+
 ## Development Guidelines
 
 - Use Tidewave tools if possible before resorting to unix tools
