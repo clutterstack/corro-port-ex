@@ -10,7 +10,7 @@ defmodule CorroPortWeb.MembersTable do
       <div class="card-body">
         <h3 class="card-title"><pre>__corro_members</pre> table entries</h3>
 
-        <div :if={@cluster_info && Map.get(@cluster_info, "members", []) != []} class="overflow-x-auto">
+        <div :if={@cluster_info && Map.get(@cluster_info, :members, []) != []} class="overflow-x-auto">
           <table class="table table-zebra">
             <thead>
               <tr>
@@ -22,7 +22,7 @@ defmodule CorroPortWeb.MembersTable do
               </tr>
             </thead>
             <tbody>
-              <tr :for={member <- Map.get(@cluster_info || %{}, "members", [])}>
+              <tr :for={member <- Map.get(@cluster_info || %{}, :members, [])}>
                 <.cluster_member_row member={member} />
               </tr>
             </tbody>
@@ -32,8 +32,8 @@ defmodule CorroPortWeb.MembersTable do
         <.tracked_peers_section cluster_info={@cluster_info} />
 
         <div :if={
-          Map.get(@cluster_info || %{}, "members", []) == [] &&
-            Map.get(@cluster_info || %{}, "tracked_peers", []) == []
+          Map.get(@cluster_info || %{}, :members, []) == [] &&
+            Map.get(@cluster_info || %{}, :tracked_peers, []) == []
         }>
           <p class="text-base-content/70">
             No cluster members or peers found. This might be a single-node setup or the cluster is still forming.
@@ -79,7 +79,7 @@ defmodule CorroPortWeb.MembersTable do
 
   def tracked_peers_section(assigns) do
     ~H"""
-    <div :if={@cluster_info && Map.get(@cluster_info, "tracked_peers", []) != []} class="mt-6">
+    <div :if={@cluster_info && Map.get(@cluster_info, :tracked_peers, []) != []} class="mt-6">
       <h4 class="font-semibold mb-2">Tracked Peers</h4>
       <div class="overflow-x-auto">
         <table class="table table-zebra">
@@ -90,7 +90,7 @@ defmodule CorroPortWeb.MembersTable do
             </tr>
           </thead>
           <tbody>
-            <tr :for={peer <- Map.get(@cluster_info || %{}, "tracked_peers", [])}>
+            <tr :for={peer <- Map.get(@cluster_info || %{}, :tracked_peers, [])}>
               <td class="font-mono text-sm">
                 {inspect(peer) |> String.slice(0, 50)}...
               </td>
