@@ -1,7 +1,3 @@
-==> corro_cli
-Compiling 4 files (.ex)
-Generated corro_cli app
-==> corro_port
     warning: module attribute @cpu_sample_interval_ms was set but never used
     │
  20 │   @cpu_sample_interval_ms 1_000  # CPU sampling interval
@@ -91,7 +87,6 @@ Generated corro_cli app
     │
     └─ lib/corro_port_web/live/analytics_live.ex:18:3
 
-Generated corro_port app
 [info] AckTracker starting...
 [info] AckTracker ETS table created: ack_tracker
 [info] CorroSubscriber: Starting subscription
@@ -111,62 +106,72 @@ Generated corro_port app
 [info] Access CorroPortWeb.APIEndpoint at http://localhost:5002
 [watch] build finished, watching for changes...
 /*! 🌼 daisyUI 5.0.8 */
-[0mWaiting for lock on the build directory (held by process 43581)
 ≈ tailwindcss v4.0.9
 
-Done in 90ms
-[debug] CLIMemberStore: Starting CLI fetch task
+Done in 84ms
 [info] NodeDiscovery: Performing initial DNS fetch
+[debug] CLIMemberStore: Starting CLI fetch task
 [debug] NodeDiscovery: Not in Fly.io environment, using development fallback
 [debug] NodeDiscovery: Using development fallback
-[debug] CorroCLI: command corrosion/corrosion-mac cluster members --config corrosion/config-node2.toml
-[info] NodeDiscovery: Successfully fetched 2 expected nodes
 [debug] ClusterSystemInfo: Starting fetch task
 [info] CorroClient.Subscriber: Starting subscription stream to http://127.0.0.1:8082/v1/subscriptions
+[info] NodeDiscovery: Successfully fetched 2 expected nodes
+[debug] CorroCLI: command corrosion/corrosion-mac cluster members --config corrosion/config-node2.toml
 [debug] CLIMemberStore: CLI fetch completed successfully
 [info] CLIMemberStore: Parsed 2 cluster members
 [debug] CLIMemberStore: Broadcasted update - 2 members, status: ok
 [debug] CLIMemberStore: Broadcasted active update - 1 regions, status: ok
-[info] CorroClient.Subscriber: Connected with watch_id: 554b3b40-d2d1-4640-beb3-229c3a861db4
-[info] CorroSubscriber: Connected with watch_id: 554b3b40-d2d1-4640-beb3-229c3a861db4
-[debug] Found 3 total members, 2 active
+[info] CorroClient.Subscriber: Connected with watch_id: e8acc5f4-5b1a-403d-a920-d92c9be178b0
+[info] CorroSubscriber: Connected with watch_id: e8acc5f4-5b1a-403d-a920-d92c9be178b0
+[debug] Found 2 total members, 2 active
 [debug] ClusterSystemInfo: Fetch task completed
-[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: true, messages: 3
+[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: true, messages: 0
 [info] CorroClient.Subscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
 [info] CorroSubscriber: Got column names: ["pk", "node_id", "message", "sequence", "timestamp", "originating_endpoint", "region"]
 [info] CorroClient.Subscriber: End of initial query - subscription is now live
 [info] CorroSubscriber: End of initial query - subscription is now live
 [debug] Live reload: priv/static/assets/js/app.js
-[info] GET /messages
-[debug] Processing with CorroPortWeb.MessagesLive.__live__/0
+[info] GET /node
+[debug] Processing with CorroPortWeb.NodeLive.__live__/0
   Parameters: %{}
   Pipelines: [:browser]
-[debug] MessagesLive: Fetched 96 total messages
-[debug] AckTracker: Found 0 acknowledgments from []
-[info] Sent 200 in 44ms
+[info] NodeLive: Fetching comprehensive node data...
+[info] Sent 200 in 66ms
+[debug] Live reload: priv/static/assets/js/app.js
 [info] CONNECTED TO Phoenix.LiveView.Socket in 16µs
   Transport: :longpoll
   Serializer: Phoenix.Socket.V2.JSONSerializer
-  Parameters: %{"_csrf_token" => "DSAaNjlFPQA1IBo6IyY8HnMnWWMAAhgJwYczSrIQdPrMOkxyEh6VDDbM", "_live_referer" => "undefined", "_mount_attempts" => "0", "_mounts" => "0", "_track_static" => %{"0" => "http://localhost:4002/assets/css/app.css", "1" => "http://localhost:4002/assets/js/app.js"}, "vsn" => "2.0.0"}
-[debug] Live reload: priv/static/assets/js/app.js
-[info] CONNECTED TO Phoenix.LiveView.Socket in 15µs
-  Transport: :longpoll
-  Serializer: Phoenix.Socket.V2.JSONSerializer
-  Parameters: %{"_csrf_token" => "PTFNGgF9ET4JJSobJiwdBXcuFXk-MgkxGH4VkJeoXUBlJaYbAazLztsu", "_live_referer" => "undefined", "_mount_attempts" => "0", "_mounts" => "0", "_track_static" => %{"0" => "http://localhost:4002/assets/css/app.css", "1" => "http://localhost:4002/assets/js/app.js"}, "vsn" => "2.0.0"}
-[info] GET /messages
-[debug] Processing with CorroPortWeb.MessagesLive.__live__/0
+  Parameters: %{"_csrf_token" => "OwgYezVHQBM6STciPwN0XloGOHN9FhQqAqa7_p4Bk9_USN09lIWF9Pnn", "_live_referer" => "undefined", "_mount_attempts" => "0", "_mounts" => "0", "_track_static" => %{"0" => "http://localhost:4002/assets/css/app.css", "1" => "http://localhost:4002/assets/js/app.js"}, "vsn" => "2.0.0"}
+[0mWaiting for lock on the build directory (held by process 45165)
+[info] GET /node
+[debug] Processing with CorroPortWeb.NodeLive.__live__/0
   Parameters: %{}
   Pipelines: [:browser]
-[debug] MessagesLive: Fetched 96 total messages
-[debug] AckTracker: Found 0 acknowledgments from []
+[info] NodeLive: Fetching comprehensive node data...
 [info] Sent 200 in 5ms
-[info] CONNECTED TO Phoenix.LiveView.Socket in 18µs
+[0mWaiting for lock on the build directory (held by process 45165)
+[info] CONNECTED TO Phoenix.LiveView.Socket in 14µs
   Transport: :longpoll
   Serializer: Phoenix.Socket.V2.JSONSerializer
-  Parameters: %{"_csrf_token" => "D0swAFpaPQEAQgtHLg4WV1o5WAIbAAkou2IL0mIPQ2c0BCR0lv77_Fsl", "_live_referer" => "undefined", "_mount_attempts" => "0", "_mounts" => "0", "_track_static" => %{"0" => "http://localhost:4002/assets/css/app.css", "1" => "http://localhost:4002/assets/js/app.js"}, "vsn" => "2.0.0"}
-[debug] MOUNT CorroPortWeb.MessagesLive
+  Parameters: %{"_csrf_token" => "CzMvPDJ8PSIeIAkbVQUqN04MB2csMx13qJVpXKIsOPal9HnPxChRhug3", "_live_referer" => "undefined", "_mount_attempts" => "0", "_mounts" => "0", "_track_static" => %{"0" => "http://localhost:4002/assets/css/app.css", "1" => "http://localhost:4002/assets/js/app.js"}, "vsn" => "2.0.0"}
+[debug] MOUNT CorroPortWeb.NodeLive
   Parameters: %{}
   Session: %{"_csrf_token" => "zyyLj7tQQphwlMDg6Oo5DFzD"}
-[debug] MessagesLive: Fetched 96 total messages
-[debug] AckTracker: Found 0 acknowledgments from []
-[debug] Replied in 2ms
+[info] NodeLive: Fetching comprehensive node data...
+[debug] Replied in 4ms
+[info] AckSender: 🤝 Sending acknowledgment for INSERT from dev-node1
+[debug] AckSender: Sending POST to http://127.0.0.1:5001/api/acknowledge with payload: %{"ack_node_id" => "dev-node2", "message_pk" => "dev-node1_1750693520207", "message_timestamp" => "2025-06-23T15:45:20.207840Z"}
+[info] AckSender: ✅ Successfully sent acknowledgment to 127.0.0.1:5001
+[debug] AckSender: Response: %{"ack_node_id" => "dev-node2", "message" => "Acknowledgment recorded", "message_pk" => "dev-node1_1750693520207", "status" => "acknowledged"}
+[debug] ClusterSystemInfo: Starting fetch task
+[debug] Found 2 total members, 2 active
+[debug] ClusterSystemInfo: Fetch task completed
+[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: true, messages: 1
+[0mWaiting for lock on the build directory (held by process 45165)
+[0mWaiting for lock on the build directory (held by process 45165)
+[0mWaiting for lock on the build directory (held by process 45165)
+[0mWaiting for lock on the build directory (held by process 45165)
+[debug] ClusterSystemInfo: Starting fetch task
+[debug] Found 2 total members, 2 active
+[debug] ClusterSystemInfo: Fetch task completed
+[debug] ClusterSystemInfo: Broadcasted update - cluster_info: true, database_info: true, messages: 1

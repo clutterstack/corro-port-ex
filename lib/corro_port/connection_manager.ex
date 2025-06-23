@@ -46,7 +46,7 @@ defmodule CorroPort.ConnectionManager do
     base_url = "http://127.0.0.1:#{api_port}"
     
     CorroClient.connect(base_url,
-      receive_timeout: 30_000,  # 30 seconds for subscription setup
+      receive_timeout: :infinity,  # Infinite timeout for long-running subscriptions
       headers: [{"content-type", "application/json"}]
     )
   end
