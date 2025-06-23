@@ -60,4 +60,5 @@ analytics/**
 
 logs/**
 
-lib/fly_map*/**
+lib/fly_map_ex/**
+lib/fly_map.ex
