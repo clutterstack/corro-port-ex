@@ -36,7 +36,7 @@ defmodule CorroPort.MixProject do
       {:phoenix, "~> 1.8.0-rc.3", override: true},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
-      {:phoenix_live_view, "~> 1.0.9"},
+      {:phoenix_live_view, "~> 1.0.17"},
       {:floki, ">= 0.30.0", only: :test},
       {:phoenix_live_dashboard, "~> 0.8.3"},
       {:esbuild, "~> 0.9", runtime: Mix.env() == :dev},
@@ -63,7 +63,8 @@ defmodule CorroPort.MixProject do
       {:cors_plug, "~> 3.0"},
       {:tidewave, "~> 0.1", only: :dev},
       {:corro_client, git: "https://github.com/clutterstack/corro_client.git", branch: "main", override: true},
-      {:corro_cli, git: "https://github.com/clutterstack/corro_cli.git", branch: "main", override: true}
+      {:corro_cli, git: "https://github.com/clutterstack/corro_cli.git", branch: "main", override: true},
+      {:fly_map_ex, git: "https://github.com/clutterstack/fly_map_ex.git", branch: "main", override: true}
     ]
   end
 

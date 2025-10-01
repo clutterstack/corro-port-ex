@@ -14,22 +14,49 @@ mix assets.build
 ```
 
 ### Running the Application
+
+**IMPORTANT**: CorroPort requires Corrosion database agents to be running before starting Phoenix nodes.
+
+#### Quick Start - Local Cluster Development
 ```bash
-# Start single node for development
-./scripts/dev-start.sh
-# Or with specific node ID
+# 1. Start corrosion agents (database layer)
+./scripts/corrosion-start.sh 3
+
+# 2. Start Phoenix cluster (application layer)
+./scripts/dev-cluster-iex.sh --verbose 3
+
+# When done, stop everything:
+# Ctrl-C to stop Phoenix cluster
+./scripts/corrosion-stop.sh
+```
+
+#### Corrosion Agent Management
+```bash
+# Start N corrosion agents in background
+./scripts/corrosion-start.sh           # Default: 3 agents
+./scripts/corrosion-start.sh 5         # Start 5 agents
+./scripts/corrosion-start.sh --verbose # Start with log locations
+
+# Stop all corrosion agents
+./scripts/corrosion-stop.sh
+
+# View agent logs
+tail -f logs/corrosion-node1.log
+tail -f logs/corrosion-node2.log
+```
+
+#### Phoenix Application Startup
+```bash
+# Single node (after starting corrosion agent)
 NODE_ID=1 ./scripts/dev-start.sh
 
-# Start 3-node cluster (recommended for testing)
-./scripts/dev-cluster.sh
-# Or custom number of nodes
-./scripts/dev-cluster.sh --nodes 5
+# Multi-node cluster with iex (interactive on node 1)
+./scripts/dev-cluster-iex.sh 3
+./scripts/dev-cluster-iex.sh --verbose 3    # With background node logs
 
-# Alternative Mix tasks
+# Alternative Mix tasks (legacy, may need updates)
 mix cluster.start
 mix cluster.start --nodes 5
-
-# Stop cluster
 mix cluster.stop
 ```
 
@@ -85,6 +112,26 @@ curl http://localhost:4001/api/analytics/experiments/test_exp/summary | jq
 ## Architecture Overview
 
 CorroPort is an Elixir Phoenix application that provides a web interface for monitoring and interacting with Corrosion database clusters. Corrosion is a SQLite-based distributed database.
+
+### Two-Layer Architecture
+
+The system runs as **two independent layers** that must both be running:
+
+1. **Corrosion Layer** (Database/Storage)
+   - Runs as separate `corrosion agent` processes
+   - Handles data replication, gossip protocol, and SQLite storage
+   - Exposes HTTP API on ports 8081, 8082, 8083, etc.
+   - Exposes QUIC gossip on ports 8787, 8788, 8789, etc.
+   - Started with: `./scripts/corrosion-start.sh`
+
+2. **CorroPort Layer** (Phoenix/Web UI)
+   - Elixir/Phoenix application nodes
+   - Connects to Corrosion agents via HTTP API
+   - Provides web interface and real-time monitoring
+   - Runs on ports 4001, 4002, 4003, etc.
+   - Started with: `./scripts/dev-cluster-iex.sh`
+
+**Key Point**: Corrosion agents must be running **before** starting Phoenix nodes. Phoenix will fail to start if it cannot connect to its Corrosion agent.
 
 ### Core Components
 

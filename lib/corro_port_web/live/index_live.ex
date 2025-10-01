@@ -6,7 +6,6 @@ defmodule CorroPortWeb.IndexLive do
     NavTabs,
     PropagationHeader,
     ErrorAlerts,
-    PropagationProgress,
     PropagationStats,
     CacheStatus
   }
@@ -203,6 +202,23 @@ defmodule CorroPortWeb.IndexLive do
     Enum.reverse(groups)
   end
 
+  defp format_regions_display(regions, empty_message) do
+    filtered_regions = Enum.reject(regions, &(&1 == "" or &1 == "unknown"))
+
+    if filtered_regions != [] do
+      " (#{Enum.join(filtered_regions, ", ")})"
+    else
+      " #{empty_message}"
+    end
+  end
+
+  defp dns_empty_message do
+    case Application.get_env(:corro_port, :node_config)[:environment] do
+      :prod -> "(none found)"
+      _ -> "(none; no DNS in dev)"
+    end
+  end
+
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
@@ -228,13 +244,25 @@ defmodule CorroPortWeb.IndexLive do
         show_progress={true}
       />
 
-      <!-- Legacy Progress Component (keeping for now) -->
-      <PropagationProgress.propagation_progress
-        expected_regions={@expected_regions}
-        active_regions={@active_regions}
-        ack_regions={@ack_regions}
-        our_regions={@our_regions}
-      />
+      <!-- Region Legend -->
+      <div class="text-sm text-base-content/70 space-y-2">
+        <div class="flex items-center">
+          <span class="inline-block w-3 h-3 rounded-full mr-2 bg-blue-400"></span>
+          Our node {@our_regions |> format_regions_display("(region unknown)")}
+        </div>
+        <div class="flex items-center">
+          <span class="inline-block w-3 h-3 rounded-full mr-2 bg-yellow-400"></span>
+          Active nodes (CLI) {@active_regions |> format_regions_display("(none found)")}
+        </div>
+        <div class="flex items-center">
+          <span class="inline-block w-3 h-3 rounded-full mr-2 bg-orange-500"></span>
+          Nodes from DNS {@expected_regions |> format_regions_display(dns_empty_message())}
+        </div>
+        <div class="flex items-center">
+          <span class="inline-block w-3 h-3 rounded-full mr-2 bg-purple-500"></span>
+          Acknowledged latest message {@ack_regions |> format_regions_display("(none yet)")}
+        </div>
+      </div>
 
       <!-- Summary Stats -->
       <PropagationStats.propagation_stats
