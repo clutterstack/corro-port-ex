@@ -102,18 +102,10 @@ defmodule CorroPortWeb.AckStatusCard do
           <span class="ml-2 text-sm">Loading acknowledgment status...</span>
         </div>
         
-    <!-- AckSender Stats -->
-        <div :if={@ack_sender_status} class="mt-4 pt-3 border-t border-base-300">
-          <div class="text-xs font-semibold mb-2">AckSender Stats:</div>
-          <div class="grid grid-cols-2 gap-2 text-xs">
-            <div>
-              <span class="text-base-content/70">Acks sent:</span>
-              {@ack_sender_status.acknowledgments_sent || 0}
-            </div>
-            <div>
-              <span class="text-base-content/70">Messages processed:</span>
-              {@ack_sender_status.total_messages_processed || 0}
-            </div>
+    <!-- AckSender Status -->
+        <div :if={@ack_sender_status && @ack_sender_status.status == :running} class="mt-4 pt-3 border-t border-base-300">
+          <div class="text-xs text-base-content/70">
+            <span class="text-success">●</span> AckSender running
           </div>
         </div>
       </div>

@@ -134,11 +134,7 @@ defmodule CorroPort.AckDiagnostics do
     end)
 
     ack_sender_status = AckSender.get_status()
-    IO.puts("\nAckSender Status:")
-
-    Enum.each(ack_sender_status, fn {key, value} ->
-      IO.puts("  ℹ️  #{key}: #{value}")
-    end)
+    IO.puts("\nAckSender Status: #{inspect(ack_sender_status)}")
 
     IO.puts("")
   end

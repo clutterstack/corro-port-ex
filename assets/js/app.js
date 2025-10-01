@@ -23,11 +23,11 @@ import "phoenix_html"
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import topbar from "../vendor/topbar"
+import { createRealTimeMapHook } from '../vendor/fly_map_ex/js/real_time_map_hook.js'
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 
-
-let Hooks = {}
+let Hooks = { RealTimeMap: createRealTimeMapHook(Socket) }
 
 Hooks.RegionMap = {
   mounted() {
