@@ -2,7 +2,7 @@ defmodule CorroPortWeb.MessagesLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPort.{MessagesAPI, MessagePropagation, NodeConfig, AckTracker, AckSender}
+  alias CorroPort.{MessagesAPI, NodeConfig, AckTracker, AckSender}
   alias CorroPortWeb.{AllMessagesTable, AckStatusCard, NavTabs}
 
   def mount(_params, _session, socket) do
@@ -86,10 +86,7 @@ defmodule CorroPortWeb.MessagesLive do
 
   # Event handlers
   def handle_event("send_message", _params, socket) do
-    node_id = NodeConfig.get_corrosion_node_id()
-    message_content = "Hello from #{node_id} at #{DateTime.utc_now() |> DateTime.to_iso8601()}"
-    
-    case MessagePropagation.send_message(message_content) do
+    case MessagesAPI.send_and_track_message("Hello from messaging page") do
       {:ok, message_data} ->
         Logger.debug("MessagesLive: ✅ Message sent successfully: #{inspect(message_data)}")
 
@@ -97,7 +94,7 @@ defmodule CorroPortWeb.MessagesLive do
         {:noreply, socket}
 
       {:error, error} ->
-        socket = put_flash(socket, :error, "Failed to send message: #{error}")
+        socket = put_flash(socket, :error, "Failed to send message: #{inspect(error)}")
         {:noreply, socket}
     end
   end

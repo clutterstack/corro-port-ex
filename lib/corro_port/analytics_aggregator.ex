@@ -121,11 +121,9 @@ defmodule CorroPort.AnalyticsAggregator do
       Process.cancel_timer(state.timer_ref)
     end
 
-    # Set experiment ID in SystemMetrics so message operations get recorded
+    # Set experiment ID in SystemMetrics and AckTracker so message operations get recorded
     CorroPort.SystemMetrics.set_experiment_id(experiment_id)
-
-    # Also set in MessagePropagation for consistency
-    CorroPort.MessagePropagation.set_experiment_id(experiment_id)
+    CorroPort.AckTracker.set_experiment_id(experiment_id)
 
     # Start periodic collection
     timer_ref = Process.send_after(self(), :collect_data, 1000)  # Start quickly
@@ -152,11 +150,9 @@ defmodule CorroPort.AnalyticsAggregator do
       Process.cancel_timer(state.timer_ref)
     end
 
-    # Clear experiment ID from SystemMetrics
+    # Clear experiment ID from SystemMetrics and AckTracker
     CorroPort.SystemMetrics.set_experiment_id(nil)
-
-    # Also clear from MessagePropagation
-    CorroPort.MessagePropagation.set_experiment_id(nil)
+    CorroPort.AckTracker.set_experiment_id(nil)
 
     new_state = %{state |
       aggregating: false,

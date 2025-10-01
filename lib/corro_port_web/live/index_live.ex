@@ -15,7 +15,8 @@ defmodule CorroPortWeb.IndexLive do
       # Subscribe to the clean domain modules
       CorroPort.NodeDiscovery.subscribe()
       CorroPort.CLIMemberStore.subscribe_active()
-      CorroPort.MessagePropagation.subscribe()
+      # Subscribe directly to AckTracker for acknowledgment updates
+      Phoenix.PubSub.subscribe(CorroPort.PubSub, "ack_events")
     end
 
     socket = fetch_all_data(socket)
@@ -34,7 +35,7 @@ defmodule CorroPortWeb.IndexLive do
   end
 
   def handle_event("send_message", _params, socket) do
-    case CorroPort.MessagePropagation.send_message("Test propagation message") do
+    case CorroPort.MessagesAPI.send_and_track_message("Test propagation message") do
       {:ok, _message_data} ->
         socket =
           socket
@@ -48,7 +49,7 @@ defmodule CorroPortWeb.IndexLive do
   end
 
   def handle_event("reset_tracking", _params, socket) do
-    case CorroPort.MessagePropagation.reset_tracking() do
+    case CorroPort.AckTracker.reset_tracking() do
       :ok ->
         Logger.info("IndexLive: ✅ Message tracking reset successfully")
 
@@ -101,7 +102,7 @@ defmodule CorroPortWeb.IndexLive do
     {:noreply, socket}
   end
 
-  def handle_info({:ack_status_updated, ack_data}, socket) do
+  def handle_info({:ack_update, ack_data}, socket) do
     Logger.debug("IndexLive: Received ack status update")
 
     marker_groups = create_region_groups(socket.assigns.expected_data, socket.assigns.active_data, ack_data, socket.assigns.local_node)
@@ -121,7 +122,7 @@ defmodule CorroPortWeb.IndexLive do
     # Fetch from clean domain modules - explicit success/error handling
     expected_data = CorroPort.NodeDiscovery.get_expected_data()
     active_data = CorroPort.CLIMemberStore.get_active_data()
-    ack_data = CorroPort.MessagePropagation.get_ack_data()
+    ack_data = CorroPort.AckTracker.get_status()
     local_node = CorroPort.LocalNode.get_info()
 
     marker_groups = create_region_groups(expected_data, active_data, ack_data, local_node)

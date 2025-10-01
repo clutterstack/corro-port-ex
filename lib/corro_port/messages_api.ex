@@ -4,7 +4,66 @@ defmodule CorroPort.MessagesAPI do
   Now includes originating_endpoint and region fields for geographic tracking.
   """
   require Logger
-  alias CorroPort.ConnectionManager
+  alias CorroPort.{ConnectionManager, AckTracker, AnalyticsStorage, LocalNode}
+
+  @doc """
+  Send a message and start tracking acknowledgments.
+
+  This is the high-level API that combines:
+  - Inserting the message into the database
+  - Starting acknowledgment tracking
+  - Recording analytics if an experiment is active
+
+  ## Parameters
+  - `content`: Message content to send
+
+  ## Returns
+  - `{:ok, message_data}` on success
+  - `{:error, reason}` on failure
+  """
+  def send_and_track_message(content) do
+    local_node_id = LocalNode.get_node_id()
+    message_content = "#{content} (from #{local_node_id} at #{DateTime.utc_now() |> DateTime.to_iso8601()})"
+    send_timestamp = DateTime.utc_now()
+
+    case insert_message(local_node_id, message_content) do
+      {:ok, result} ->
+        Logger.info("MessagesAPI: Successfully sent message: #{inspect(result)}")
+
+        # Track this message for acknowledgments
+        message_pk = "#{local_node_id}_#{result.sequence}"
+
+        track_message_data = %{
+          pk: message_pk,
+          timestamp: result.timestamp,
+          node_id: result.node_id
+        }
+
+        case AckTracker.track_latest_message(track_message_data) do
+          :ok ->
+            # Record send event in analytics if experiment is active
+            record_send_event(message_pk, local_node_id, send_timestamp, result.region)
+
+            message_data = %{
+              pk: message_pk,
+              timestamp: result.timestamp,
+              node_id: result.node_id,
+              message: result.message,
+              sequence: result.sequence
+            }
+
+            {:ok, message_data}
+
+          {:error, reason} ->
+            Logger.warning("MessagesAPI: Failed to track message: #{inspect(reason)}")
+            {:error, {:tracking_failed, reason}}
+        end
+
+      {:error, reason} ->
+        Logger.warning("MessagesAPI: Failed to send message: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
 
   @doc """
   Inserts a new message into the node_messages table with originating endpoint and region.
@@ -185,6 +244,27 @@ defmodule CorroPort.MessagesAPI do
       error ->
         Logger.warning("Failed to cleanup messages: #{inspect(error)}")
         error
+    end
+  end
+
+  defp record_send_event(message_id, originating_node, timestamp, region) do
+    # Only record if AckTracker has an active experiment
+    case AckTracker.get_experiment_id() do
+      nil ->
+        # No active experiment, skip analytics
+        :ok
+
+      experiment_id ->
+        # Record the send event
+        AnalyticsStorage.record_message_event(
+          message_id,
+          experiment_id,
+          originating_node,
+          nil,  # target_node is nil for send events
+          :sent,
+          timestamp,
+          region
+        )
     end
   end
 end

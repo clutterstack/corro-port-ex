@@ -95,6 +95,8 @@ overmind-*
 
 
 CLAUDE.md 
+*.md
+!README.md
 
 analytics/**
 

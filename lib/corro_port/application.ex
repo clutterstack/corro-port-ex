@@ -23,7 +23,6 @@ defmodule CorroPort.Application do
 
       # Clean domain modules
       CorroPort.NodeDiscovery,
-      CorroPort.MessagePropagation,
       CorroPort.ClusterSystemInfo,
 
       # Analytics modules

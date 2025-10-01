@@ -254,7 +254,7 @@ defmodule CorroPortWeb.AnalyticsApiController do
   """
   def send_message(conn, %{"content" => content}) do
     try do
-      case CorroPort.MessagePropagation.send_message(content) do
+      case CorroPort.MessagesAPI.send_and_track_message(content) do
         {:ok, message_data} ->
           json(conn, %{
             status: "success",
@@ -267,7 +267,7 @@ defmodule CorroPortWeb.AnalyticsApiController do
             node_id: CorroPort.LocalNode.get_node_id(),
             timestamp: DateTime.utc_now()
           })
-        
+
         {:error, reason} ->
           conn
           |> put_status(:bad_request)

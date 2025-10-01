@@ -278,7 +278,6 @@ defmodule CorroPort.SystemMetrics do
   defp collect_message_queue_metrics do
     # Get message queue lengths for key processes
     key_processes = [
-      CorroPort.MessagePropagation,
       CorroPort.AckTracker,
       CorroPort.AnalyticsStorage,
       __MODULE__

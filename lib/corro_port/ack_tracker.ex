@@ -4,10 +4,17 @@ defmodule CorroPort.AckTracker do
 
   Uses DNS-based node discovery to get the authoritative list of cluster nodes
   from Fly.io's DNS TXT records. Much simpler than the previous fallback-heavy approach.
+
+  Now includes:
+  - Region extraction from acknowledgments
+  - Experiment ID tracking for analytics
+  - Analytics event recording
   """
 
   use GenServer
   require Logger
+
+  alias CorroPort.RegionExtractor
 
   @table_name :ack_tracker
 
@@ -54,6 +61,19 @@ defmodule CorroPort.AckTracker do
     GenServer.call(__MODULE__, :get_dns_nodes)
   end
 
+  @doc """
+  Set the current experiment ID for analytics tracking.
+  """
+  def set_experiment_id(experiment_id) do
+    GenServer.call(__MODULE__, {:set_experiment_id, experiment_id})
+  end
+
+  @doc """
+  Get the current experiment ID.
+  """
+  def get_experiment_id do
+    GenServer.call(__MODULE__, :get_experiment_id)
+  end
 
   # GenServer Implementation
 
@@ -70,7 +90,7 @@ defmodule CorroPort.AckTracker do
 
     Logger.info("AckTracker ETS table created: #{@table_name}")
 
-    {:ok, %{table: table}}
+    {:ok, %{table: table, experiment_id: nil}}
   end
 
   def handle_call({:track_latest_message, message_data}, _from, state) do
@@ -99,10 +119,10 @@ defmodule CorroPort.AckTracker do
         ack_value = %{timestamp: current_time, node_id: ack_node_id}
 
         :ets.insert(@table_name, {ack_key, ack_value})
-        
+
         # Record acknowledgment event in analytics if experiment is active
-        record_ack_event(message_data.pk, message_data.node_id, ack_node_id, current_time)
-        
+        record_ack_event(message_data.pk, message_data.node_id, ack_node_id, current_time, state.experiment_id)
+
         broadcast_update()
 
         {:reply, :ok, state}
@@ -139,6 +159,15 @@ defmodule CorroPort.AckTracker do
   def handle_call(:get_dns_nodes, _from, state) do
     nodes = get_expected_nodes()
     {:reply, nodes, state}
+  end
+
+  def handle_call({:set_experiment_id, experiment_id}, _from, state) do
+    Logger.info("AckTracker: Set experiment ID to #{experiment_id}")
+    {:reply, :ok, %{state | experiment_id: experiment_id}}
+  end
+
+  def handle_call(:get_experiment_id, _from, state) do
+    {:reply, state.experiment_id, state}
   end
 
   def terminate(_reason, _state) do
@@ -251,6 +280,9 @@ defmodule CorroPort.AckTracker do
     # Get expected nodes from DNS-based node discovery
     expected_nodes = get_expected_nodes()
 
+    # Extract regions from acknowledgments
+    ack_regions = RegionExtractor.extract_from_acks(acknowledgments)
+
     Logger.debug(
       "AckTracker: Found #{length(acknowledgments)} acknowledgments from #{inspect(Enum.map(acknowledgments, & &1.node_id))}"
     )
@@ -260,7 +292,8 @@ defmodule CorroPort.AckTracker do
       acknowledgments: acknowledgments,
       ack_count: length(acknowledgments),
       expected_count: length(expected_nodes),
-      expected_nodes: expected_nodes
+      expected_nodes: expected_nodes,
+      regions: ack_regions
     }
   end
 
@@ -276,27 +309,25 @@ defmodule CorroPort.AckTracker do
     end
   end
 
-  defp record_ack_event(message_id, originating_node, ack_node_id, timestamp) do
-    # Only record if SystemMetrics has an active experiment
-    case CorroPort.SystemMetrics.get_experiment_id() do
-      nil -> 
-        # No active experiment, skip analytics
-        :ok
-        
-      experiment_id ->
-        # Extract region from ack_node_id if possible
-        region = extract_region_from_node_id(ack_node_id)
-        
-        # Record the acknowledgment event
-        CorroPort.AnalyticsStorage.record_message_event(
-          message_id,
-          experiment_id,
-          originating_node,
-          ack_node_id,  # target_node is the ack sender
-          :acked,
-          timestamp,
-          region
-        )
+  defp record_ack_event(message_id, originating_node, ack_node_id, timestamp, experiment_id) do
+    # Only record if we have an active experiment
+    if experiment_id do
+      # Extract region from ack_node_id if possible
+      region = extract_region_from_node_id(ack_node_id)
+
+      # Record the acknowledgment event
+      CorroPort.AnalyticsStorage.record_message_event(
+        message_id,
+        experiment_id,
+        originating_node,
+        ack_node_id,  # target_node is the ack sender
+        :acked,
+        timestamp,
+        region
+      )
+    else
+      # No active experiment, skip analytics
+      :ok
     end
   end
 
