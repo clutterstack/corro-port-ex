@@ -5,7 +5,16 @@ defmodule CorroPort.AckSender do
   In production: Uses fly.io 6PN private IPv6 addresses for direct communication
   In development: Uses localhost with different API ports per node
 
-  Implemented as a simple supervised Task that reacts to PubSub messages.
+  ## Architecture
+
+  Implemented as a supervised Task (not a GenServer) that:
+  - Subscribes to PubSub `message_updates` topic
+  - Runs a receive loop to handle incoming messages
+  - Spawns background tasks for HTTP acknowledgment sending
+  - No state management (purely reactive)
+
+  This design eliminates GenServer overhead for what is essentially a
+  message-driven task spawner with no meaningful state to maintain.
   """
 
   require Logger
