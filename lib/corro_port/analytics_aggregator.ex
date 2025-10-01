@@ -123,7 +123,7 @@ defmodule CorroPort.AnalyticsAggregator do
 
     # Set experiment ID in SystemMetrics so message operations get recorded
     CorroPort.SystemMetrics.set_experiment_id(experiment_id)
-    
+
     # Also set in MessagePropagation for consistency
     CorroPort.MessagePropagation.set_experiment_id(experiment_id)
 
@@ -154,7 +154,7 @@ defmodule CorroPort.AnalyticsAggregator do
 
     # Clear experiment ID from SystemMetrics
     CorroPort.SystemMetrics.set_experiment_id(nil)
-    
+
     # Also clear from MessagePropagation
     CorroPort.MessagePropagation.set_experiment_id(nil)
 
@@ -170,7 +170,7 @@ defmodule CorroPort.AnalyticsAggregator do
 
   def handle_call({:get_cluster_summary, experiment_id}, _from, state) do
     case get_cached_or_collect(:summary, experiment_id, state) do
-      {:ok, data, new_state} -> 
+      {:ok, data, new_state} ->
         # CLIMemberStore excludes local node, so add 1 for total cluster size
         # This gives us the complete cluster size for display
         total_cluster_nodes = length(state.active_nodes) + 1
@@ -303,7 +303,7 @@ defmodule CorroPort.AnalyticsAggregator do
   end
 
   defp collect_specific_data(:timing, experiment_id, _state) do
-    # Only query local node for now - avoid 500s from remote nodes  
+    # Only query local node for now - avoid 500s from remote nodes
     local_node = get_local_node_info()
     timing_stats = get_node_timing_stats(local_node, experiment_id)
     {:ok, timing_stats}
@@ -319,7 +319,7 @@ defmodule CorroPort.AnalyticsAggregator do
   defp get_local_node_info do
     local_node_id = LocalNode.get_node_id()
     local_phoenix_port = calculate_phoenix_port(%{node_id: local_node_id, api_port: nil})
-    
+
     %{
       node_id: local_node_id,
       region: LocalNode.get_region(),
@@ -417,7 +417,7 @@ defmodule CorroPort.AnalyticsAggregator do
       # Extract members from the active data structure
       members = case active_data.members do
         {:ok, member_list} -> member_list
-        {:error, reason} -> 
+        {:error, reason} ->
           Logger.warning("AnalyticsAggregator: Failed to get members from CLIMemberStore: #{inspect(reason)}")
           []
       end
@@ -427,8 +427,8 @@ defmodule CorroPort.AnalyticsAggregator do
       # Convert to node info format
       nodes = Enum.map(members, fn member ->
         node_id = CorroPort.AckTracker.member_to_node_id(member)
-        region = CorroPort.CorrosionParserAdapter.extract_region_from_node_id(node_id)
-        
+        region = CorroCLI.Parser.extract_region_from_node_id(node_id)
+
         %{
           node_id: node_id,
           region: region,
@@ -447,7 +447,7 @@ defmodule CorroPort.AnalyticsAggregator do
         # Fallback to local node only
         local_node_id = LocalNode.get_node_id()
         local_phoenix_port = calculate_phoenix_port(%{node_id: local_node_id, api_port: nil})
-        
+
         [%{
           node_id: local_node_id,
           region: LocalNode.get_region(),
@@ -460,7 +460,7 @@ defmodule CorroPort.AnalyticsAggregator do
   defp calculate_phoenix_port(member) do
     # Extract node_id from member to determine Phoenix port
     node_id = CorroPort.AckTracker.member_to_node_id(member)
-    
+
     cond do
       # Development pattern: node1 -> 4001, node2 -> 4002, etc.
       is_binary(node_id) and node_id =~ ~r/node(\d+)/ ->

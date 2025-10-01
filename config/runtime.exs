@@ -20,6 +20,10 @@ if System.get_env("PHX_SERVER") do
   config :corro_port, CorroPortWeb.Endpoint, server: true
 end
 
+config :corro_cli,
+    binary_path: CorroPort.NodeConfig.get_corro_binary_path(),
+    config_path: CorroPort.NodeConfig.get_config_path()
+
 if config_env() == :prod do
   secret_key_base =
     System.get_env("SECRET_KEY_BASE") ||

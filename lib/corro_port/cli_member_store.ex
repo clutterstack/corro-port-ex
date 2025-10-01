@@ -11,8 +11,8 @@ defmodule CorroPort.CLIMemberStore do
   require Logger
 
   alias CorroPort.RegionExtractor
-  alias CorroPort.CorroCliAdapter, as: CorroCLI
-  alias CorroPort.CorrosionParserAdapter, as: CorrosionParser
+  alias CorroCLI
+  alias CorroCLI.Parser
 
   # Default refresh interval: 5 minutes
   @default_refresh_interval 300_000
@@ -264,7 +264,7 @@ defmodule CorroPort.CLIMemberStore do
   end
 
   defp parse_cli_output(raw_output) do
-    case CorrosionParser.parse_cluster_members(raw_output) do
+    case Parser.parse_cluster_members(raw_output) do
       {:ok, []} ->
         Logger.info("CLIMemberStore: No cluster members found - single node setup")
         {[], nil}
