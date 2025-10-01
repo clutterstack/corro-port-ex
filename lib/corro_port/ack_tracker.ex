@@ -212,13 +212,13 @@ defmodule CorroPort.AckTracker do
   # Convert gossip port to node ID using our standard mapping (development only)
   defp gossip_port_to_node_id(port) do
     case port do
-      8787 -> "node1"
-      8788 -> "node2"
-      8789 -> "node3"
-      8790 -> "node4"
-      8791 -> "node5"
+      8787 -> "dev-node1"
+      8788 -> "dev-node2"
+      8789 -> "dev-node3"
+      8790 -> "dev-node4"
+      8791 -> "dev-node5"
       # General formula for higher node numbers
-      p when p > 8786 -> "node#{p - 8786}"
+      p when p > 8786 -> "dev-node#{p - 8786}"
       _ -> nil
     end
   end
