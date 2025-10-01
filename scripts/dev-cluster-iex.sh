@@ -155,6 +155,12 @@ pids=()
 # Create logs directory if it doesn't exist
 mkdir -p logs
 
+# Compile first to avoid build directory lock contention
+echo "🔨 Compiling application..."
+mix compile
+echo "✅ Compilation complete!"
+echo ""
+
 # Start background nodes first (nodes 2+)
 if [ "$NUM_NODES" -gt 1 ]; then
     echo "🔧 Starting background nodes..."

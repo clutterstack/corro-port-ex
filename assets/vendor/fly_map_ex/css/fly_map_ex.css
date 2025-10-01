@@ -1,0 +1,261 @@
+/*
+ * FlyMapEx CSS Styles
+ * Framework-agnostic styles for the FlyMapEx Phoenix component library
+ *
+ * These styles provide a neutral baseline without relying on Tailwind, DaisyUI,
+ * or any other utility framework. Host applications can override variables or
+ * class names as needed.
+ */
+
+/* === CSS Custom Properties for Theming === */
+:root {
+  /* Container colours */
+  --fly-map-bg: #ffffff;
+  --fly-map-border: #e5e7eb;
+
+  /* Text colours */
+  --fly-map-text: #1f2937;
+  --fly-map-text-muted: rgba(31, 41, 55, 0.7);
+  --fly-map-text-subtle: rgba(31, 41, 55, 0.5);
+
+  /* Interactive states */
+  --fly-map-hover-bg: rgba(0, 0, 0, 0.05);
+  --fly-map-focus-ring: rgba(59, 130, 246, 0.5);
+  --fly-map-border-hover: rgba(31, 41, 55, 0.1);
+
+  /* Layout */
+  --fly-map-border-radius: 0.5rem;
+  --fly-map-border-radius-lg: 0.75rem;
+
+  /* Map theme defaults (used by responsive theme) */
+  --fly-map-land: #888888;
+  --fly-map-ocean: #aaaaaa;
+  --fly-map-border-color: #0f172a;
+  --fly-map-neutral-marker: #6b7280;
+  --fly-map-neutral-text: #374151;
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fly-map-bg: #1f2937;
+    --fly-map-border: #374151;
+    --fly-map-text: #f9fafb;
+    --fly-map-text-muted: rgba(249, 250, 251, 0.7);
+    --fly-map-text-subtle: rgba(249, 250, 251, 0.5);
+    --fly-map-hover-bg: rgba(255, 255, 255, 0.05);
+    --fly-map-border-hover: rgba(249, 250, 251, 0.1);
+
+    --fly-map-land: #0f172a;
+    --fly-map-ocean: #64748b;
+    --fly-map-border-color: #cbd5f5;
+    --fly-map-neutral-marker: #9ca3af;
+    --fly-map-neutral-text: #e5e7eb;
+  }
+}
+
+/* === Main Container === */
+.fly-map-container {
+  background-color: var(--fly-map-bg);
+  border-radius: var(--fly-map-border-radius-lg);
+  border: 1px solid var(--fly-map-border);
+  padding: 1.5rem;
+}
+
+.fly-map-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* === Layout Classes === */
+.fly-map-layout-stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.fly-map-layout-side-by-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+@media (min-width: 1024px) {
+  .fly-map-layout-side-by-side {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .fly-map-layout-side-by-side .fly-map-map-container {
+    width: 65%;
+    flex-shrink: 0;
+  }
+
+  .fly-map-layout-side-by-side .fly-map-legend-container {
+    width: 35%;
+    flex-shrink: 0;
+  }
+}
+
+.fly-map-map-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.fly-map-map-wrapper {
+  border-radius: var(--fly-map-border-radius-lg);
+  border: 1px solid var(--fly-map-border);
+  overflow: hidden;
+}
+
+.fly-map-legend-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* === Legend Styling === */
+.fly-map-legend {
+  font-size: 0.75rem;
+  color: var(--fly-map-text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fly-map-legend-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.25rem;
+  border-radius: var(--fly-map-border-radius);
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.fly-map-legend-entry:hover {
+  background-color: var(--fly-map-hover-bg);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  border-color: var(--fly-map-border-hover);
+}
+
+.legend-selected {
+  background-color: var(--fly-map-hover-bg);
+  border-color: var(--fly-map-border-hover);
+}
+
+.legend-selected .fly-map-legend-label {
+  color: var(--fly-map-text);
+}
+
+.fly-map-legend-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  padding: 0;
+}
+
+.fly-map-legend-button:focus {
+  outline: none;
+  background-color: rgba(0, 0, 0, 0.07);
+  box-shadow: 0 0 0 2px var(--fly-map-focus-ring);
+}
+
+.fly-map-legend-marker {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  padding: 0.125rem;
+}
+
+.fly-map-legend-content {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.fly-map-legend-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  color: var(--fly-map-text);
+}
+
+.fly-map-legend-meta {
+  font-size: 0.75rem;
+  color: var(--fly-map-text-muted);
+  margin-left: 0.5rem;
+}
+
+.fly-map-legend-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.fly-map-legend-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--fly-map-text-subtle);
+  padding-top: 0.25rem;
+}
+
+/* === Region Display === */
+.fly-map-regions-display {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.25rem;
+  border-radius: var(--fly-map-border-radius);
+  transition: all 0.2s ease;
+}
+
+.fly-map-regions-display:hover {
+  background-color: var(--fly-map-hover-bg);
+}
+
+.fly-map-region-marker {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+}
+
+.fly-map-region-info {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.fly-map-region-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--fly-map-text-muted);
+}
+
+.fly-map-region-count {
+  font-size: 0.75rem;
+  color: var(--fly-map-text-subtle);
+}
+
+/* === Utility === */
+.group-hidden {
+  display: none;
+}
+
+.fly-map-hidden {
+  display: none !important;
+}

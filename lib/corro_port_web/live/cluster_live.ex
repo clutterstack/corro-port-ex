@@ -18,26 +18,16 @@ defmodule CorroPortWeb.ClusterLive do
     local_node_id = NodeConfig.get_corrosion_node_id()
 
     socket =
-      assign(socket, %{
+      socket
+      |> assign(%{
         page_title: "Cluster Status",
         local_node_id: local_node_id,
         phoenix_port: phoenix_port,
-        corro_api_port: CorroPort.ConnectionManager.get_corro_api_port(),
-
-        # Data from clean domain modules
-        expected_data: nil,
-        active_data: nil,
-        system_data: nil,
-        local_node: CorroPort.LocalNode.get_info(),
-
-        # Computed region groups for map display
-        region_groups: [],
-
-        # General state
-        last_updated: nil
+        corro_api_port: CorroPort.ConnectionManager.get_corro_api_port()
       })
+      |> fetch_all_data()
 
-    {:ok, fetch_all_data(socket)}
+    {:ok, socket}
   end
 
   # Event handlers - unified refresh system
@@ -68,12 +58,12 @@ defmodule CorroPortWeb.ClusterLive do
   def handle_info({:expected_nodes_updated, expected_data}, socket) do
     Logger.debug("ClusterLive: Received expected nodes update")
 
-    # Recreate region groups with updated expected data
-    region_groups = create_region_groups(expected_data, socket.assigns.active_data, socket.assigns.local_node)
+    # Recreate marker groups with updated expected data
+    marker_groups = create_region_groups(expected_data, socket.assigns.active_data, socket.assigns.local_node)
 
     socket = assign(socket, %{
       expected_data: expected_data,
-      region_groups: region_groups
+      marker_groups: marker_groups
     })
 
     {:noreply, socket}
@@ -82,12 +72,12 @@ defmodule CorroPortWeb.ClusterLive do
   def handle_info({:active_members_updated, active_data}, socket) do
     Logger.debug("ClusterLive: Received active members update")
 
-    # Recreate region groups with updated active data
-    region_groups = create_region_groups(socket.assigns.expected_data, active_data, socket.assigns.local_node)
+    # Recreate marker groups with updated active data
+    marker_groups = create_region_groups(socket.assigns.expected_data, active_data, socket.assigns.local_node)
 
     socket = assign(socket, %{
       active_data: active_data,
-      region_groups: region_groups
+      marker_groups: marker_groups
     })
 
     {:noreply, socket}
@@ -111,8 +101,8 @@ defmodule CorroPortWeb.ClusterLive do
     system_data = CorroPort.ClusterSystemInfo.get_system_data()
     local_node = CorroPort.LocalNode.get_info()
 
-    # Create region groups for the new API
-    region_groups = create_region_groups(expected_data, active_data, local_node)
+    # Create marker groups for the FlyMapEx API
+    marker_groups = create_region_groups(expected_data, active_data, local_node)
 
     assign(socket, %{
       # Data from clean domain modules
@@ -121,8 +111,8 @@ defmodule CorroPortWeb.ClusterLive do
       system_data: system_data,
       local_node: local_node,
 
-      # Computed region groups for map display
-      region_groups: region_groups,
+      # Computed marker groups for map display
+      marker_groups: marker_groups,
 
       last_updated: DateTime.utc_now()
     })
@@ -133,12 +123,12 @@ defmodule CorroPortWeb.ClusterLive do
   end
 
   defp create_region_groups(expected_data, active_data, local_node) do
-    # Build region groups for the new FlyMapEx API
+    # Build marker groups for the FlyMapEx API
     groups = []
 
     # Our region (primary/local node)
     groups = if local_node.region != "unknown" do
-      [%{regions: [local_node.region], style_key: :primary, label: "Our Node"} | groups]
+      [%{nodes: [local_node.region], style_key: :primary, label: "Our Node"} | groups]
     else
       groups
     end
@@ -146,15 +136,15 @@ defmodule CorroPortWeb.ClusterLive do
     # Active regions (excluding our region)
     active_regions = exclude_our_region(active_data.regions, local_node.region)
     groups = if !Enum.empty?(active_regions) do
-      [%{regions: active_regions, style_key: :active, label: "Active Regions"} | groups]
+      [%{nodes: active_regions, style_key: :active, label: "Active Regions"} | groups]
     else
       groups
     end
 
-    # Expected regions (excluding our region) 
+    # Expected regions (excluding our region)
     expected_regions = exclude_our_region(expected_data.regions, local_node.region)
     groups = if !Enum.empty?(expected_regions) do
-      [%{regions: expected_regions, style_key: :expected, label: "Expected Regions"} | groups]
+      [%{nodes: expected_regions, style_key: :expected, label: "Expected Regions"} | groups]
     else
       groups
     end
@@ -250,7 +240,7 @@ defmodule CorroPortWeb.ClusterLive do
 
       <!-- Enhanced World Map with Regions -->
       <FlyMapEx.render
-        region_groups={@region_groups}
+        marker_groups={@marker_groups}
         theme={:monitoring}
       />
 
