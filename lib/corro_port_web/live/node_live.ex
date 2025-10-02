@@ -20,7 +20,7 @@ defmodule CorroPortWeb.NodeLive do
         db_info: nil,
         process_info: nil,
         file_info: nil,
-        connectivity_test: nil,
+        api_cx_test: nil,
         error: nil,
         loading: true,
         last_updated: nil
@@ -37,12 +37,12 @@ defmodule CorroPortWeb.NodeLive do
     Logger.debug("NodeLive: Testing local Corrosion API connection.")
 
     # Run the test and update the socket with results
-    test_result = perform_local_connectivity_test()
+    test_result = perform_local_api_cx_test()
     Logger.debug("API responded OK")
 
     socket =
       socket
-      |> assign(:connectivity_test, test_result)
+      |> assign(:api_cx_test, test_result)
       |> put_flash(
         if(test_result.success, do: :info, else: :error),
         test_result.flash_message
@@ -70,7 +70,7 @@ defmodule CorroPortWeb.NodeLive do
 
   # Private functions
 
-  defp perform_local_connectivity_test do
+  defp perform_local_api_cx_test do
     start_time = System.monotonic_time(:millisecond)
 
     if ConnectionManager.test_connection() == :ok do
@@ -352,7 +352,7 @@ defmodule CorroPortWeb.NodeLive do
       <.header>
         Node Information
         <:subtitle>
-          About this Corrosion node and its configuration
+          About this node and its Corrosion and Elixir configuration
         </:subtitle>
         <:actions>
           <.button phx-click="refresh" variant="primary">
@@ -364,12 +364,7 @@ defmodule CorroPortWeb.NodeLive do
         </:actions>
       </.header>
 
-      <% status = connectivity_status(@connectivity_test) %>
-      <div class="flex flex-wrap items-center gap-2 rounded-lg bg-base-200 px-3 py-2 text-sm">
-        <.icon name={status.icon} class="h-4 w-4" />
-        <span class={"font-semibold " <> status.class}>{status.label}</span>
-        <span :if={status.detail} class="text-base-content/70">{status.detail}</span>
-      </div>
+      <.connection_indicator api_cx_test={@api_cx_test} />
 
     <!-- Loading State -->
       <div :if={@loading} class="flex items-center justify-center py-8">
@@ -408,7 +403,7 @@ defmodule CorroPortWeb.NodeLive do
 
             <div :if={@node_info} class="space-y-3">
               <div class="grid grid-cols-2 gap-4 text-sm">
-                <div><strong>Phoenix HTTP:</strong></div>
+                <div><strong>Phoenix HTTP port:</strong></div>
                 <div class="font-mono">
                   {@node_info.phoenix_port}
                 </div>
@@ -420,9 +415,8 @@ defmodule CorroPortWeb.NodeLive do
     <!-- Config from Application Environment -->
         <div class="card bg-base-100">
           <div class="card-body">
-            <h3 class="card-title text-lg">Application Configuration</h3>
             <div :if={@config_info} class="space-y-3">
-              <h4 class="font-semibold mb-2">Config from Application Environment:</h4>
+              <h3 class="card-title text-lg">Config from Application Environment:</h3>
               <pre class="bg-base-300 p-4 rounded text-xs overflow-auto">
                 <%= @config_info.raw_node_config %>
               </pre>
@@ -430,26 +424,10 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
 
-    <!-- Corrosion Config File -->
-        <div class="card bg-base-100">
-          <div class="card-body">
-            <h3 class="card-title text-lg">Corrosion Configuration</h3>
-            <div :if={@config_info.config_exists}>
-              <h4 class="font-semibold mb-2">Corrosion Config File: {@config_info.config_path}</h4>
-              <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= @config_info.config_content %></pre>
-            </div>
-            <div :if={@config_info.config_exists} class="grid grid-cols-2 gap-2 text-xs mt-2">
-              <div><strong>Size:</strong> {@config_info.config_size}</div>
-              <div><strong>Modified:</strong> {@config_info.config_modified}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
     <!-- Process Information -->
       <div class="card bg-base-100">
         <div class="card-body">
-          <h3 class="card-title text-lg">Process Information</h3>
+          <h3 class="card-title text-lg">Erlang Processes</h3>
           <div :if={@process_info} class="space-y-3">
             <div class="grid grid-cols-2 gap-4 text-sm">
               <div><strong>Total Processes:</strong></div>
@@ -482,10 +460,27 @@ defmodule CorroPortWeb.NodeLive do
         </div>
       </div>
 
+    <!-- Corrosion Config File -->
+        <div class="card bg-base-100">
+          <div class="card-body">
+            <h3 class="card-title text-lg">Corrosion Configuration</h3>
+            <div :if={@config_info.config_exists}>
+              <h4 class="font-semibold mb-2">Corrosion Config File: {@config_info.config_path}</h4>
+              <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= @config_info.config_content %></pre>
+            </div>
+            <div :if={@config_info.config_exists} class="grid grid-cols-2 gap-2 text-xs mt-2">
+              <div><strong>Size:</strong> {@config_info.config_size}</div>
+              <div><strong>Modified:</strong> {@config_info.config_modified}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
     <!-- Database Information -->
       <div :if={@db_info} class="card bg-base-100">
         <div class="card-body">
-          <h3 class="card-title text-lg">Database Information</h3>
+          <h3 class="card-title text-lg">Corrosion Database</h3>
           <div class="space-y-3">
             <div :for={{key, value} <- @db_info} class="text-sm">
               <div class="flex items-start justify-between">
@@ -556,6 +551,17 @@ defmodule CorroPortWeb.NodeLive do
       <div :if={@last_updated} class="text-xs text-base-content/70 text-center">
         Last updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}
       </div>
+    </div>
+    """
+  end
+
+  def connection_indicator(api_cx_test = assigns) do
+    corro_status = connectivity_status(assigns.api_cx_test) |> dbg
+    ~H"""
+    <div class="flex flex-wrap items-center gap-2 rounded-lg bg-base-200 px-3 py-2 text-sm">
+      <.icon name={corro_status.icon} class="h-4 w-4" />
+      <span class={"font-semibold " <> corro_status.class}>{corro_status.label}</span>
+      <span :if={corro_status.detail} class="text-base-content/70">{corro_status.detail}</span>
     </div>
     """
   end
