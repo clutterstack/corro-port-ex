@@ -221,7 +221,7 @@ defmodule CorroPortWeb.ClusterLive do
               class={DisplayHelpers.refresh_button_class(@system_data, "btn btn-xs")}
             >
               <.icon name="hero-server" class="w-3 h-3 mr-1" />
-              System
+              Cluster info from API
               <span :if={@system_data.cache_status.error} class="ml-1">⚠</span>
             </.button>
 
