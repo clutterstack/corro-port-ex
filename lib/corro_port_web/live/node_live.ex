@@ -293,6 +293,56 @@ defmodule CorroPortWeb.NodeLive do
 
   defp format_memory(_), do: "N/A"
 
+  defp connectivity_status(nil) do
+    %{
+      icon: "hero-question-mark-circle",
+      label: "Connectivity test not run yet",
+      class: "text-base-content/70",
+      detail: nil
+    }
+  end
+
+  defp connectivity_status(%{success: true} = test) do
+    detail =
+      [
+        test.response_time_ms && "#{test.response_time_ms}ms",
+        format_test_timestamp(test.timestamp)
+      ]
+      |> Enum.reject(&(&1 in [nil, ""]))
+      |> Enum.join(" | ")
+
+    %{
+      icon: "hero-signal",
+      label: "Connected",
+      class: "text-success",
+      detail: if(detail == "", do: nil, else: "| " <> detail)
+    }
+  end
+
+  defp connectivity_status(%{success: false} = test) do
+    detail =
+      [
+        test.response_time_ms && "#{test.response_time_ms}ms",
+        format_test_timestamp(test.timestamp),
+        test.details
+      ]
+      |> Enum.reject(&(&1 in [nil, ""]))
+      |> Enum.join(" | ")
+
+    %{
+      icon: "hero-exclamation-triangle",
+      label: "Connection failed",
+      class: "text-error",
+      detail: if(detail == "", do: nil, else: "| " <> detail)
+    }
+  end
+
+  defp format_test_timestamp(nil), do: nil
+
+  defp format_test_timestamp(%DateTime{} = timestamp) do
+    Calendar.strftime(timestamp, "%H:%M:%S UTC")
+  end
+
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
@@ -314,39 +364,11 @@ defmodule CorroPortWeb.NodeLive do
         </:actions>
       </.header>
 
-    <!-- Connectivity Test Results -->
-      <div :if={@connectivity_test} class="card bg-base-200">
-        <div class="card-body">
-          <h3 class="card-title text-sm">
-            <.icon name="hero-signal" class="w-4 h-4 mr-2" /> Local Connectivity Test
-          </h3>
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <span><strong>Status:</strong></span>
-              <span class={
-                if @connectivity_test.success,
-                  do: "badge badge-success",
-                  else: "badge badge-error"
-              }>
-                {if @connectivity_test.success, do: "Connected", else: "Failed"}
-              </span>
-            </div>
-            <div class="flex items-center justify-between">
-              <span><strong>Response Time:</strong></span>
-              <span class="font-mono text-sm">{@connectivity_test.response_time_ms}ms</span>
-            </div>
-            <div class="flex items-center justify-between">
-              <span><strong>Test Time:</strong></span>
-              <span class="text-sm">
-                {Calendar.strftime(@connectivity_test.timestamp, "%H:%M:%S")}
-              </span>
-            </div>
-            <div class="mt-2">
-              <div class="text-xs font-semibold">Details:</div>
-              <div class="text-xs text-base-content/70">{@connectivity_test.details}</div>
-            </div>
-          </div>
-        </div>
+      <% status = connectivity_status(@connectivity_test) %>
+      <div class="flex flex-wrap items-center gap-2 rounded-lg bg-base-200 px-3 py-2 text-sm">
+        <.icon name={status.icon} class="h-4 w-4" />
+        <span class={"font-semibold " <> status.class}>{status.label}</span>
+        <span :if={status.detail} class="text-base-content/70">{status.detail}</span>
       </div>
 
     <!-- Loading State -->

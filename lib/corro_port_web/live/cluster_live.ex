@@ -40,7 +40,7 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, put_flash(socket, :info, "DNS data refreshed")}
   end
 
-  def handle_event("refresh_active", _params, socket) do
+  def handle_event("refresh_cli_members", _params, socket) do
     CorroPort.CLIClusterData.refresh_members()
     {:noreply, put_flash(socket, :info, "CLI member refresh initiated...")}
   end
@@ -209,7 +209,7 @@ defmodule CorroPortWeb.ClusterLive do
             </.button>
 
             <.button
-              phx-click="refresh_active"
+              phx-click="refresh_cli_members"
               class={DisplayHelpers.refresh_button_class(@active_data)}
             >
               <.icon name="hero-command-line" class="w-3 h-3 mr-1" />
