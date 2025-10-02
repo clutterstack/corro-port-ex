@@ -23,6 +23,7 @@ defmodule CorroPortWeb.Router do
     live "/node", NodeLive
     live "/messages", MessagesLive
     live "/analytics", AnalyticsLive
+    live "/query-console", QueryConsoleLive
   end
 
   scope "/api", CorroPortWeb do
@@ -30,17 +31,24 @@ defmodule CorroPortWeb.Router do
 
     # Analytics data endpoints
     get "/analytics/health", AnalyticsApiController, :health
-    get "/analytics/experiments/:experiment_id/summary", AnalyticsApiController, :experiment_summary
+
+    get "/analytics/experiments/:experiment_id/summary",
+        AnalyticsApiController,
+        :experiment_summary
+
     get "/analytics/experiments/:experiment_id/timing", AnalyticsApiController, :timing_stats
     get "/analytics/experiments/:experiment_id/metrics", AnalyticsApiController, :system_metrics
     get "/analytics/experiments/:experiment_id/events", AnalyticsApiController, :message_events
-    get "/analytics/experiments/:experiment_id/topology", AnalyticsApiController, :topology_snapshots
-    
+
+    get "/analytics/experiments/:experiment_id/topology",
+        AnalyticsApiController,
+        :topology_snapshots
+
     # Analytics control endpoints
     post "/analytics/aggregation/start", AnalyticsApiController, :start_aggregation
     post "/analytics/aggregation/stop", AnalyticsApiController, :stop_aggregation
     get "/analytics/aggregation/status", AnalyticsApiController, :aggregation_status
-    
+
     # Message sending endpoint
     post "/messages/send", AnalyticsApiController, :send_message
   end

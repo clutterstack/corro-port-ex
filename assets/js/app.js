@@ -29,6 +29,35 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 
 let Hooks = { RealTimeMap: createRealTimeMapHook(Socket) }
 
+Hooks.CopySQL = {
+  mounted() {
+    this.handleClick = async (event) => {
+      event.preventDefault()
+
+      const text = this.el.dataset.clipboard || ""
+      const label = this.el.dataset.sqlLabel || "SQL"
+
+      try {
+        if (!navigator.clipboard) {
+          throw new Error("Clipboard API unavailable")
+        }
+
+        await navigator.clipboard.writeText(text)
+        this.pushEvent("sql_copied", {label})
+      } catch (error) {
+        console.error("Failed to copy SQL", error)
+        this.pushEvent("sql_copy_failed", {label})
+      }
+    }
+
+    this.el.addEventListener("click", this.handleClick)
+  },
+
+  destroyed() {
+    this.el.removeEventListener("click", this.handleClick)
+  }
+}
+
 Hooks.RegionMap = {
   mounted() {
     this.el.addEventListener('click', (event) => {
@@ -98,4 +127,3 @@ if (process.env.NODE_ENV === "development") {
     window.liveReloader = reloader
   })
 }
-
