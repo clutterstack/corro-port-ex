@@ -8,8 +8,7 @@ defmodule CorroPortWeb.ClusterLive do
 
   def mount(_params, _session, socket) do
     if connected?(socket) do
-      # Subscribe to clean domain modules
-      CorroPort.DNSNodeData.subscribe()
+      # Subscribe to CLI cluster data updates
       CorroPort.CLIClusterData.subscribe_active()
     end
 
@@ -37,8 +36,8 @@ defmodule CorroPortWeb.ClusterLive do
   end
 
   def handle_event("refresh_expected", _params, socket) do
-    CorroPort.DNSNodeData.refresh_cache()
-    {:noreply, put_flash(socket, :info, "DNS cache refresh initiated...")}
+    socket = fetch_all_data(socket)
+    {:noreply, put_flash(socket, :info, "DNS data refreshed")}
   end
 
   def handle_event("refresh_active", _params, socket) do
@@ -48,20 +47,6 @@ defmodule CorroPortWeb.ClusterLive do
 
 
   # Real-time updates from domain modules
-
-  def handle_info({:expected_nodes_updated, expected_data}, socket) do
-    Logger.debug("ClusterLive: Received expected nodes update")
-
-    # Recreate marker groups with updated expected data
-    marker_groups = create_region_groups(expected_data, socket.assigns.active_data, socket.assigns.local_node)
-
-    socket = assign(socket, %{
-      expected_data: expected_data,
-      marker_groups: marker_groups
-    })
-
-    {:noreply, socket}
-  end
 
   def handle_info({:active_members_updated, active_data}, socket) do
     Logger.debug("ClusterLive: Received active members update")
@@ -80,8 +65,9 @@ defmodule CorroPortWeb.ClusterLive do
   # Private functions
 
   defp fetch_all_data(socket) do
-    # Fetch from clean domain modules
-    expected_data = CorroPort.DNSNodeData.get_expected_data()
+    # Fetch DNS data directly (no caching needed)
+    expected_data = CorroPort.DNSLookup.get_expected_data()
+    # Fetch from CLI cluster data (has its own caching)
     active_data = CorroPort.CLIClusterData.get_active_data()
     local_node = CorroPort.LocalNode.get_info()
 

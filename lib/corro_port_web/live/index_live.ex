@@ -11,10 +11,8 @@ defmodule CorroPortWeb.IndexLive do
 
   def mount(_params, _session, socket) do
     if connected?(socket) do
-      # Subscribe to the clean domain modules
-      CorroPort.DNSNodeData.subscribe()
+      # Subscribe to CLI cluster data and acknowledgment updates
       CorroPort.CLIClusterData.subscribe_active()
-      # Subscribe directly to AckTracker for acknowledgment updates
       Phoenix.PubSub.subscribe(CorroPort.PubSub, "ack_events")
     end
 
@@ -24,8 +22,8 @@ defmodule CorroPortWeb.IndexLive do
 
   # Event handlers - per-domain refresh
   def handle_event("refresh_expected", _params, socket) do
-    CorroPort.DNSNodeData.refresh_cache()
-    {:noreply, put_flash(socket, :info, "DNS cache refresh initiated...")}
+    socket = fetch_all_data(socket)
+    {:noreply, put_flash(socket, :info, "DNS data refreshed")}
   end
 
   def handle_event("refresh_active", _params, socket) do
@@ -71,21 +69,6 @@ defmodule CorroPortWeb.IndexLive do
   end
 
   # Real-time updates from domain modules
-  def handle_info({:expected_nodes_updated, expected_data}, socket) do
-    Logger.debug("IndexLive: Received expected nodes update")
-
-    new_expected_regions = exclude_our_region(expected_data.regions, socket.assigns.local_node.region)
-    marker_groups = create_region_groups(expected_data, socket.assigns.active_data, socket.assigns.ack_data, socket.assigns.local_node)
-
-    socket = assign(socket, %{
-      expected_data: expected_data,
-      expected_regions: new_expected_regions,
-      marker_groups: marker_groups
-    })
-
-    {:noreply, socket}
-  end
-
   def handle_info({:active_members_updated, active_data}, socket) do
     Logger.debug("IndexLive: Received active members update")
 
@@ -118,8 +101,9 @@ defmodule CorroPortWeb.IndexLive do
   # Private functions
 
   defp fetch_all_data(socket) do
-    # Fetch from clean domain modules - explicit success/error handling
-    expected_data = CorroPort.DNSNodeData.get_expected_data()
+    # Fetch DNS data directly (no caching needed)
+    expected_data = CorroPort.DNSLookup.get_expected_data()
+    # Fetch from CLI cluster data (has its own caching)
     active_data = CorroPort.CLIClusterData.get_active_data()
     ack_data = CorroPort.AckTracker.get_status()
     local_node = CorroPort.LocalNode.get_info()

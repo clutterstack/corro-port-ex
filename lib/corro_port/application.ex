@@ -21,9 +21,6 @@ defmodule CorroPort.Application do
       CorroPort.AckSender,
       CorroPort.CLIClusterData,
 
-      # Clean domain modules
-      CorroPort.DNSNodeData,
-
       # Analytics modules
       CorroPort.Analytics.Repo,
       CorroPort.AnalyticsStorage,
