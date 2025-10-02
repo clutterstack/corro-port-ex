@@ -8,10 +8,9 @@ defmodule CorroPortWeb.ClusterLive do
 
   def mount(_params, _session, socket) do
     if connected?(socket) do
-      # Subscribe to all clean domain modules
-      CorroPort.NodeDiscovery.subscribe()
-      CorroPort.CLIMemberStore.subscribe_active()
-      CorroPort.ClusterSystemInfo.subscribe()
+      # Subscribe to clean domain modules
+      CorroPort.DNSNodeData.subscribe()
+      CorroPort.CLIClusterData.subscribe_active()
     end
 
     phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
@@ -38,18 +37,13 @@ defmodule CorroPortWeb.ClusterLive do
   end
 
   def handle_event("refresh_expected", _params, socket) do
-    CorroPort.NodeDiscovery.refresh_cache()
+    CorroPort.DNSNodeData.refresh_cache()
     {:noreply, put_flash(socket, :info, "DNS cache refresh initiated...")}
   end
 
   def handle_event("refresh_active", _params, socket) do
-    CorroPort.CLIMemberStore.refresh_members()
+    CorroPort.CLIClusterData.refresh_members()
     {:noreply, put_flash(socket, :info, "CLI member refresh initiated...")}
-  end
-
-  def handle_event("refresh_system", _params, socket) do
-    CorroPort.ClusterSystemInfo.refresh_cache()
-    {:noreply, put_flash(socket, :info, "System info refresh initiated...")}
   end
 
 
@@ -83,23 +77,31 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, socket}
   end
 
-
-  def handle_info({:cluster_system_updated, system_data}, socket) do
-    Logger.debug("ClusterLive: Received cluster system update")
-
-    socket = assign(socket, :system_data, system_data)
-
-    {:noreply, socket}
-  end
-
   # Private functions
 
   defp fetch_all_data(socket) do
-    # Fetch from all clean domain modules
-    expected_data = CorroPort.NodeDiscovery.get_expected_data()
-    active_data = CorroPort.CLIMemberStore.get_active_data()
-    system_data = CorroPort.ClusterSystemInfo.get_system_data()
+    # Fetch from clean domain modules
+    expected_data = CorroPort.DNSNodeData.get_expected_data()
+    active_data = CorroPort.CLIClusterData.get_active_data()
     local_node = CorroPort.LocalNode.get_info()
+
+    # Fetch cluster info directly from API
+    conn = CorroPort.ConnectionManager.get_connection()
+    {cluster_info, cluster_error} = case CorroClient.get_cluster_info(conn) do
+      {:ok, info} -> {info, nil}
+      {:error, reason} -> {nil, reason}
+    end
+
+    # Build system_data structure for DisplayHelpers compatibility
+    system_data = %{
+      cluster_info: cluster_info,
+      database_info: nil,
+      latest_messages: [],
+      cache_status: %{
+        last_updated: DateTime.utc_now(),
+        error: cluster_error
+      }
+    }
 
     # Create marker groups for the FlyMapEx API
     marker_groups = create_region_groups(expected_data, active_data, local_node)
@@ -215,16 +217,6 @@ defmodule CorroPortWeb.ClusterLive do
               CLI
               <span :if={DisplayHelpers.show_warning?(@active_data)} class="ml-1">⚠</span>
             </.button>
-
-            <.button
-              phx-click="refresh_system"
-              class={DisplayHelpers.refresh_button_class(@system_data, "btn btn-xs")}
-            >
-              <.icon name="hero-server" class="w-3 h-3 mr-1" />
-              Cluster info from API
-              <span :if={@system_data.cache_status.error} class="ml-1">⚠</span>
-            </.button>
-
 
             <.button phx-click="refresh_all" class="btn btn-sm">
               <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Refresh All

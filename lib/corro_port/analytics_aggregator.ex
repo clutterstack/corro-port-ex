@@ -167,7 +167,7 @@ defmodule CorroPort.AnalyticsAggregator do
   def handle_call({:get_cluster_summary, experiment_id}, _from, state) do
     case get_cached_or_collect(:summary, experiment_id, state) do
       {:ok, data, new_state} ->
-        # CLIMemberStore excludes local node, so add 1 for total cluster size
+        # CLIClusterData excludes local node, so add 1 for total cluster size
         # This gives us the complete cluster size for display
         total_cluster_nodes = length(state.active_nodes) + 1
         updated_data = Map.put(data, :node_count, total_cluster_nodes)
@@ -407,14 +407,14 @@ defmodule CorroPort.AnalyticsAggregator do
 
   defp discover_cluster_nodes do
     try do
-      # Get active members from CLIMemberStore
-      active_data = CorroPort.CLIMemberStore.get_active_data()
+      # Get active members from CLIClusterData
+      active_data = CorroPort.CLIClusterData.get_active_data()
 
       # Extract members from the active data structure
       members = case active_data.members do
         {:ok, member_list} -> member_list
         {:error, reason} ->
-          Logger.warning("AnalyticsAggregator: Failed to get members from CLIMemberStore: #{inspect(reason)}")
+          Logger.warning("AnalyticsAggregator: Failed to get members from CLIClusterData: #{inspect(reason)}")
           []
       end
 

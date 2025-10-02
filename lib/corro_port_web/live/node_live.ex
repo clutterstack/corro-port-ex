@@ -9,7 +9,6 @@ defmodule CorroPortWeb.NodeLive do
     if connected?(socket) do
       # Subscribe to any relevant updates
       Phoenix.PubSub.subscribe(CorroPort.PubSub, "node_updates")
-      CorroPort.ClusterSystemInfo.subscribe()
     end
 
     socket =
@@ -25,7 +24,7 @@ defmodule CorroPortWeb.NodeLive do
         error: nil,
         loading: true,
         last_updated: nil,
-        system_data: %{cluster_info: %{}}
+        cluster_info: nil
       })
 
     {:ok, fetch_node_data(socket)}
@@ -69,10 +68,6 @@ defmodule CorroPortWeb.NodeLive do
     end
   end
 
-  def handle_info({:cluster_system_updated, system_data}, socket) do
-    Logger.debug("NodeLive: Received cluster system update")
-    {:noreply, assign(socket, :system_data, system_data)}
-  end
 
   # Private functions
 
@@ -110,17 +105,25 @@ defmodule CorroPortWeb.NodeLive do
 
     # Gather all the information
     node_info = get_node_info()
-
     config_info = get_config_info()
+
     conn = ConnectionManager.get_connection()
+
+    # Fetch database info
     db_info = case CorroClient.get_database_info(conn) do
       {:ok, info} -> info
       {:error, _} -> %{}
     end
+
+    # Fetch cluster info for members table
+    cluster_info = case CorroClient.get_cluster_info(conn) do
+      {:ok, info} -> info
+      {:error, _} -> nil
+    end
+
     process_info = get_process_info()
     file_info = get_file_info()
     local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
-    system_data = CorroPort.ClusterSystemInfo.get_system_data()
 
     socket
     |> assign(%{
@@ -128,12 +131,12 @@ defmodule CorroPortWeb.NodeLive do
       local_node_id: local_node_id,
       config_info: config_info,
       db_info: db_info,
+      cluster_info: cluster_info,
       process_info: process_info,
       file_info: file_info,
       loading: false,
       last_updated: DateTime.utc_now(),
-      error: nil,
-      system_data: system_data
+      error: nil
     })
   end
 
@@ -496,10 +499,10 @@ defmodule CorroPortWeb.NodeLive do
       </div>
 
     <!-- Cluster Members from local __corro_members table -->
-      <div :if={@system_data.cluster_info != %{}} class="card bg-base-100">
+      <div :if={@cluster_info} class="card bg-base-100">
         <div class="card-body">
           <h3 class="card-title text-lg">Cluster Members (from local __corro_members table)</h3>
-          <MembersTable.cluster_members_table cluster_info={@system_data.cluster_info} />
+          <MembersTable.cluster_members_table cluster_info={@cluster_info} />
         </div>
       </div>
 

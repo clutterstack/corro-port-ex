@@ -12,8 +12,8 @@ defmodule CorroPortWeb.IndexLive do
   def mount(_params, _session, socket) do
     if connected?(socket) do
       # Subscribe to the clean domain modules
-      CorroPort.NodeDiscovery.subscribe()
-      CorroPort.CLIMemberStore.subscribe_active()
+      CorroPort.DNSNodeData.subscribe()
+      CorroPort.CLIClusterData.subscribe_active()
       # Subscribe directly to AckTracker for acknowledgment updates
       Phoenix.PubSub.subscribe(CorroPort.PubSub, "ack_events")
     end
@@ -24,12 +24,12 @@ defmodule CorroPortWeb.IndexLive do
 
   # Event handlers - per-domain refresh
   def handle_event("refresh_expected", _params, socket) do
-    CorroPort.NodeDiscovery.refresh_cache()
+    CorroPort.DNSNodeData.refresh_cache()
     {:noreply, put_flash(socket, :info, "DNS cache refresh initiated...")}
   end
 
   def handle_event("refresh_active", _params, socket) do
-    CorroPort.CLIMemberStore.refresh_members()
+    CorroPort.CLIClusterData.refresh_members()
     {:noreply, put_flash(socket, :info, "CLI member refresh initiated...")}
   end
 
@@ -119,8 +119,8 @@ defmodule CorroPortWeb.IndexLive do
 
   defp fetch_all_data(socket) do
     # Fetch from clean domain modules - explicit success/error handling
-    expected_data = CorroPort.NodeDiscovery.get_expected_data()
-    active_data = CorroPort.CLIMemberStore.get_active_data()
+    expected_data = CorroPort.DNSNodeData.get_expected_data()
+    active_data = CorroPort.CLIClusterData.get_active_data()
     ack_data = CorroPort.AckTracker.get_status()
     local_node = CorroPort.LocalNode.get_info()
 

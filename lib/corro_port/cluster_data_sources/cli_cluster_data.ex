@@ -1,4 +1,4 @@
-defmodule CorroPort.CLIMemberStore do
+defmodule CorroPort.CLIClusterData do
   @moduledoc """
   Centralized store for cluster member data fetched via CLI.
 
@@ -32,7 +32,7 @@ defmodule CorroPort.CLIMemberStore do
       GenServer.call(__MODULE__, :get_members, 1000)
     catch
       :exit, _ ->
-        Logger.warning("CLIMemberStore: Call timeout, returning empty state")
+        Logger.warning("CLIClusterData: Call timeout, returning empty state")
         empty_state()
     end
   end
@@ -52,7 +52,7 @@ defmodule CorroPort.CLIMemberStore do
       GenServer.call(__MODULE__, :get_active_data, 1000)
     catch
       :exit, _ ->
-        Logger.warning("CLIMemberStore: Call timeout, returning empty active data")
+        Logger.warning("CLIClusterData: Call timeout, returning empty active data")
         empty_active_data()
     end
   end
@@ -65,8 +65,8 @@ defmodule CorroPort.CLIMemberStore do
       GenServer.call(__MODULE__, :get_cache_status, 1000)
     catch
       :exit, _ ->
-        Logger.warning("CLIMemberStore: Call timeout, returning empty cache status")
-        %{last_updated: nil, error: {:service_unavailable, "CLIMemberStore not responding"}, status: :unavailable, member_count: 0}
+        Logger.warning("CLIClusterData: Call timeout, returning empty cache status")
+        %{last_updated: nil, error: {:service_unavailable, "CLIClusterData not responding"}, status: :unavailable, member_count: 0}
     end
   end
 
@@ -99,7 +99,7 @@ defmodule CorroPort.CLIMemberStore do
   def init(opts) do
     refresh_interval = Keyword.get(opts, :refresh_interval, @default_refresh_interval)
 
-    Logger.info("CLIMemberStore starting with #{refresh_interval}ms refresh interval")
+    Logger.info("CLIClusterData starting with #{refresh_interval}ms refresh interval")
 
     # Start with empty state
     state = %{
@@ -134,7 +134,7 @@ defmodule CorroPort.CLIMemberStore do
   end
 
   def handle_cast(:refresh_members, state) do
-    Logger.info("CLIMemberStore: Manual refresh requested")
+    Logger.info("CLIClusterData: Manual refresh requested")
 
     # Cancel any existing task
     state = cancel_existing_task(state)
@@ -159,13 +159,13 @@ defmodule CorroPort.CLIMemberStore do
   end
 
   def handle_info({task_ref, {:ok, raw_output}}, %{fetch_task: {task_ref, _}} = state) do
-    Logger.debug("CLIMemberStore: CLI fetch completed successfully")
+    Logger.debug("CLIClusterData: CLI fetch completed successfully")
 
     # Ensure we never pass nil to the parser - convert nil to empty string
     # This handles the case where System.cmd might unexpectedly return nil
     normalized_output = raw_output || ""
 
-    # Logger.debug("CLIMemberStore: Raw output type: #{inspect(raw_output)} -> #{inspect(normalized_output)}")
+    # Logger.debug("CLIClusterData: Raw output type: #{inspect(raw_output)} -> #{inspect(normalized_output)}")
 
     # Parse the output
     {members, error} = parse_cli_output(normalized_output)
@@ -200,7 +200,7 @@ defmodule CorroPort.CLIMemberStore do
   end
 
   def handle_info({task_ref, {:error, reason}}, %{fetch_task: {task_ref, _}} = state) do
-    Logger.warning("CLIMemberStore: CLI fetch failed: #{inspect(reason)}")
+    Logger.warning("CLIClusterData: CLI fetch failed: #{inspect(reason)}")
 
     new_state = %{
       state
@@ -218,7 +218,7 @@ defmodule CorroPort.CLIMemberStore do
   end
 
   def handle_info({:DOWN, task_ref, :process, _pid, reason}, %{fetch_task: {task_ref, _}} = state) do
-    Logger.debug("CLIMemberStore: Task process ended: #{inspect(reason)}")
+    Logger.debug("CLIClusterData: Task process ended: #{inspect(reason)}")
 
     new_state = %{state | fetch_task: nil}
     {:noreply, new_state}
@@ -230,19 +230,19 @@ defmodule CorroPort.CLIMemberStore do
   end
 
   def handle_info(msg, state) do
-    Logger.debug("CLIMemberStore: Unhandled message: #{inspect(msg)}")
+    Logger.debug("CLIClusterData: Unhandled message: #{inspect(msg)}")
     {:noreply, state}
   end
 
   def terminate(reason, _state) do
-    Logger.info("CLIMemberStore shutting down: #{inspect(reason)}")
+    Logger.info("CLIClusterData shutting down: #{inspect(reason)}")
     :ok
   end
 
   # Private Functions
 
   defp start_fetch_task(state) do
-    Logger.debug("CLIMemberStore: Starting CLI fetch task")
+    Logger.debug("CLIClusterData: Starting CLI fetch task")
 
     task =
       Task.async(fn ->
@@ -257,7 +257,7 @@ defmodule CorroPort.CLIMemberStore do
   defp cancel_existing_task(%{fetch_task: nil} = state), do: state
 
   defp cancel_existing_task(%{fetch_task: {_task_ref, task}} = state) do
-    Logger.debug("CLIMemberStore: Cancelling existing fetch task")
+    Logger.debug("CLIClusterData: Cancelling existing fetch task")
     Task.shutdown(task, :brutal_kill)
     %{state | fetch_task: nil}
   end
@@ -265,16 +265,16 @@ defmodule CorroPort.CLIMemberStore do
   defp parse_cli_output(raw_output) do
     case CorroCLI.Parser.parse_cluster_members(raw_output) do
       {:ok, []} ->
-        Logger.info("CLIMemberStore: No cluster members found - single node setup")
+        Logger.info("CLIClusterData: No cluster members found - single node setup")
         {[], nil}
 
       {:ok, members} ->
         presented_members = CorroPort.ClusterMemberPresenter.present_members(members)
-        Logger.info("CLIMemberStore: Parsed #{length(presented_members)} cluster members")
+        Logger.info("CLIClusterData: Parsed #{length(presented_members)} cluster members")
         {presented_members, nil}
 
       {:error, reason} ->
-        Logger.warning("CLIMemberStore: Failed to parse CLI output: #{inspect(reason)}")
+        Logger.warning("CLIClusterData: Failed to parse CLI output: #{inspect(reason)}")
         {[], {:parse_error, reason}}
     end
   end
@@ -344,7 +344,7 @@ defmodule CorroPort.CLIMemberStore do
     %{
       members: [],
       last_updated: nil,
-      last_error: {:service_unavailable, "CLIMemberStore not responding"},
+      last_error: {:service_unavailable, "CLIClusterData not responding"},
       status: :unavailable,
       member_count: 0
     }
@@ -356,7 +356,7 @@ defmodule CorroPort.CLIMemberStore do
       regions: [],
       cache_status: %{
         last_updated: nil,
-        error: {:service_unavailable, "CLIMemberStore not responding"},
+        error: {:service_unavailable, "CLIClusterData not responding"},
         status: :unavailable,
         member_count: 0
       }
@@ -373,7 +373,7 @@ defmodule CorroPort.CLIMemberStore do
     )
 
     Logger.debug(
-      "CLIMemberStore: Broadcasted update - #{length(state.members)} members, status: #{state.status}"
+      "CLIClusterData: Broadcasted update - #{length(state.members)} members, status: #{state.status}"
     )
   end
 
@@ -387,7 +387,7 @@ defmodule CorroPort.CLIMemberStore do
     )
 
     Logger.debug(
-      "CLIMemberStore: Broadcasted active update - #{length(state.regions)} regions, status: #{state.status}"
+      "CLIClusterData: Broadcasted active update - #{length(state.regions)} regions, status: #{state.status}"
     )
   end
 end

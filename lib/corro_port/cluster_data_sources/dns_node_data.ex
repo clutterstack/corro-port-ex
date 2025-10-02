@@ -1,4 +1,4 @@
-defmodule CorroPort.NodeDiscovery do
+defmodule CorroPort.DNSNodeData do
   @moduledoc """
   Discovers expected cluster nodes via DNS and computes their regions.
 
@@ -44,7 +44,7 @@ defmodule CorroPort.NodeDiscovery do
   Receives: {:expected_nodes_updated, expected_data}
   """
   def subscribe do
-    Phoenix.PubSub.subscribe(CorroPort.PubSub, "node_discovery")
+    Phoenix.PubSub.subscribe(CorroPort.PubSub, "dns_node_data")
   end
 
   @doc """
@@ -57,7 +57,7 @@ defmodule CorroPort.NodeDiscovery do
   # GenServer Implementation
 
   def init(_opts) do
-    Logger.info("NodeDiscovery starting...")
+    Logger.info("DNSNodeData starting...")
 
     state = %{
       nodes_result: nil,
@@ -89,13 +89,13 @@ defmodule CorroPort.NodeDiscovery do
   end
 
   def handle_cast(:refresh_cache, state) do
-    Logger.info("NodeDiscovery: Manual cache refresh requested")
+    Logger.info("DNSNodeData: Manual cache refresh requested")
     new_state = perform_fetch(state)
     {:noreply, new_state}
   end
 
   def handle_info(:initial_fetch, state) do
-    Logger.info("NodeDiscovery: Performing initial DNS fetch")
+    Logger.info("DNSNodeData: Performing initial DNS fetch")
     new_state = perform_fetch(state)
     {:noreply, new_state}
   end
@@ -119,12 +119,12 @@ defmodule CorroPort.NodeDiscovery do
           last_error: nil
         }
 
-        Logger.info("NodeDiscovery: Successfully fetched #{length(filtered_nodes)} expected nodes")
+        Logger.info("DNSNodeData: Successfully fetched #{length(filtered_nodes)} expected nodes")
         broadcast_update(new_state)
         new_state
 
       {:error, reason} ->
-        Logger.warning("NodeDiscovery: DNS fetch failed: #{inspect(reason)}")
+        Logger.warning("DNSNodeData: DNS fetch failed: #{inspect(reason)}")
 
         new_state = %{
           state |
@@ -142,19 +142,19 @@ defmodule CorroPort.NodeDiscovery do
   defp fetch_nodes_from_dns do
     case get_fly_app_name() do
       nil ->
-        Logger.debug("NodeDiscovery: Not in Fly.io environment, using development fallback")
+        Logger.debug("DNSNodeData: Not in Fly.io environment, using development fallback")
         get_development_fallback()
 
       app_name ->
         dns_name = "vms.#{app_name}.internal"
-        Logger.debug("NodeDiscovery: Querying DNS TXT record: #{dns_name}")
+        Logger.debug("DNSNodeData: Querying DNS TXT record: #{dns_name}")
 
         case query_dns_txt(dns_name) do
           {:ok, txt_records} ->
             parse_txt_records(txt_records)
 
           {:error, reason} ->
-            Logger.warning("NodeDiscovery: DNS query failed for #{dns_name}: #{inspect(reason)}")
+            Logger.warning("DNSNodeData: DNS query failed for #{dns_name}: #{inspect(reason)}")
             {:error, {:dns_query_failed, reason}}
         end
     end
@@ -199,11 +199,11 @@ defmodule CorroPort.NodeDiscovery do
         |> Enum.uniq()
         |> Enum.sort()
 
-      Logger.info("NodeDiscovery: Parsed #{length(all_nodes)} nodes from DNS")
+      Logger.info("DNSNodeData: Parsed #{length(all_nodes)} nodes from DNS")
       {:ok, all_nodes}
     rescue
       e ->
-        Logger.warning("NodeDiscovery: Error parsing TXT records: #{inspect(e)}")
+        Logger.warning("DNSNodeData: Error parsing TXT records: #{inspect(e)}")
         {:error, {:parse_error, e}}
     end
   end
@@ -223,13 +223,13 @@ defmodule CorroPort.NodeDiscovery do
         "#{region}-#{machine_id}"
 
       _ ->
-        Logger.warning("NodeDiscovery: Invalid machine/region pair: #{inspect(pair_string)}")
+        Logger.warning("DNSNodeData: Invalid machine/region pair: #{inspect(pair_string)}")
         nil
     end
   end
 
   defp get_development_fallback do
-    Logger.debug("NodeDiscovery: Using development fallback")
+    Logger.debug("DNSNodeData: Using development fallback")
 
     _local_node_id = CorroPort.LocalNode.get_node_id()
     all_dev_nodes = ["dev-node1", "dev-node2", "dev-node3"]
@@ -250,7 +250,7 @@ defmodule CorroPort.NodeDiscovery do
 
   defp broadcast_update(state) do
     expected_data = build_expected_data(state)
-    Phoenix.PubSub.broadcast(CorroPort.PubSub, "node_discovery", {:expected_nodes_updated, expected_data})
+    Phoenix.PubSub.broadcast(CorroPort.PubSub, "dns_node_data", {:expected_nodes_updated, expected_data})
   end
 
   defp is_cache_fresh?(nil), do: false
