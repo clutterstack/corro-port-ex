@@ -6,7 +6,6 @@ defmodule CorroPortWeb.IndexLive do
     NavTabs,
     PropagationHeader,
     ErrorAlerts,
-    PropagationStats,
     CacheStatus
   }
 
@@ -241,35 +240,6 @@ defmodule CorroPortWeb.IndexLive do
       <!-- Enhanced World Map with Regions -->
       <FlyMapEx.render
         marker_groups={@marker_groups}
-      />
-
-      <!-- Region Legend -->
-      <div class="text-sm text-base-content/70 space-y-2">
-        <div class="flex items-center">
-          <span class="inline-block w-3 h-3 rounded-full mr-2 bg-blue-400"></span>
-          Our node {@our_regions |> format_regions_display("(region unknown)")}
-        </div>
-        <div class="flex items-center">
-          <span class="inline-block w-3 h-3 rounded-full mr-2 bg-yellow-400"></span>
-          Active nodes (CLI) {@active_regions |> format_regions_display("(none found)")}
-        </div>
-        <div class="flex items-center">
-          <span class="inline-block w-3 h-3 rounded-full mr-2 bg-orange-500"></span>
-          Nodes from DNS {@expected_regions |> format_regions_display(dns_empty_message())}
-        </div>
-        <div class="flex items-center">
-          <span class="inline-block w-3 h-3 rounded-full mr-2 bg-purple-500"></span>
-          Acknowledged latest message {@ack_regions |> format_regions_display("(none yet)")}
-        </div>
-      </div>
-
-      <!-- Summary Stats -->
-      <PropagationStats.propagation_stats
-        expected_data={@expected_data}
-        active_data={@active_data}
-        expected_regions={@expected_regions}
-        active_regions={@active_regions}
-        ack_regions={@ack_regions}
       />
 
       <!-- Cache Status Indicators -->
