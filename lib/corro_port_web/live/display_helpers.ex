@@ -498,4 +498,176 @@ end
 
 def format_cli_last_updated(_), do: nil
 
+  # DNS Node Data Helpers
+
+  @doc """
+  Builds DNS node data for the DNSNodesTable component.
+  """
+  def build_dns_node_data(expected_data) do
+    case expected_data.nodes do
+      {:ok, nodes} ->
+        parsed_nodes = Enum.map(nodes, &parse_dns_node_id/1)
+        status = if expected_data.cache_status.error, do: :error, else: :ok
+        %{
+          nodes: parsed_nodes,
+          node_count: length(parsed_nodes),
+          status: status,
+          last_updated: expected_data.cache_status.last_updated,
+          last_error: expected_data.cache_status.error
+        }
+
+      {:error, reason} ->
+        %{
+          nodes: [],
+          node_count: 0,
+          status: :error,
+          last_updated: expected_data.cache_status.last_updated,
+          last_error: reason
+        }
+    end
+  end
+
+  @doc """
+  Parses a DNS node ID into region and machine ID components.
+  Expected format: "region-machineid" (e.g., "ams-machine1")
+  """
+  def parse_dns_node_id(node_id) when is_binary(node_id) do
+    case String.split(node_id, "-", parts: 2) do
+      [region, machine_id] ->
+        %{
+          "region" => region,
+          "machine_id" => machine_id,
+          "full_id" => node_id
+        }
+
+      [single_part] ->
+        # Handle case where there's no dash
+        %{
+          "region" => "unknown",
+          "machine_id" => single_part,
+          "full_id" => node_id
+        }
+    end
+  end
+
+  def parse_dns_node_id(_), do: %{"region" => "unknown", "machine_id" => "unknown", "full_id" => "unknown"}
+
+  @doc """
+  Builds DNS status information for display.
+  """
+  def build_dns_status_info(dns_node_data) do
+    %{
+      status_badge_class: dns_status_badge_class(dns_node_data.status),
+      status_text: format_dns_status(dns_node_data.status),
+      last_updated_text: format_dns_last_updated(dns_node_data.last_updated),
+      node_count: dns_node_data.node_count
+    }
+  end
+
+  @doc """
+  Determines DNS status badge CSS classes.
+  """
+  def dns_status_badge_class(status) do
+    base = "badge badge-sm"
+
+    case status do
+      :ok -> "#{base} badge-success"
+      :fetching -> "#{base} badge-info"
+      :error -> "#{base} badge-error"
+      :unavailable -> "#{base} badge-warning"
+      :initializing -> "#{base} badge-neutral"
+      _ -> "#{base} badge-neutral"
+    end
+  end
+
+  @doc """
+  Formats DNS status for display.
+  """
+  def format_dns_status(status) do
+    case status do
+      :ok -> "Active"
+      :fetching -> "Fetching"
+      :error -> "Error"
+      :unavailable -> "Unavailable"
+      :initializing -> "Starting"
+      _ -> "Unknown"
+    end
+  end
+
+  @doc """
+  Formats DNS last updated timestamp for display.
+  """
+  def format_dns_last_updated(nil), do: nil
+
+  def format_dns_last_updated(timestamp) when is_binary(timestamp) do
+    case DateTime.from_iso8601(timestamp) do
+      {:ok, dt, _} -> Calendar.strftime(dt, "%H:%M:%S")
+      _ -> timestamp
+    end
+  end
+
+  def format_dns_last_updated(%DateTime{} = dt) do
+    Calendar.strftime(dt, "%H:%M:%S")
+  end
+
+  def format_dns_last_updated(_), do: nil
+
+  @doc """
+  Extracts DNS error from expected data for the DNSNodesTable component.
+  """
+  def extract_dns_error(expected_data) do
+    case expected_data.nodes do
+      {:ok, _} -> nil
+      {:error, reason} -> reason
+    end
+  end
+
+  @doc """
+  Determines if DNS error should be displayed.
+  """
+  def should_show_dns_error?(dns_error) do
+    !is_nil(dns_error)
+  end
+
+  @doc """
+  Determines if DNS has successful nodes to display.
+  """
+  def has_successful_dns_nodes?(dns_node_data) do
+    dns_node_data && dns_node_data.nodes != []
+  end
+
+  @doc """
+  Determines if DNS empty state should be shown.
+  """
+  def show_dns_empty_state?(dns_node_data, dns_error) do
+    dns_node_data && dns_node_data.nodes == [] && is_nil(dns_error)
+  end
+
+  @doc """
+  Determines if DNS loading state should be shown.
+  """
+  def show_dns_loading_state?(dns_node_data) do
+    is_nil(dns_node_data) || dns_node_data.status == :initializing
+  end
+
+  @doc """
+  Builds DNS error configuration for display.
+  """
+  def build_dns_error_config(dns_error) do
+    {title, message} = case dns_error do
+      {:dns_query_failed, :no_txt_records} ->
+        {"DNS Data Issue", "No DNS TXT records found for cluster discovery"}
+
+      {:dns_query_failed, reason} ->
+        {"DNS Data Issue", "DNS query failed: #{inspect(reason)}"}
+
+      {:parse_error, _reason} ->
+        {"DNS Data Issue", "DNS query succeeded but output couldn't be parsed"}
+
+      _ ->
+        {"DNS Data Issue", "Unknown DNS error: #{inspect(dns_error)}"}
+    end
+
+    %{title: title, message: message}
+  end
 end

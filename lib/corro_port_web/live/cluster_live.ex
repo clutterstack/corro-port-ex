@@ -2,7 +2,7 @@ defmodule CorroPortWeb.ClusterLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPortWeb.{DebugSection, NavTabs, CLIMembersTable, MembersTable}
+  alias CorroPortWeb.{DebugSection, NavTabs, CLIMembersTable, DNSNodesTable, MembersTable}
   alias CorroPortWeb.DisplayHelpers
   alias CorroPort.NodeConfig
 
@@ -303,6 +303,9 @@ defmodule CorroPortWeb.ClusterLive do
         marker_groups={@marker_groups}
         theme={:monitoring}
       />
+
+      <!-- DNS-Discovered Nodes Table -->
+      <DNSNodesTable.display expected_data={@expected_data} />
 
       <!-- CLI Members Display with clean data structure -->
       <CLIMembersTable.display
