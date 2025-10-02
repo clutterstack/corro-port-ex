@@ -2,7 +2,7 @@ defmodule CorroPortWeb.ClusterLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPortWeb.{DebugSection, NavTabs, CLIMembersTable}
+  alias CorroPortWeb.{DebugSection, NavTabs, CLIMembersTable, MembersTable}
   alias CorroPortWeb.DisplayHelpers
   alias CorroPort.NodeConfig
 
@@ -71,12 +71,15 @@ defmodule CorroPortWeb.ClusterLive do
     active_data = CorroPort.CLIClusterData.get_active_data()
     local_node = CorroPort.LocalNode.get_info()
 
-    # Fetch cluster info directly from API
+    # Fetch cluster info directly from API, falling back to previous data on error
     conn = CorroPort.ConnectionManager.get_connection()
-    {cluster_info, cluster_error} = case CorroClient.get_cluster_info(conn) do
-      {:ok, info} -> {info, nil}
-      {:error, reason} -> {nil, reason}
-    end
+    previous_cluster_info = Map.get(socket.assigns, :cluster_info)
+
+    {cluster_info, cluster_error} =
+      case CorroClient.get_cluster_info(conn) do
+        {:ok, info} -> {info, nil}
+        {:error, reason} -> {previous_cluster_info, reason}
+      end
 
     # Build system_data structure for DisplayHelpers compatibility
     system_data = %{
@@ -98,16 +101,26 @@ defmodule CorroPortWeb.ClusterLive do
       active_data: active_data,
       system_data: system_data,
       local_node: local_node,
+      cluster_info: cluster_info,
 
       # Computed marker groups for map display
       marker_groups: marker_groups,
 
       last_updated: DateTime.utc_now()
     })
+    |> maybe_flash_cluster_error(cluster_error)
   end
 
   defp exclude_our_region(regions, our_region) do
     Enum.reject(regions, &(&1 == our_region))
+  end
+
+  defp maybe_flash_cluster_error(socket, nil) do
+    Phoenix.LiveView.clear_flash(socket, :error)
+  end
+
+  defp maybe_flash_cluster_error(socket, error) do
+    put_flash(socket, :error, "Failed to refresh __corro_members from Corrosion API. Showing last successful data. Reason: #{inspect(error)}")
   end
 
   defp create_region_groups(expected_data, active_data, local_node) do
@@ -216,6 +229,75 @@ defmodule CorroPortWeb.ClusterLive do
       <.error_alert :if={@cli_alert} config={@cli_alert} />
       <.error_alert :if={@system_alert} config={@system_alert} />
 
+      <!-- About Data Sources (collapsible) -->
+      <details class="collapse collapse-arrow bg-base-200">
+        <summary class="collapse-title text-sm font-medium">
+          <.icon name="hero-information-circle" class="w-4 h-4 inline mr-2" />
+          About Data Sources
+        </summary>
+        <div class="collapse-content">
+          <div class="grid md:grid-cols-3 gap-4 text-sm">
+            <div class="card bg-base-100">
+              <div class="card-body p-4">
+                <h4 class="font-semibold flex items-center gap-2">
+                  <.icon name="hero-globe-alt" class="w-4 h-4" />
+                  DNS Discovery
+                </h4>
+                <p class="text-xs text-base-content/70 mt-2">
+                  Queries DNS TXT records to find nodes that <strong>should exist</strong> based on infrastructure configuration.
+                </p>
+                <div class="text-xs mt-2 space-y-1">
+                  <div><strong>Query:</strong> <code class="text-xs">vms.&#123;app_name&#125;.internal</code></div>
+                  <div><strong>Returns:</strong> Expected node IDs and regions</div>
+                  <div><strong>Refresh:</strong> On-demand (OS DNS cache)</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card bg-base-100">
+              <div class="card-body p-4">
+                <h4 class="font-semibold flex items-center gap-2">
+                  <.icon name="hero-command-line" class="w-4 h-4" />
+                  CLI Members
+                </h4>
+                <p class="text-xs text-base-content/70 mt-2">
+                  Executes <code>corro cluster members</code> to find Corrosion nodes <strong>actively participating</strong> in the gossip protocol.
+                </p>
+                <div class="text-xs mt-2 space-y-1">
+                  <div><strong>Command:</strong> <code class="text-xs">corro cluster members</code></div>
+                  <div><strong>Returns:</strong> Active members with RTT, state, leader/follower</div>
+                  <div><strong>Refresh:</strong> Every 5 minutes + on-demand</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card bg-base-100">
+              <div class="card-body p-4">
+                <h4 class="font-semibold flex items-center gap-2">
+                  <.icon name="hero-server" class="w-4 h-4" />
+                  Corrosion API
+                </h4>
+                <p class="text-xs text-base-content/70 mt-2">
+                  Queries the <strong>database-level cluster state</strong> from the Corrosion agent's API.
+                </p>
+                <div class="text-xs mt-2 space-y-1">
+                  <div><strong>Query:</strong> <code class="text-xs">__corro_members</code> table</div>
+                  <div><strong>Returns:</strong> Member counts, peers, system state</div>
+                  <div><strong>Refresh:</strong> On-demand</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="alert alert-info mt-4 text-xs">
+            <.icon name="hero-light-bulb" class="w-4 h-4" />
+            <div>
+              <strong>Architecture Note:</strong> CorroPort runs as two layers: Corrosion agents (database/storage on ports 8081+) and Phoenix nodes (web UI on ports 4001+). Corrosion agents must be running before Phoenix nodes can start.
+            </div>
+          </div>
+        </div>
+      </details>
+
       <!-- Enhanced World Map with Regions -->
       <FlyMapEx.render
         marker_groups={@marker_groups}
@@ -227,6 +309,9 @@ defmodule CorroPortWeb.ClusterLive do
         cli_member_data={@cli_member_data}
         cli_error={@cli_error}
       />
+
+      <!-- Corrosion API (__corro_members) table entries -->
+      <MembersTable.cluster_members_table :if={@cluster_info} cluster_info={@cluster_info} />
 
 
       <!-- Enhanced Cluster Summary using pre-computed stats -->
@@ -275,22 +360,40 @@ defmodule CorroPortWeb.ClusterLive do
         </h3>
 
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <!-- Expected Nodes -->
+          <!-- DNS-Discovered Nodes -->
           <div class="stat bg-base-100 rounded-lg">
-            <div class="stat-title text-xs">Expected Nodes</div>
+            <div class="stat-title text-xs">
+              <span title={@summary_stats.expected.tooltip} class="cursor-help">
+                DNS-Discovered Nodes ℹ️
+              </span>
+            </div>
             <div class={"stat-value text-lg flex items-center #{@summary_stats.expected.display.class}"}>
               {@summary_stats.expected.display.content}
             </div>
-            <div class="stat-desc text-xs">{@summary_stats.expected.regions_count} regions</div>
+            <div class="stat-desc text-xs">
+              {@summary_stats.expected.regions_count} regions
+              <span class="text-base-content/50 ml-1">
+                • {@summary_stats.expected.source_label}
+              </span>
+            </div>
           </div>
 
-          <!-- Active Members -->
+          <!-- CLI Active Members -->
           <div class="stat bg-base-100 rounded-lg">
-            <div class="stat-title text-xs">Active Members</div>
+            <div class="stat-title text-xs">
+              <span title={@summary_stats.active.tooltip} class="cursor-help">
+                CLI Active Members ℹ️
+              </span>
+            </div>
             <div class={"stat-value text-lg flex items-center #{@summary_stats.active.display.class}"}>
               {@summary_stats.active.display.content}
             </div>
-            <div class="stat-desc text-xs">{@summary_stats.active.regions_count} regions</div>
+            <div class="stat-desc text-xs">
+              {@summary_stats.active.regions_count} regions
+              <span class="text-base-content/50 ml-1">
+                • {@summary_stats.active.source_label}
+              </span>
+            </div>
           </div>
 
           <!-- Cluster Health -->
@@ -338,20 +441,37 @@ defmodule CorroPortWeb.ClusterLive do
 
   defp cache_status_display(assigns) do
     ~H"""
-    <div class="flex gap-4 text-xs text-base-content/70">
-      <div>
-        <strong>DNS Cache:</strong>
-        {@cache_status.dns}
-      </div>
+    <div class="card bg-base-200">
+      <div class="card-body p-4">
+        <h4 class="text-sm font-semibold mb-3 flex items-center gap-2">
+          <.icon name="hero-clock" class="w-4 h-4" />
+          Data Source Status
+        </h4>
+        <div class="grid md:grid-cols-3 gap-4 text-xs">
+          <div class="flex items-start gap-2">
+            <.icon name="hero-globe-alt" class="w-4 h-4 mt-0.5 text-primary" />
+            <div>
+              <div class="font-semibold">DNS Discovery</div>
+              <div class="text-base-content/70">{@cache_status.dns}</div>
+            </div>
+          </div>
 
-      <div>
-        <strong>CLI Cache:</strong>
-        {@cache_status.cli}
-      </div>
+          <div class="flex items-start gap-2">
+            <.icon name="hero-command-line" class="w-4 h-4 mt-0.5 text-secondary" />
+            <div>
+              <div class="font-semibold">CLI Members</div>
+              <div class="text-base-content/70">{@cache_status.cli}</div>
+            </div>
+          </div>
 
-      <div>
-        <strong>System Cache:</strong>
-        {@cache_status.system}
+          <div class="flex items-start gap-2">
+            <.icon name="hero-server" class="w-4 h-4 mt-0.5 text-accent" />
+            <div>
+              <div class="font-semibold">Corrosion API</div>
+              <div class="text-base-content/70">{@cache_status.system}</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     """

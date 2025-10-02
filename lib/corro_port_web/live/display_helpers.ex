@@ -205,6 +205,37 @@ defmodule CorroPortWeb.DisplayHelpers do
   end
 
   @doc """
+  Returns tooltip/help text for data sources.
+  """
+  def data_source_tooltip(source) do
+    case source do
+      :dns ->
+        "Discovered via DNS TXT record query. Shows nodes that should exist based on infrastructure config."
+
+      :cli ->
+        "Fetched via 'corro cluster members' CLI command. Shows Corrosion nodes actively participating in gossip protocol."
+
+      :api ->
+        "Queried from Corrosion API (__corro_members table). Database-level cluster state from the agent."
+
+      _ ->
+        ""
+    end
+  end
+
+  @doc """
+  Returns source label for display.
+  """
+  def data_source_label(source) do
+    case source do
+      :dns -> "DNS Query"
+      :cli -> "CLI Command"
+      :api -> "Corrosion API"
+      _ -> "Unknown"
+    end
+  end
+
+  @doc """
   Builds display configuration for cluster summary stats.
   """
   def cluster_summary_stats(expected_data, active_data, system_data, expected_regions, active_regions) do
@@ -215,11 +246,17 @@ defmodule CorroPortWeb.DisplayHelpers do
     %{
       expected: %{
         display: expected_display,
-        regions_count: length(expected_regions)
+        regions_count: length(expected_regions),
+        source_label: data_source_label(:dns),
+        tooltip: data_source_tooltip(:dns),
+        last_updated: expected_data.cache_status.last_updated
       },
       active: %{
         display: active_display,
-        regions_count: length(active_regions)
+        regions_count: length(active_regions),
+        source_label: data_source_label(:cli),
+        tooltip: data_source_tooltip(:cli),
+        last_updated: active_data.cache_status.last_updated
       },
       api_health: api_health,
       messages_count: length(system_data.latest_messages)

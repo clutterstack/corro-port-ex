@@ -3,7 +3,7 @@ defmodule CorroPortWeb.NodeLive do
   require Logger
 
   alias CorroPort.{NodeConfig, ConnectionManager}
-  alias CorroPortWeb.{NavTabs, MembersTable}
+  alias CorroPortWeb.NavTabs
 
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -23,8 +23,7 @@ defmodule CorroPortWeb.NodeLive do
         connectivity_test: nil,
         error: nil,
         loading: true,
-        last_updated: nil,
-        cluster_info: nil
+        last_updated: nil
       })
 
     {:ok, fetch_node_data(socket)}
@@ -115,12 +114,6 @@ defmodule CorroPortWeb.NodeLive do
       {:error, _} -> %{}
     end
 
-    # Fetch cluster info for members table
-    cluster_info = case CorroClient.get_cluster_info(conn) do
-      {:ok, info} -> info
-      {:error, _} -> nil
-    end
-
     process_info = get_process_info()
     file_info = get_file_info()
     local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
@@ -131,7 +124,6 @@ defmodule CorroPortWeb.NodeLive do
       local_node_id: local_node_id,
       config_info: config_info,
       db_info: db_info,
-      cluster_info: cluster_info,
       process_info: process_info,
       file_info: file_info,
       loading: false,
@@ -497,15 +489,6 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-
-    <!-- Cluster Members from local __corro_members table -->
-      <div :if={@cluster_info} class="card bg-base-100">
-        <div class="card-body">
-          <h3 class="card-title text-lg">Cluster Members (from local __corro_members table)</h3>
-          <MembersTable.cluster_members_table cluster_info={@cluster_info} />
-        </div>
-      </div>
-
     <!-- File Information -->
       <div :if={@file_info && !@loading} class="card bg-base-100">
         <div class="card-body">
