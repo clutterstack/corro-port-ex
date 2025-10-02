@@ -18,6 +18,13 @@ defmodule CorroPort.AnalyticsAggregator do
   - Aggregator polls nodes every 10 seconds during experiments
   - Aggregated data is cached locally with TTL
   - Real-time updates are pushed via Phoenix PubSub
+
+  Experiment Data Model:
+  - Experiments are keyed by a shared experiment_id propagated to SystemMetrics and AckTracker
+  - Topology snapshots capture bootstrap peers and transaction parameters at experiment start
+  - Message events track per-message send/ack timing with originating/target node context
+  - System metrics record per-node CPU, memory, and VM health for correlation with messaging data
+  - Aggregated analytics surface flow patterns, latency distributions, failure rates, and guidance
   """
 
   use GenServer
