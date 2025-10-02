@@ -269,8 +269,9 @@ defmodule CorroPort.CLIMemberStore do
         {[], nil}
 
       {:ok, members} ->
-        Logger.info("CLIMemberStore: Parsed #{length(members)} cluster members")
-        {members, nil}
+        presented_members = CorroPort.ClusterMemberPresenter.present_members(members)
+        Logger.info("CLIMemberStore: Parsed #{length(presented_members)} cluster members")
+        {presented_members, nil}
 
       {:error, reason} ->
         Logger.warning("CLIMemberStore: Failed to parse CLI output: #{inspect(reason)}")

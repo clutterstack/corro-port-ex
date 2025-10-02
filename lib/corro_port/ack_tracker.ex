@@ -313,7 +313,7 @@ defmodule CorroPort.AckTracker do
     # Only record if we have an active experiment
     if experiment_id do
       # Extract region from ack_node_id if possible
-      region = extract_region_from_node_id(ack_node_id)
+      region = CorroPort.NodeNaming.extract_region_from_node_id(ack_node_id)
 
       # Record the acknowledgment event
       CorroPort.AnalyticsStorage.record_message_event(
@@ -331,13 +331,4 @@ defmodule CorroPort.AckTracker do
     end
   end
 
-  defp extract_region_from_node_id(node_id) do
-    # Try to extract region information from node_id
-    # This is a basic implementation - you might want to enhance this
-    # based on your actual node naming conventions
-    case String.split(node_id, "-") do
-      [region | _] -> region
-      _ -> nil
-    end
-  end
 end

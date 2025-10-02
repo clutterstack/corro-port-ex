@@ -13,7 +13,7 @@ defmodule CorroPort.RegionExtractor do
     if CorroPort.NodeConfig.production?() do
       # Production: extract region prefix
       nodes
-      |> Enum.map(&CorroCLI.Parser.extract_region_from_node_id/1)
+      |> Enum.map(&CorroPort.NodeNaming.extract_region_from_node_id/1)
       |> Enum.reject(&(&1 in ["unknown", ""]))
       |> Enum.uniq()
     else
@@ -39,7 +39,7 @@ defmodule CorroPort.RegionExtractor do
         members
         |> Enum.map(&CorroPort.AckTracker.member_to_node_id/1)
         |> Enum.reject(&is_nil/1)
-        |> Enum.map(&CorroCLI.Parser.extract_region_from_node_id/1)
+        |> Enum.map(&CorroPort.NodeNaming.extract_region_from_node_id/1)
         |> Enum.reject(&(&1 in ["unknown", ""]))
         |> Enum.uniq()
 
@@ -66,7 +66,7 @@ defmodule CorroPort.RegionExtractor do
       # Production: extract region prefix
       acks
       |> Enum.map(& &1.node_id)
-      |> Enum.map(&CorroCLI.Parser.extract_region_from_node_id/1)
+      |> Enum.map(&CorroPort.NodeNaming.extract_region_from_node_id/1)
       |> Enum.reject(&(&1 in ["unknown", ""]))
       |> Enum.uniq()
     else
@@ -89,7 +89,7 @@ defmodule CorroPort.RegionExtractor do
     node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
     if CorroPort.NodeConfig.production?() do
-      region = CorroCLI.Parser.extract_region_from_node_id(node_id)
+      region = CorroPort.NodeNaming.extract_region_from_node_id(node_id)
       if region in ["unknown", ""], do: "local", else: region
     else
       # Dev: use full node_id as region name (matches custom FlyMapEx regions)
