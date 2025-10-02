@@ -35,9 +35,6 @@ defmodule CorroPortWeb.CLIMembersTable do
           </div>
         </div>
 
-        <!-- CLI Status Info -->
-        <.cli_status_info :if={@status_info} status_info={@status_info} />
-
         <!-- Error Display -->
         <.cli_error_alert :if={DisplayHelpers.should_show_cli_error?(@cli_error)} cli_error={@cli_error} />
 
@@ -63,31 +60,6 @@ defmodule CorroPortWeb.CLIMembersTable do
 
   # Helper components extracted from template
 
-  defp cli_status_info(assigns) do
-    ~H"""
-    <div class="mb-4">
-      <div class="flex items-center gap-4 text-sm">
-        <div class="flex items-center gap-2">
-          <span class="font-semibold">Status:</span>
-          <span class={@status_info.status_badge_class}>
-            {@status_info.status_text}
-          </span>
-        </div>
-        <div :if={@status_info.last_updated_text}>
-          <span class="font-semibold">Last Updated:</span>
-          <span class="text-xs">
-            {@status_info.last_updated_text}
-          </span>
-        </div>
-        <div>
-          <span class="font-semibold">Members:</span>
-          <span>{@status_info.member_count}</span>
-        </div>
-      </div>
-    </div>
-    """
-  end
-
   defp cli_error_alert(assigns) do
     error_config = DisplayHelpers.build_cli_error_config(assigns.cli_error)
     assigns = assign(assigns, :error_config, error_config)
@@ -106,10 +78,6 @@ defmodule CorroPortWeb.CLIMembersTable do
   defp cli_results_section(assigns) do
     ~H"""
     <div class="space-y-4">
-      <div class="alert alert-success">
-        <.icon name="hero-check-circle" class="w-5 h-5" />
-        <span>Found {length(@cli_member_data.members)} cluster members via CLI</span>
-      </div>
 
       <div class="overflow-x-auto">
         <table class="table table-zebra">

@@ -256,9 +256,9 @@ defmodule CorroPortWeb.MessagesLive do
         </:subtitle>
         <:actions>
           <.button
-            :if={@ack_status && @ack_status.latest_message}
             phx-click="reset_tracking"
             class="btn btn-warning btn-outline"
+            disabled={!(@ack_status && @ack_status.latest_message)}
           >
             <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Reset Tracking
           </.button>
