@@ -20,10 +20,6 @@ if System.get_env("PHX_SERVER") do
   config :corro_port, CorroPortWeb.Endpoint, server: true
 end
 
-config :corro_cli,
-    binary_path: CorroPort.NodeConfig.get_corro_binary_path(),
-    config_path: CorroPort.NodeConfig.get_config_path()
-
 if config_env() == :prod do
   secret_key_base =
     System.get_env("SECRET_KEY_BASE") ||
@@ -32,9 +28,9 @@ if config_env() == :prod do
       You can generate one by calling: mix phx.gen.secret
       """
 
-  host = System.get_env("PHX_HOST") || "example.com"
-  port = String.to_integer(System.get_env("PORT") || "8080")
-  ack_api_port = String.to_integer(System.get_env("API_PORT") || "8088")
+  host = System.get_env("PHX_HOST", "example.com")
+  port = String.to_integer(System.get_env("PORT", "8080"))
+  ack_api_port = String.to_integer(System.get_env("API_PORT", "8088"))
 
   config :corro_port, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
@@ -46,75 +42,75 @@ if config_env() == :prod do
 
   # API endpoint configuration
   fly_private_ip = System.get_env("FLY_PRIVATE_IP")
-  fly_app_name = System.get_env("FLY_APP_NAME")
-  fly_machine_id = System.get_env("FLY_MACHINE_ID")
 
-  if fly_private_ip do
-    # Parse IPv6 address for API endpoint
+  api_ip = if fly_private_ip do
     case :inet.parse_address(String.to_charlist(fly_private_ip)) do
       {:ok, ipv6_tuple} ->
-        config :corro_port, CorroPortWeb.APIEndpoint,
-          http: [ip: ipv6_tuple, port: ack_api_port],
-          secret_key_base: secret_key_base,
-          server: true
+        ipv6_tuple
 
       {:error, _} ->
         Logger.warning(
           "Failed to parse FLY_PRIVATE_IP: #{fly_private_ip}, falling back to all interfaces"
         )
-
-        config :corro_port, CorroPortWeb.APIEndpoint,
-          http: [ip: {0, 0, 0, 0, 0, 0, 0, 0}, port: ack_api_port],
-          secret_key_base: secret_key_base,
-          server: true
+        {0, 0, 0, 0, 0, 0, 0, 0}
     end
   else
-    # Fallback to all interfaces if no private IP
-    config :corro_port, CorroPortWeb.APIEndpoint,
-      http: [ip: {0, 0, 0, 0, 0, 0, 0, 0}, port: ack_api_port],
-      secret_key_base: secret_key_base,
-      server: true
+    {0, 0, 0, 0, 0, 0, 0, 0}
   end
+
+  config :corro_port, CorroPortWeb.APIEndpoint,
+    http: [ip: api_ip, port: ack_api_port],
+    secret_key_base: secret_key_base,
+    server: true
 
   # Configure Analytics Repo for production
   config :corro_port, CorroPort.Analytics.Repo,
     database: "/opt/data/analytics/analytics.db"
 
-  # Update node config with production settings
-  if fly_app_name && fly_private_ip && fly_machine_id do
-    # Get region from environment
-    fly_region = System.get_env("FLY_REGION") || "unknown"
+  # Common node config values
+  common_node_config = [
+    ack_api_port: ack_api_port,
+    corrosion_api_port: 8081,
+    corrosion_gossip_port: 8787,
+    corro_config_path: "/app/corrosion.toml",
+    corrosion_binary: "/app/corrosion",
+    environment: :prod
+  ]
 
-    # Create region-aware node ID: region-machine_id
+  # Update node config with production settings
+  fly_app_name = System.get_env("FLY_APP_NAME")
+  fly_machine_id = System.get_env("FLY_MACHINE_ID")
+
+  node_specific_config = if fly_app_name && fly_private_ip && fly_machine_id do
+    fly_region = System.get_env("FLY_REGION", "unknown")
     region_node_id = "#{fly_region}-#{fly_machine_id}"
 
-    config :corro_port, :node_config,
+    [
       node_id: region_node_id,
-      ack_api_port: ack_api_port,
-      corrosion_api_port: 8081,
-      corrosion_gossip_port: 8787,
       corrosion_bootstrap_list: "[\"#{fly_app_name}.internal:8787\"]",
-      corro_config_path: "/app/corrosion.toml",
-      corrosion_binary: "/app/corrosion",
-      environment: :prod,
       fly_app_name: fly_app_name,
       private_ip: fly_private_ip,
       fly_machine_id: fly_machine_id,
       fly_region: fly_region
+    ]
   else
     # Fallback configuration
     fallback_region = System.get_env("FLY_REGION", "fallback")
     fallback_node_id = System.get_env("NODE_ID", "fallback")
 
-    config :corro_port, :node_config,
+    [
       node_id: "#{fallback_region}-#{fallback_node_id}",
-      ack_api_port: ack_api_port,
-      corrosion_api_port: 8081,
-      corrosion_gossip_port: 8787,
       corrosion_bootstrap_list: "[]",
-      corro_config_path: "/app/corrosion.toml",
-      corrosion_binary: "/app/corrosion",
-      environment: :prod,
       fly_region: fallback_region
+    ]
   end
+
+  full_node_config = Keyword.merge(common_node_config, node_specific_config)
+
+  config :corro_port, :node_config, full_node_config
+
+  # Configure corro_cli using the config values directly
+  config :corro_cli,
+    binary_path: full_node_config[:corrosion_binary],
+    config_path: full_node_config[:corro_config_path]
 end

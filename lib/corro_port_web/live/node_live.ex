@@ -556,12 +556,12 @@ defmodule CorroPortWeb.NodeLive do
   end
 
   def connection_indicator(api_cx_test = assigns) do
-    corro_status = connectivity_status(assigns.api_cx_test) |> dbg
+    assigns = assign( assigns, :corro_status, connectivity_status(assigns.api_cx_test) )
     ~H"""
     <div class="flex flex-wrap items-center gap-2 rounded-lg bg-base-200 px-3 py-2 text-sm">
-      <.icon name={corro_status.icon} class="h-4 w-4" />
-      <span class={"font-semibold " <> corro_status.class}>{corro_status.label}</span>
-      <span :if={corro_status.detail} class="text-base-content/70">{corro_status.detail}</span>
+      <.icon name={@corro_status.icon} class="h-4 w-4" />
+      <span class={"font-semibold " <> @corro_status.class}>{@corro_status.label}</span>
+      <span :if={@corro_status.detail} class="text-base-content/70">{@corro_status.detail}</span>
     </div>
     """
   end
