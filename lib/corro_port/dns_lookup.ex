@@ -10,7 +10,7 @@ defmodule CorroPort.DNSLookup do
   @dns_timeout 5_000
 
   @doc """
-  Get expected nodes data with computed regions.
+  Get DNS-discovered nodes data with computed regions.
 
   Returns:
   %{
@@ -19,7 +19,7 @@ defmodule CorroPort.DNSLookup do
     cache_status: %{last_updated: dt, error: nil | reason}
   }
   """
-  def get_expected_data do
+  def get_dns_data do
     timestamp = DateTime.utc_now()
 
     case fetch_nodes_from_dns() do

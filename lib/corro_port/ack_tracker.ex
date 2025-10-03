@@ -303,7 +303,7 @@ defmodule CorroPort.AckTracker do
   end
 
   defp get_expected_nodes do
-    case CorroPort.DNSLookup.get_expected_data() do
+    case CorroPort.DNSLookup.get_dns_data() do
       %{nodes: {:ok, nodes}} -> nodes
       _ -> []
     end

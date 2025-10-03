@@ -7,20 +7,20 @@ defmodule CorroPortWeb.ClusterCards do
   Function components for Corrosion cluster status using clean domain data.
   """
 
-  attr :expected_data, :map, required: true
-  attr :active_data, :map, required: true
-  attr :system_data, :map, required: true
+  attr :dns_data, :map, required: true
+  attr :cli_data, :map, required: true
+  attr :api_data, :map, required: true
 
   def cluster_header(assigns) do
     # Pre-compute button configurations using helper functions
-    dns_button = DisplayHelpers.refresh_button_config(assigns.expected_data, "refresh_expected", "DNS", "hero-globe-alt")
-    cli_button = DisplayHelpers.refresh_button_config(assigns.active_data, "refresh_active", "CLI", "hero-command-line")
-    system_button = DisplayHelpers.system_button_config(assigns.system_data, "refresh_system", "System", "hero-server")
+    dns_button = DisplayHelpers.refresh_button_config(assigns.dns_data, "refresh_dns", "DNS", "hero-globe-alt")
+    cli_button = DisplayHelpers.refresh_button_config(assigns.cli_data, "refresh_cli", "CLI", "hero-command-line")
+    api_button = DisplayHelpers.system_button_config(assigns.api_data, "refresh_api", "API", "hero-server")
 
     assigns = assign(assigns, %{
       dns_button: dns_button,
       cli_button: cli_button,
-      system_button: system_button
+      api_button: api_button
     })
 
     ~H"""
@@ -36,7 +36,7 @@ defmodule CorroPortWeb.ClusterCards do
           <!-- Per-domain refresh buttons using helper configurations -->
           <.action_button config={@dns_button} />
           <.action_button config={@cli_button} />
-          <.action_button config={@system_button} />
+          <.action_button config={@api_button} />
 
           <.button phx-click="reset_tracking" class="btn btn-warning btn-outline btn-sm">
             <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Reset
@@ -55,13 +55,13 @@ defmodule CorroPortWeb.ClusterCards do
     """
   end
 
-  attr :expected_data, :map, required: true
-  attr :active_data, :map, required: true
-  attr :system_data, :map, required: true
+  attr :dns_data, :map, required: true
+  attr :cli_data, :map, required: true
+  attr :api_data, :map, required: true
 
   def error_alerts(assigns) do
     # Pre-compute alert configurations using helper functions
-    alerts = DisplayHelpers.build_all_alerts(assigns.expected_data, assigns.active_data, assigns.system_data)
+    alerts = DisplayHelpers.build_all_alerts(assigns.dns_data, assigns.cli_data, assigns.api_data)
     assigns = assign(assigns, :alerts, alerts)
 
     ~H"""
@@ -85,29 +85,29 @@ defmodule CorroPortWeb.ClusterCards do
     """
   end
 
-  attr :expected_data, :map, required: true
-  attr :active_data, :map, required: true
-  attr :system_data, :map, required: true
-  attr :expected_regions, :list, required: true
-  attr :active_regions, :list, required: true
+  attr :dns_data, :map, required: true
+  attr :cli_data, :map, required: true
+  attr :api_data, :map, required: true
+  attr :dns_regions, :list, required: true
+  attr :cli_regions, :list, required: true
   attr :last_updated, :any, required: true
 
   def enhanced_cluster_summary(assigns) do
     # Pre-compute all display data using helper functions
     summary_stats = DisplayHelpers.cluster_summary_stats(
-      assigns.expected_data,
-      assigns.active_data,
-      assigns.system_data,
-      assigns.expected_regions,
-      assigns.active_regions
+      assigns.dns_data,
+      assigns.cli_data,
+      assigns.api_data,
+      assigns.dns_regions,
+      assigns.cli_regions
     )
 
-    system_info = DisplayHelpers.system_info_details(assigns.system_data)
+    api_info = DisplayHelpers.api_info_details(assigns.api_data)
     last_updated_display = DisplayHelpers.format_timestamp(assigns.last_updated)
 
     assigns = assign(assigns, %{
       summary_stats: summary_stats,
-      system_info: system_info,
+      api_info: api_info,
       last_updated_display: last_updated_display
     })
 
@@ -201,20 +201,20 @@ defmodule CorroPortWeb.ClusterCards do
     """
   end
 
-  attr :expected_data, :map, required: true
-  attr :active_data, :map, required: true
-  attr :system_data, :map, required: true
+  attr :dns_data, :map, required: true
+  attr :cli_data, :map, required: true
+  attr :api_data, :map, required: true
 
   def cache_status_indicators(assigns) do
     # Pre-compute all cache status displays using helper function
-    cache_status = DisplayHelpers.all_cache_status(assigns.expected_data, assigns.active_data, assigns.system_data)
+    cache_status = DisplayHelpers.all_cache_status(assigns.dns_data, assigns.cli_data, assigns.api_data)
     assigns = assign(assigns, :cache_status, cache_status)
 
     ~H"""
     <div class="flex gap-4 text-xs text-base-content/70">
       <.cache_item label="DNS Cache" status={@cache_status.dns} />
       <.cache_item label="CLI Cache" status={@cache_status.cli} />
-      <.cache_item label="System Cache" status={@cache_status.system} />
+      <.cache_item label="API Cache" status={@cache_status.api} />
     </div>
     """
   end

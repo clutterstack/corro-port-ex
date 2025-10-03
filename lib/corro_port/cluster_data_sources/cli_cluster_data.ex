@@ -38,7 +38,7 @@ defmodule CorroPort.CLIClusterData do
   end
 
   @doc """
-  Get active members data with computed regions.
+  Get CLI-sourced members data with computed regions.
 
   Returns:
   %{
@@ -47,13 +47,13 @@ defmodule CorroPort.CLIClusterData do
     cache_status: %{last_updated: dt, error: nil | :cli_timeout}
   }
   """
-  def get_active_data do
+  def get_cli_data do
     try do
-      GenServer.call(__MODULE__, :get_active_data, 1000)
+      GenServer.call(__MODULE__, :get_cli_data, 1000)
     catch
       :exit, _ ->
-        Logger.warning("CLIClusterData: Call timeout, returning empty active data")
-        empty_active_data()
+        Logger.warning("CLIClusterData: Call timeout, returning empty CLI data")
+        empty_cli_data()
     end
   end
 
@@ -87,10 +87,10 @@ defmodule CorroPort.CLIClusterData do
   end
 
   @doc """
-  Subscribe to active member updates.
-  Receives: {:active_members_updated, active_data}
+  Subscribe to CLI member updates.
+  Receives: {:cli_members_updated, cli_data}
   """
-  def subscribe_active do
+  def subscribe_cli do
     Phoenix.PubSub.subscribe(CorroPort.PubSub, "cluster_membership")
   end
 
@@ -123,9 +123,9 @@ defmodule CorroPort.CLIClusterData do
     {:reply, member_data, state}
   end
 
-  def handle_call(:get_active_data, _from, state) do
-    active_data = build_active_data(state)
-    {:reply, active_data, state}
+  def handle_call(:get_cli_data, _from, state) do
+    cli_data = build_cli_data(state)
+    {:reply, cli_data, state}
   end
 
   def handle_call(:get_cache_status, _from, state) do
@@ -194,7 +194,7 @@ defmodule CorroPort.CLIClusterData do
 
     # Broadcast updates (both legacy and new formats)
     broadcast_update(new_state)
-    broadcast_active_update(new_state)
+    broadcast_cli_update(new_state)
 
     {:noreply, new_state}
   end
@@ -212,7 +212,7 @@ defmodule CorroPort.CLIClusterData do
 
     # Keep existing members on error, just update error state
     broadcast_update(new_state)
-    broadcast_active_update(new_state)
+    broadcast_cli_update(new_state)
 
     {:noreply, new_state}
   end
@@ -289,7 +289,7 @@ defmodule CorroPort.CLIClusterData do
     }
   end
 
-  defp build_active_data(state) do
+  defp build_cli_data(state) do
     members_result = build_members_result(state)
     cache_status = build_cache_status(state)
 
@@ -350,7 +350,7 @@ defmodule CorroPort.CLIClusterData do
     }
   end
 
-  defp empty_active_data do
+  defp empty_cli_data do
     %{
       members: {:error, :service_unavailable},
       regions: [],
@@ -377,17 +377,17 @@ defmodule CorroPort.CLIClusterData do
     )
   end
 
-  defp broadcast_active_update(state) do
-    active_data = build_active_data(state)
+  defp broadcast_cli_update(state) do
+    cli_data = build_cli_data(state)
 
     Phoenix.PubSub.broadcast(
       CorroPort.PubSub,
       "cluster_membership",
-      {:active_members_updated, active_data}
+      {:cli_members_updated, cli_data}
     )
 
     Logger.debug(
-      "CLIClusterData: Broadcasted active update - #{length(state.regions)} regions, status: #{state.status}"
+      "CLIClusterData: Broadcasted CLI update - #{length(state.regions)} regions, status: #{state.status}"
     )
   end
 end

@@ -46,11 +46,11 @@ defmodule CorroPortWeb.DisplayHelpers do
   @doc """
   Builds all alert configurations for display.
   """
-  def build_all_alerts(expected_data, active_data, system_data) do
+  def build_all_alerts(dns_data, cli_data, api_data) do
     [
-      dns_alert_config(expected_data),
-      cli_alert_config(active_data),
-      system_alert_config(system_data)
+      dns_alert_config(dns_data),
+      cli_alert_config(cli_data),
+      api_alert_config(api_data)
     ]
     |> Enum.reject(&is_nil/1)
   end
@@ -162,8 +162,8 @@ defmodule CorroPortWeb.DisplayHelpers do
   @doc """
   Gets alert configuration for DNS data.
   """
-  def dns_alert_config(expected_data) do
-    case get_error_reason(expected_data) do
+  def dns_alert_config(dns_data) do
+    case get_error_reason(dns_data) do
       nil -> nil
       reason -> %{
         class: "alert alert-warning",
@@ -177,8 +177,8 @@ defmodule CorroPortWeb.DisplayHelpers do
   @doc """
   Gets alert configuration for CLI data.
   """
-  def cli_alert_config(active_data) do
-    case get_error_reason(active_data) do
+  def cli_alert_config(cli_data) do
+    case get_error_reason(cli_data) do
       nil -> nil
       reason -> %{
         class: "alert alert-error",
@@ -190,15 +190,15 @@ defmodule CorroPortWeb.DisplayHelpers do
   end
 
   @doc """
-  Gets alert configuration for system data.
+  Gets alert configuration for API data.
   """
-  def system_alert_config(system_data) do
-    case system_data.cache_status.error do
+  def api_alert_config(api_data) do
+    case api_data.cache_status.error do
       nil -> nil
       error -> %{
         class: "alert alert-warning",
         icon: "hero-exclamation-triangle",
-        title: "System Data Issue",
+        title: "API Data Issue",
         message: "Error: #{format_error_reason(error)} - Cluster info may be incomplete"
       }
     end
@@ -238,37 +238,37 @@ defmodule CorroPortWeb.DisplayHelpers do
   @doc """
   Builds display configuration for cluster summary stats.
   """
-  def cluster_summary_stats(expected_data, active_data, system_data, expected_regions, active_regions) do
-    expected_display = count_display(expected_data, :nodes)
-    active_display = count_display(active_data, :members)
-    api_health = api_health_display(system_data)
+  def cluster_summary_stats(dns_data, cli_data, api_data, dns_regions, cli_regions) do
+    dns_display = count_display(dns_data, :nodes)
+    cli_display = count_display(cli_data, :members)
+    api_health = api_health_display(api_data)
 
     %{
-      expected: %{
-        display: expected_display,
-        regions_count: length(expected_regions),
+      dns: %{
+        display: dns_display,
+        regions_count: length(dns_regions),
         source_label: data_source_label(:dns),
         tooltip: data_source_tooltip(:dns),
-        last_updated: expected_data.cache_status.last_updated
+        last_updated: dns_data.cache_status.last_updated
       },
-      active: %{
-        display: active_display,
-        regions_count: length(active_regions),
+      cli: %{
+        display: cli_display,
+        regions_count: length(cli_regions),
         source_label: data_source_label(:cli),
         tooltip: data_source_tooltip(:cli),
-        last_updated: active_data.cache_status.last_updated
+        last_updated: cli_data.cache_status.last_updated
       },
       api_health: api_health,
-      messages_count: length(system_data.latest_messages)
+      messages_count: length(api_data.latest_messages)
     }
   end
 
   @doc """
-  Gets system info details for cluster summary.
+  Gets API info details for cluster summary.
   Returns nil if no cluster info available.
   """
-  def system_info_details(system_data) do
-    case system_data.cluster_info do
+  def api_info_details(api_data) do
+    case api_data.cluster_info do
       nil -> nil
       cluster_info -> %{
         total_active_nodes: Map.get(cluster_info, "total_active_nodes", 0),
@@ -282,14 +282,14 @@ defmodule CorroPortWeb.DisplayHelpers do
   @doc """
   Builds CLI member data for the CLIMembersTable component.
   """
-  def build_cli_member_data(active_data) do
-    case active_data.members do
+  def build_cli_member_data(cli_data) do
+    case cli_data.members do
       {:ok, members} ->
         %{
           members: members,
           member_count: length(members),
           status: :ok,
-          last_updated: active_data.cache_status.last_updated,
+          last_updated: cli_data.cache_status.last_updated,
           last_error: nil
         }
 
@@ -298,17 +298,17 @@ defmodule CorroPortWeb.DisplayHelpers do
           members: [],
           member_count: 0,
           status: :error,
-          last_updated: active_data.cache_status.last_updated,
+          last_updated: cli_data.cache_status.last_updated,
           last_error: reason
         }
     end
   end
 
   @doc """
-  Extracts CLI error from active data for the CLIMembersTable component.
+  Extracts CLI error from CLI data for the CLIMembersTable component.
   """
-  def extract_cli_error(active_data) do
-    case active_data.members do
+  def extract_cli_error(cli_data) do
+    case cli_data.members do
       {:ok, _} -> nil
       {:error, reason} -> reason
     end
@@ -317,11 +317,11 @@ defmodule CorroPortWeb.DisplayHelpers do
   @doc """
   Builds cache status display data for all data sources.
   """
-  def all_cache_status(expected_data, active_data, system_data) do
+  def all_cache_status(dns_data, cli_data, api_data) do
     %{
-      dns: cache_status_display(expected_data.cache_status),
-      cli: cache_status_display(active_data.cache_status),
-      system: cache_status_display(system_data.cache_status)
+      dns: cache_status_display(dns_data.cache_status),
+      cli: cache_status_display(cli_data.cache_status),
+      api: cache_status_display(api_data.cache_status)
     }
   end
 
@@ -503,17 +503,17 @@ def format_cli_last_updated(_), do: nil
   @doc """
   Builds DNS node data for the DNSNodesTable component.
   """
-  def build_dns_node_data(expected_data) do
-    case expected_data.nodes do
+  def build_dns_node_data(dns_data) do
+    case dns_data.nodes do
       {:ok, nodes} ->
         parsed_nodes = Enum.map(nodes, &parse_dns_node_id/1)
-        status = if expected_data.cache_status.error, do: :error, else: :ok
+        status = if dns_data.cache_status.error, do: :error, else: :ok
         %{
           nodes: parsed_nodes,
           node_count: length(parsed_nodes),
           status: status,
-          last_updated: expected_data.cache_status.last_updated,
-          last_error: expected_data.cache_status.error
+          last_updated: dns_data.cache_status.last_updated,
+          last_error: dns_data.cache_status.error
         }
 
       {:error, reason} ->
@@ -521,7 +521,7 @@ def format_cli_last_updated(_), do: nil
           nodes: [],
           node_count: 0,
           status: :error,
-          last_updated: expected_data.cache_status.last_updated,
+          last_updated: dns_data.cache_status.last_updated,
           last_error: reason
         }
     end
@@ -613,10 +613,10 @@ def format_cli_last_updated(_), do: nil
   def format_dns_last_updated(_), do: nil
 
   @doc """
-  Extracts DNS error from expected data for the DNSNodesTable component.
+  Extracts DNS error from DNS data for the DNSNodesTable component.
   """
-  def extract_dns_error(expected_data) do
-    case expected_data.nodes do
+  def extract_dns_error(dns_data) do
+    case dns_data.nodes do
       {:ok, _} -> nil
       {:error, reason} -> reason
     end

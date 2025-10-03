@@ -12,7 +12,7 @@ defmodule CorroPortWeb.IndexLive do
   def mount(_params, _session, socket) do
     if connected?(socket) do
       # Subscribe to CLI cluster data and acknowledgment updates
-      CorroPort.CLIClusterData.subscribe_active()
+      CorroPort.CLIClusterData.subscribe_cli()
       Phoenix.PubSub.subscribe(CorroPort.PubSub, "ack_events")
     end
 
@@ -21,12 +21,12 @@ defmodule CorroPortWeb.IndexLive do
   end
 
   # Event handlers - per-domain refresh
-  def handle_event("refresh_expected", _params, socket) do
+  def handle_event("refresh_dns", _params, socket) do
     socket = fetch_all_data(socket)
     {:noreply, put_flash(socket, :info, "DNS data refreshed")}
   end
 
-  def handle_event("refresh_active", _params, socket) do
+  def handle_event("refresh_cli", _params, socket) do
     CorroPort.CLIClusterData.refresh_members()
     {:noreply, put_flash(socket, :info, "CLI member refresh initiated...")}
   end
@@ -69,15 +69,15 @@ defmodule CorroPortWeb.IndexLive do
   end
 
   # Real-time updates from domain modules
-  def handle_info({:active_members_updated, active_data}, socket) do
-    Logger.debug("IndexLive: Received active members update")
+  def handle_info({:cli_members_updated, cli_data}, socket) do
+    Logger.debug("IndexLive: Received CLI members update")
 
-    new_active_regions = exclude_our_region(active_data.regions, socket.assigns.local_node.region)
-    marker_groups = create_region_groups(socket.assigns.expected_data, active_data, socket.assigns.ack_data, socket.assigns.local_node)
+    new_cli_regions = exclude_our_region(cli_data.regions, socket.assigns.local_node.region)
+    marker_groups = create_region_groups(socket.assigns.dns_data, cli_data, socket.assigns.ack_data, socket.assigns.local_node)
 
     socket = assign(socket, %{
-      active_data: active_data,
-      active_regions: new_active_regions,
+      cli_data: cli_data,
+      cli_regions: new_cli_regions,
       marker_groups: marker_groups
     })
 
@@ -87,7 +87,7 @@ defmodule CorroPortWeb.IndexLive do
   def handle_info({:ack_update, ack_data}, socket) do
     Logger.debug("IndexLive: Received ack status update")
 
-    marker_groups = create_region_groups(socket.assigns.expected_data, socket.assigns.active_data, ack_data, socket.assigns.local_node)
+    marker_groups = create_region_groups(socket.assigns.dns_data, socket.assigns.cli_data, ack_data, socket.assigns.local_node)
 
     socket = assign(socket, %{
       ack_data: ack_data,
@@ -102,26 +102,26 @@ defmodule CorroPortWeb.IndexLive do
 
   defp fetch_all_data(socket) do
     # Fetch DNS data directly (no caching needed)
-    expected_data = CorroPort.DNSLookup.get_expected_data()
+    dns_data = CorroPort.DNSLookup.get_dns_data()
     # Fetch from CLI cluster data (has its own caching)
-    active_data = CorroPort.CLIClusterData.get_active_data()
+    cli_data = CorroPort.CLIClusterData.get_cli_data()
     ack_data = CorroPort.AckTracker.get_status()
     local_node = CorroPort.LocalNode.get_info()
 
-    marker_groups = create_region_groups(expected_data, active_data, ack_data, local_node)
+    marker_groups = create_region_groups(dns_data, cli_data, ack_data, local_node)
 
     assign(socket, %{
       page_title: "Geographic Distribution",
 
       # Raw data with embedded success/error states
-      expected_data: expected_data,
-      active_data: active_data,
+      dns_data: dns_data,
+      cli_data: cli_data,
       ack_data: ack_data,
       local_node: local_node,
 
       # Computed regions for map display (excluding our region)
-      expected_regions: exclude_our_region(expected_data.regions, local_node.region),
-      active_regions: exclude_our_region(active_data.regions, local_node.region),
+      dns_regions: exclude_our_region(dns_data.regions, local_node.region),
+      cli_regions: exclude_our_region(cli_data.regions, local_node.region),
       ack_regions: ack_data.regions,
       our_regions: [local_node.region],
 
@@ -148,7 +148,7 @@ defmodule CorroPortWeb.IndexLive do
     end
   end
 
-  defp create_region_groups(expected_data, active_data, ack_data, local_node) do
+  defp create_region_groups(dns_data, cli_data, ack_data, local_node) do
     # Build marker groups for the FlyMapEx API
     groups = []
 
@@ -159,18 +159,18 @@ defmodule CorroPortWeb.IndexLive do
       groups
     end
 
-    # Active regions (excluding our region)
-    active_regions = exclude_our_region(active_data.regions, local_node.region)
-    groups = if !Enum.empty?(active_regions) do
-      [%{nodes: active_regions, style_key: :active, label: "Active Regions"} | groups]
+    # CLI regions (excluding our region)
+    cli_regions = exclude_our_region(cli_data.regions, local_node.region)
+    groups = if !Enum.empty?(cli_regions) do
+      [%{nodes: cli_regions, style_key: :active, label: "CLI Active Regions"} | groups]
     else
       groups
     end
 
-    # Expected regions (excluding our region)
-    expected_regions = exclude_our_region(expected_data.regions, local_node.region)
-    groups = if !Enum.empty?(expected_regions) do
-      [%{nodes: expected_regions, style_key: :expected, label: "Expected Regions"} | groups]
+    # DNS regions (excluding our region)
+    dns_regions = exclude_our_region(dns_data.regions, local_node.region)
+    groups = if !Enum.empty?(dns_regions) do
+      [%{nodes: dns_regions, style_key: :expected, label: "DNS Expected Regions"} | groups]
     else
       groups
     end
@@ -211,14 +211,14 @@ defmodule CorroPortWeb.IndexLive do
 
       <!-- Page Header with Actions -->
       <PropagationHeader.propagation_header
-        expected_data={@expected_data}
-        active_data={@active_data}
+        dns_data={@dns_data}
+        cli_data={@cli_data}
       />
 
       <!-- Error Alerts -->
       <ErrorAlerts.error_alerts
-        expected_data={@expected_data}
-        active_data={@active_data}
+        dns_data={@dns_data}
+        cli_data={@cli_data}
       />
 
       <!-- Enhanced World Map with Regions -->
@@ -228,8 +228,8 @@ defmodule CorroPortWeb.IndexLive do
 
       <!-- Cache Status Indicators -->
       <CacheStatus.cache_status
-        expected_data={@expected_data}
-        active_data={@active_data}
+        dns_data={@dns_data}
+        cli_data={@cli_data}
       />
 
       <!-- Last Updated -->

@@ -5,8 +5,8 @@ defmodule CorroPortWeb.DNSNodesTable do
 
   def display(assigns) do
     # Pre-compute display content using helper functions
-    dns_node_data = if assigns.expected_data do
-      DisplayHelpers.build_dns_node_data(assigns.expected_data)
+    dns_node_data = if assigns.dns_data do
+      DisplayHelpers.build_dns_node_data(assigns.dns_data)
     else
       nil
     end
@@ -17,7 +17,7 @@ defmodule CorroPortWeb.DNSNodesTable do
       nil
     end
 
-    dns_error = DisplayHelpers.extract_dns_error(assigns.expected_data)
+    dns_error = DisplayHelpers.extract_dns_error(assigns.dns_data)
 
     assigns = assign(assigns, %{
       status_info: status_info,
@@ -34,7 +34,7 @@ defmodule CorroPortWeb.DNSNodesTable do
             <.icon name="hero-globe-alt" class="w-5 h-5 mr-2" /> DNS-Discovered Nodes
           </h3>
           <div class="flex gap-2">
-            <.button phx-click="refresh_expected" class="btn btn-primary btn-sm">
+            <.button phx-click="refresh_dns" class="btn btn-primary btn-sm">
               <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Refresh DNS Data
             </.button>
             <span

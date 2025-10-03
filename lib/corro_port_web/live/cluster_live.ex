@@ -9,7 +9,7 @@ defmodule CorroPortWeb.ClusterLive do
   def mount(_params, _session, socket) do
     if connected?(socket) do
       # Subscribe to CLI cluster data updates
-      CorroPort.CLIClusterData.subscribe_active()
+      CorroPort.CLIClusterData.subscribe_cli()
     end
 
     phoenix_port = Application.get_env(:corro_port, CorroPortWeb.Endpoint)[:http][:port] || 4000
@@ -35,12 +35,12 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, fetch_all_data(socket)}
   end
 
-  def handle_event("refresh_expected", _params, socket) do
+  def handle_event("refresh_dns", _params, socket) do
     socket = fetch_all_data(socket)
     {:noreply, put_flash(socket, :info, "DNS data refreshed")}
   end
 
-  def handle_event("refresh_cli_members", _params, socket) do
+  def handle_event("refresh_cli", _params, socket) do
     CorroPort.CLIClusterData.refresh_members()
     {:noreply, put_flash(socket, :info, "CLI member refresh initiated...")}
   end
@@ -48,14 +48,14 @@ defmodule CorroPortWeb.ClusterLive do
 
   # Real-time updates from domain modules
 
-  def handle_info({:active_members_updated, active_data}, socket) do
-    Logger.debug("ClusterLive: Received active members update")
+  def handle_info({:cli_members_updated, cli_data}, socket) do
+    Logger.debug("ClusterLive: Received CLI members update")
 
-    # Recreate marker groups with updated active data
-    marker_groups = create_region_groups(socket.assigns.expected_data, active_data, socket.assigns.local_node)
+    # Recreate marker groups with updated CLI data
+    marker_groups = create_region_groups(socket.assigns.dns_data, cli_data, socket.assigns.local_node)
 
     socket = assign(socket, %{
-      active_data: active_data,
+      cli_data: cli_data,
       marker_groups: marker_groups
     })
 
@@ -66,9 +66,9 @@ defmodule CorroPortWeb.ClusterLive do
 
   defp fetch_all_data(socket) do
     # Fetch DNS data directly (no caching needed)
-    expected_data = CorroPort.DNSLookup.get_expected_data()
+    dns_data = CorroPort.DNSLookup.get_dns_data()
     # Fetch from CLI cluster data (has its own caching)
-    active_data = CorroPort.CLIClusterData.get_active_data()
+    cli_data = CorroPort.CLIClusterData.get_cli_data()
     local_node = CorroPort.LocalNode.get_info()
 
     # Fetch cluster info directly from API, falling back to previous data on error
@@ -81,8 +81,8 @@ defmodule CorroPortWeb.ClusterLive do
         {:error, reason} -> {previous_cluster_info, reason}
       end
 
-    # Build system_data structure for DisplayHelpers compatibility
-    system_data = %{
+    # Build api_data structure for DisplayHelpers compatibility
+    api_data = %{
       cluster_info: cluster_info,
       database_info: nil,
       latest_messages: [],
@@ -93,13 +93,13 @@ defmodule CorroPortWeb.ClusterLive do
     }
 
     # Create marker groups for the FlyMapEx API
-    marker_groups = create_region_groups(expected_data, active_data, local_node)
+    marker_groups = create_region_groups(dns_data, cli_data, local_node)
 
     assign(socket, %{
       # Data from clean domain modules
-      expected_data: expected_data,
-      active_data: active_data,
-      system_data: system_data,
+      dns_data: dns_data,
+      cli_data: cli_data,
+      api_data: api_data,
       local_node: local_node,
       cluster_info: cluster_info,
 
@@ -123,7 +123,7 @@ defmodule CorroPortWeb.ClusterLive do
     put_flash(socket, :error, "Failed to refresh __corro_members from Corrosion API. Showing last successful data. Reason: #{inspect(error)}")
   end
 
-  defp create_region_groups(expected_data, active_data, local_node) do
+  defp create_region_groups(dns_data, cli_data, local_node) do
     # Build marker groups for the FlyMapEx API
     groups = []
 
@@ -134,18 +134,18 @@ defmodule CorroPortWeb.ClusterLive do
       groups
     end
 
-    # Active regions (excluding our region)
-    active_regions = exclude_our_region(active_data.regions, local_node.region)
-    groups = if !Enum.empty?(active_regions) do
-      [%{nodes: active_regions, style_key: :active, label: "Active Regions"} | groups]
+    # CLI regions (excluding our region)
+    cli_regions = exclude_our_region(cli_data.regions, local_node.region)
+    groups = if !Enum.empty?(cli_regions) do
+      [%{nodes: cli_regions, style_key: :active, label: "CLI Active Regions"} | groups]
     else
       groups
     end
 
-    # Expected regions (excluding our region)
-    expected_regions = exclude_our_region(expected_data.regions, local_node.region)
-    groups = if !Enum.empty?(expected_regions) do
-      [%{nodes: expected_regions, style_key: :expected, label: "Expected Regions"} | groups]
+    # DNS regions (excluding our region)
+    dns_regions = exclude_our_region(dns_data.regions, local_node.region)
+    groups = if !Enum.empty?(dns_regions) do
+      [%{nodes: dns_regions, style_key: :expected, label: "DNS Expected Regions"} | groups]
     else
       groups
     end
@@ -156,29 +156,29 @@ defmodule CorroPortWeb.ClusterLive do
 
   def render(assigns) do
     # Pre-compute all display data using helpers
-    dns_alert = DisplayHelpers.dns_alert_config(assigns.expected_data)
-    cli_alert = DisplayHelpers.cli_alert_config(assigns.active_data)
-    system_alert = DisplayHelpers.system_alert_config(assigns.system_data)
+    dns_alert = DisplayHelpers.dns_alert_config(assigns.dns_data)
+    cli_alert = DisplayHelpers.cli_alert_config(assigns.cli_data)
+    api_alert = DisplayHelpers.api_alert_config(assigns.api_data)
 
     summary_stats = DisplayHelpers.cluster_summary_stats(
-      assigns.expected_data,
-      assigns.active_data,
-      assigns.system_data,
-      assigns.expected_data.regions,
-      assigns.active_data.regions
+      assigns.dns_data,
+      assigns.cli_data,
+      assigns.api_data,
+      assigns.dns_data.regions,
+      assigns.cli_data.regions
     )
 
-    system_info = DisplayHelpers.system_info_details(assigns.system_data)
-    cli_member_data = DisplayHelpers.build_cli_member_data(assigns.active_data)
-    cli_error = DisplayHelpers.extract_cli_error(assigns.active_data)
-    cache_status = DisplayHelpers.all_cache_status(assigns.expected_data, assigns.active_data, assigns.system_data)
+    api_info = DisplayHelpers.api_info_details(assigns.api_data)
+    cli_member_data = DisplayHelpers.build_cli_member_data(assigns.cli_data)
+    cli_error = DisplayHelpers.extract_cli_error(assigns.cli_data)
+    cache_status = DisplayHelpers.all_cache_status(assigns.dns_data, assigns.cli_data, assigns.api_data)
 
     assigns = assign(assigns, %{
       dns_alert: dns_alert,
       cli_alert: cli_alert,
-      system_alert: system_alert,
+      api_alert: api_alert,
       summary_stats: summary_stats,
-      system_info: system_info,
+      api_info: api_info,
       cli_member_data: cli_member_data,
       cli_error: cli_error,
       cache_status: cache_status
@@ -200,21 +200,21 @@ defmodule CorroPortWeb.ClusterLive do
           <div class="flex gap-2">
             <!-- Per-domain refresh buttons using helper functions -->
             <.button
-              phx-click="refresh_expected"
-              class={DisplayHelpers.refresh_button_class(@expected_data)}
+              phx-click="refresh_dns"
+              class={DisplayHelpers.refresh_button_class(@dns_data)}
             >
               <.icon name="hero-globe-alt" class="w-3 h-3 mr-1" />
               DNS
-              <span :if={DisplayHelpers.show_warning?(@expected_data)} class="ml-1">⚠</span>
+              <span :if={DisplayHelpers.show_warning?(@dns_data)} class="ml-1">⚠</span>
             </.button>
 
             <.button
-              phx-click="refresh_cli_members"
-              class={DisplayHelpers.refresh_button_class(@active_data)}
+              phx-click="refresh_cli"
+              class={DisplayHelpers.refresh_button_class(@cli_data)}
             >
               <.icon name="hero-command-line" class="w-3 h-3 mr-1" />
               CLI
-              <span :if={DisplayHelpers.show_warning?(@active_data)} class="ml-1">⚠</span>
+              <span :if={DisplayHelpers.show_warning?(@cli_data)} class="ml-1">⚠</span>
             </.button>
 
             <.button phx-click="refresh_all" class="btn btn-sm">
@@ -227,7 +227,7 @@ defmodule CorroPortWeb.ClusterLive do
       <!-- Error alerts using pre-computed configurations -->
       <.error_alert :if={@dns_alert} config={@dns_alert} />
       <.error_alert :if={@cli_alert} config={@cli_alert} />
-      <.error_alert :if={@system_alert} config={@system_alert} />
+      <.error_alert :if={@api_alert} config={@api_alert} />
 
       <!-- About Data Sources (collapsible) -->
       <details class="collapse collapse-arrow bg-base-200">
@@ -305,7 +305,7 @@ defmodule CorroPortWeb.ClusterLive do
       />
 
       <!-- DNS-Discovered Nodes Table -->
-      <DNSNodesTable.display expected_data={@expected_data} />
+      <DNSNodesTable.display dns_data={@dns_data} />
 
       <!-- CLI Members Display with clean data structure -->
       <CLIMembersTable.display
@@ -320,12 +320,12 @@ defmodule CorroPortWeb.ClusterLive do
       <!-- Enhanced Cluster Summary using pre-computed stats -->
       <.cluster_summary
         summary_stats={@summary_stats}
-        system_info={@system_info} />
+        api_info={@api_info} />
 
       <!-- Debug Section with clean data -->
       <DebugSection.debug_section
-        cluster_info={@system_data.cluster_info}
-        node_messages={@system_data.latest_messages}
+        cluster_info={@api_data.cluster_info}
+        node_messages={@api_data.latest_messages}
       />
 
       <!-- Cache status indicators using pre-computed status -->
@@ -366,17 +366,17 @@ defmodule CorroPortWeb.ClusterLive do
           <!-- DNS-Discovered Nodes -->
           <div class="stat bg-base-100 rounded-lg">
             <div class="stat-title text-xs">
-              <span title={@summary_stats.expected.tooltip} class="cursor-help">
+              <span title={@summary_stats.dns.tooltip} class="cursor-help">
                 DNS-Discovered Nodes ℹ️
               </span>
             </div>
-            <div class={"stat-value text-lg flex items-center #{@summary_stats.expected.display.class}"}>
-              {@summary_stats.expected.display.content}
+            <div class={"stat-value text-lg flex items-center #{@summary_stats.dns.display.class}"}>
+              {@summary_stats.dns.display.content}
             </div>
             <div class="stat-desc text-xs">
-              {@summary_stats.expected.regions_count} regions
+              {@summary_stats.dns.regions_count} regions
               <span class="text-base-content/50 ml-1">
-                • {@summary_stats.expected.source_label}
+                • {@summary_stats.dns.source_label}
               </span>
             </div>
           </div>
@@ -384,17 +384,17 @@ defmodule CorroPortWeb.ClusterLive do
           <!-- CLI Active Members -->
           <div class="stat bg-base-100 rounded-lg">
             <div class="stat-title text-xs">
-              <span title={@summary_stats.active.tooltip} class="cursor-help">
+              <span title={@summary_stats.cli.tooltip} class="cursor-help">
                 CLI Active Members ℹ️
               </span>
             </div>
-            <div class={"stat-value text-lg flex items-center #{@summary_stats.active.display.class}"}>
-              {@summary_stats.active.display.content}
+            <div class={"stat-value text-lg flex items-center #{@summary_stats.cli.display.class}"}>
+              {@summary_stats.cli.display.content}
             </div>
             <div class="stat-desc text-xs">
-              {@summary_stats.active.regions_count} regions
+              {@summary_stats.cli.regions_count} regions
               <span class="text-base-content/50 ml-1">
-                • {@summary_stats.active.source_label}
+                • {@summary_stats.cli.source_label}
               </span>
             </div>
           </div>
@@ -416,25 +416,25 @@ defmodule CorroPortWeb.ClusterLive do
           </div>
         </div>
 
-        <!-- System Info Details -->
-        <div :if={@system_info} class="mt-4 text-sm space-y-2">
+        <!-- API Info Details -->
+        <div :if={@api_info} class="mt-4 text-sm space-y-2">
           <div class="flex items-center justify-between">
             <strong>Total Active Nodes:</strong>
             <span class="font-semibold text-lg">
-              {@system_info.total_active_nodes}
+              {@api_info.total_active_nodes}
             </span>
           </div>
 
           <div class="flex items-center justify-between">
             <strong>Remote Members:</strong>
             <span>
-              {@system_info.active_member_count}/{@system_info.member_count} active
+              {@api_info.active_member_count}/{@api_info.member_count} active
             </span>
           </div>
 
           <div class="flex items-center justify-between">
             <strong>Tracked Peers:</strong>
-            <span>{@system_info.peer_count}</span>
+            <span>{@api_info.peer_count}</span>
           </div>
         </div>
       </div>
@@ -471,7 +471,7 @@ defmodule CorroPortWeb.ClusterLive do
             <.icon name="hero-server" class="w-4 h-4 mt-0.5 text-accent" />
             <div>
               <div class="font-semibold">Corrosion API</div>
-              <div class="text-base-content/70">{@cache_status.system}</div>
+              <div class="text-base-content/70">{@cache_status.api}</div>
             </div>
           </div>
         </div>

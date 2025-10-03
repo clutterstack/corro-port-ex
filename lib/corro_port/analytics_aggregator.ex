@@ -414,11 +414,11 @@ defmodule CorroPort.AnalyticsAggregator do
 
   defp discover_cluster_nodes do
     try do
-      # Get active members from CLIClusterData
-      active_data = CorroPort.CLIClusterData.get_active_data()
+      # Get CLI members from CLIClusterData
+      cli_data = CorroPort.CLIClusterData.get_cli_data()
 
-      # Extract members from the active data structure
-      members = case active_data.members do
+      # Extract members from the CLI data structure
+      members = case cli_data.members do
         {:ok, member_list} -> member_list
         {:error, reason} ->
           Logger.warning("AnalyticsAggregator: Failed to get members from CLIClusterData: #{inspect(reason)}")

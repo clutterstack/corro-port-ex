@@ -5,26 +5,26 @@ defmodule CorroPortWeb.ErrorAlerts do
   @doc """
   Renders error alerts for different data sources with specific styling.
   """
-  attr :expected_data, :map, required: true
-  attr :active_data, :map, required: true
+  attr :dns_data, :map, required: true
+  attr :cli_data, :map, required: true
 
   def error_alerts(assigns) do
     ~H"""
     <div class="space-y-4">
       <!-- DNS Discovery Error -->
       <.error_alert
-        :if={dns_has_error?(@expected_data)}
+        :if={dns_has_error?(@dns_data)}
         type={:warning}
         title="DNS Discovery Failed"
-        message={format_dns_error(@expected_data)}
+        message={format_dns_error(@dns_data)}
       />
 
       <!-- CLI Data Error -->
       <.error_alert
-        :if={cli_has_error?(@active_data)}
+        :if={cli_has_error?(@cli_data)}
         type={:error}
         title="CLI Data Failed"
-        message={format_cli_error(@active_data)}
+        message={format_cli_error(@cli_data)}
       />
     </div>
     """
@@ -48,23 +48,23 @@ defmodule CorroPortWeb.ErrorAlerts do
   end
 
   # Helper functions
-  defp dns_has_error?(expected_data) do
-    match?({:error, _}, Map.get(expected_data, :nodes))
+  defp dns_has_error?(dns_data) do
+    match?({:error, _}, Map.get(dns_data, :nodes))
   end
 
-  defp cli_has_error?(active_data) do
-    match?({:error, _}, Map.get(active_data, :members))
+  defp cli_has_error?(cli_data) do
+    match?({:error, _}, Map.get(cli_data, :members))
   end
 
-  defp format_dns_error(expected_data) do
-    case Map.get(expected_data, :nodes) do
+  defp format_dns_error(dns_data) do
+    case Map.get(dns_data, :nodes) do
       {:error, reason} -> "Error: #{format_error_reason(reason)} - Expected regions may be incomplete"
       _ -> ""
     end
   end
 
-  defp format_cli_error(active_data) do
-    case Map.get(active_data, :members) do
+  defp format_cli_error(cli_data) do
+    case Map.get(cli_data, :members) do
       {:error, reason} -> "Error: #{format_error_reason(reason)} - Active member list may be stale"
       _ -> ""
     end
