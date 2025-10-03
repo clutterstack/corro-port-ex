@@ -83,3 +83,8 @@ config :phoenix_live_view,
   debug_heex_annotations: true,
   # Enable helpful, but potentially expensive runtime checks
   enable_expensive_runtime_checks: true
+
+# Configure corro_cli for development
+config :corro_cli,
+  binary_path: "corrosion/corrosion-mac",
+  config_path: config_path
