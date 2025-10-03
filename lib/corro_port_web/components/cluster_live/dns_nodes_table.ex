@@ -1,4 +1,4 @@
-defmodule CorroPortWeb.DNSNodesTable do
+defmodule CorroPortWeb.Components.ClusterLive.DNSNodesTable do
   use Phoenix.Component
   import CorroPortWeb.CoreComponents
   alias CorroPortWeb.DisplayHelpers

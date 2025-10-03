@@ -2,8 +2,22 @@ defmodule CorroPortWeb.ClusterLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPortWeb.{DebugSection, NavTabs, CLIMembersTable, DNSNodesTable, MembersTable}
-  alias CorroPortWeb.DisplayHelpers
+  alias CorroPortWeb.Components.ClusterLive.{
+    DebugSection,
+    CLIMembersTable,
+    DNSNodesTable,
+    MembersTable,
+    ClusterHeader,
+    DataSourcesInfo,
+    ClusterSummaryCard
+  }
+
+  alias CorroPortWeb.{
+    NavTabs,
+    DisplayHelpers,
+    CacheStatusCard
+  }
+
   alias CorroPort.NodeConfig
 
   def mount(_params, _session, socket) do
@@ -189,40 +203,8 @@ defmodule CorroPortWeb.ClusterLive do
       <!-- Navigation Tabs -->
       <NavTabs.nav_tabs active={:cluster} />
 
-      <.header>
-        Corrosion Cluster Status
-        <:subtitle>
-          <div class="flex items-center gap-4">
-            <span>Comprehensive cluster health and node connectivity monitoring</span>
-          </div>
-        </:subtitle>
-        <:actions>
-          <div class="flex gap-2">
-            <!-- Per-domain refresh buttons using helper functions -->
-            <.button
-              phx-click="refresh_dns"
-              class={DisplayHelpers.refresh_button_class(@dns_data)}
-            >
-              <.icon name="hero-globe-alt" class="w-3 h-3 mr-1" />
-              DNS
-              <span :if={DisplayHelpers.show_warning?(@dns_data)} class="ml-1">⚠</span>
-            </.button>
-
-            <.button
-              phx-click="refresh_cli"
-              class={DisplayHelpers.refresh_button_class(@cli_data)}
-            >
-              <.icon name="hero-command-line" class="w-3 h-3 mr-1" />
-              CLI
-              <span :if={DisplayHelpers.show_warning?(@cli_data)} class="ml-1">⚠</span>
-            </.button>
-
-            <.button phx-click="refresh_all" class="btn btn-sm">
-              <.icon name="hero-arrow-path" class="w-3 h-3 mr-1" /> Refresh All
-            </.button>
-          </div>
-        </:actions>
-      </.header>
+      <!-- Header with refresh buttons -->
+      <ClusterHeader.cluster_header dns_data={@dns_data} cli_data={@cli_data} />
 
       <!-- Error alerts using pre-computed configurations -->
       <.error_alert :if={@dns_alert} config={@dns_alert} />
@@ -230,73 +212,7 @@ defmodule CorroPortWeb.ClusterLive do
       <.error_alert :if={@api_alert} config={@api_alert} />
 
       <!-- About Data Sources (collapsible) -->
-      <details class="collapse collapse-arrow bg-base-200">
-        <summary class="collapse-title text-sm font-medium">
-          <.icon name="hero-information-circle" class="w-4 h-4 inline mr-2" />
-          About Data Sources
-        </summary>
-        <div class="collapse-content">
-          <div class="grid md:grid-cols-3 gap-4 text-sm">
-            <div class="card bg-base-100">
-              <div class="card-body p-4">
-                <h4 class="font-semibold flex items-center gap-2">
-                  <.icon name="hero-globe-alt" class="w-4 h-4" />
-                  DNS Discovery
-                </h4>
-                <p class="text-xs text-base-content/70 mt-2">
-                  Queries DNS TXT records to find nodes that <strong>should exist</strong> based on infrastructure configuration.
-                </p>
-                <div class="text-xs mt-2 space-y-1">
-                  <div><strong>Query:</strong> <code class="text-xs">vms.&#123;app_name&#125;.internal</code></div>
-                  <div><strong>Returns:</strong> Expected node IDs and regions</div>
-                  <div><strong>Refresh:</strong> On-demand (OS DNS cache)</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="card bg-base-100">
-              <div class="card-body p-4">
-                <h4 class="font-semibold flex items-center gap-2">
-                  <.icon name="hero-command-line" class="w-4 h-4" />
-                  CLI Members
-                </h4>
-                <p class="text-xs text-base-content/70 mt-2">
-                  Executes <code>corro cluster members</code> to find Corrosion nodes <strong>actively participating</strong> in the gossip protocol.
-                </p>
-                <div class="text-xs mt-2 space-y-1">
-                  <div><strong>Command:</strong> <code class="text-xs">corro cluster members</code></div>
-                  <div><strong>Returns:</strong> Active members with RTT, state, leader/follower</div>
-                  <div><strong>Refresh:</strong> Every 5 minutes + on-demand</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="card bg-base-100">
-              <div class="card-body p-4">
-                <h4 class="font-semibold flex items-center gap-2">
-                  <.icon name="hero-server" class="w-4 h-4" />
-                  Corrosion API
-                </h4>
-                <p class="text-xs text-base-content/70 mt-2">
-                  Queries the <strong>database-level cluster state</strong> from the Corrosion agent's API.
-                </p>
-                <div class="text-xs mt-2 space-y-1">
-                  <div><strong>Query:</strong> <code class="text-xs">__corro_members</code> table</div>
-                  <div><strong>Returns:</strong> Member counts, peers, system state</div>
-                  <div><strong>Refresh:</strong> On-demand</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="alert alert-info mt-4 text-xs">
-            <.icon name="hero-light-bulb" class="w-4 h-4" />
-            <div>
-              <strong>Architecture Note:</strong> CorroPort runs as two layers: Corrosion agents (database/storage on ports 8081+) and Phoenix nodes (web UI on ports 4001+). Corrosion agents must be running before Phoenix nodes can start.
-            </div>
-          </div>
-        </div>
-      </details>
+      <DataSourcesInfo.data_sources_info />
 
       <!-- Enhanced World Map with Regions -->
       <FlyMapEx.render
@@ -318,7 +234,7 @@ defmodule CorroPortWeb.ClusterLive do
 
 
       <!-- Enhanced Cluster Summary using pre-computed stats -->
-      <.cluster_summary
+      <ClusterSummaryCard.cluster_summary_card
         summary_stats={@summary_stats}
         api_info={@api_info} />
 
@@ -329,7 +245,7 @@ defmodule CorroPortWeb.ClusterLive do
       />
 
       <!-- Cache status indicators using pre-computed status -->
-      <.cache_status_display cache_status={@cache_status} />
+      <CacheStatusCard.cache_status_card cache_status={@cache_status} />
 
       <!-- Last Updated -->
       <div class="text-xs text-base-content/70 text-center">
@@ -354,129 +270,4 @@ defmodule CorroPortWeb.ClusterLive do
     """
   end
 
-  defp cluster_summary(assigns) do
-    ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body">
-        <h3 class="card-title text-sm">
-          <.icon name="hero-server-stack" class="w-4 h-4 mr-2" /> Cluster Summary
-        </h3>
-
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <!-- DNS-Discovered Nodes -->
-          <div class="stat bg-base-100 rounded-lg">
-            <div class="stat-title text-xs">
-              <span title={@summary_stats.dns.tooltip} class="cursor-help">
-                DNS-Discovered Nodes ℹ️
-              </span>
-            </div>
-            <div class={"stat-value text-lg flex items-center #{@summary_stats.dns.display.class}"}>
-              {@summary_stats.dns.display.content}
-            </div>
-            <div class="stat-desc text-xs">
-              {@summary_stats.dns.regions_count} regions
-              <span class="text-base-content/50 ml-1">
-                • {@summary_stats.dns.source_label}
-              </span>
-            </div>
-          </div>
-
-          <!-- CLI Active Members -->
-          <div class="stat bg-base-100 rounded-lg">
-            <div class="stat-title text-xs">
-              <span title={@summary_stats.cli.tooltip} class="cursor-help">
-                CLI Active Members ℹ️
-              </span>
-            </div>
-            <div class={"stat-value text-lg flex items-center #{@summary_stats.cli.display.class}"}>
-              {@summary_stats.cli.display.content}
-            </div>
-            <div class="stat-desc text-xs">
-              {@summary_stats.cli.regions_count} regions
-              <span class="text-base-content/50 ml-1">
-                • {@summary_stats.cli.source_label}
-              </span>
-            </div>
-          </div>
-
-          <!-- Cluster Health -->
-          <div class="stat bg-base-100 rounded-lg">
-            <div class="stat-title text-xs">API Health</div>
-            <div class={"stat-value text-lg #{@summary_stats.api_health.class}"}>
-              {@summary_stats.api_health.content}
-            </div>
-            <div class="stat-desc text-xs">{@summary_stats.api_health.description}</div>
-          </div>
-
-          <!-- Message Activity -->
-          <div class="stat bg-base-100 rounded-lg">
-            <div class="stat-title text-xs">Messages</div>
-            <div class="stat-value text-lg">{@summary_stats.messages_count}</div>
-            <div class="stat-desc text-xs">in database</div>
-          </div>
-        </div>
-
-        <!-- API Info Details -->
-        <div :if={@api_info} class="mt-4 text-sm space-y-2">
-          <div class="flex items-center justify-between">
-            <strong>Total Active Nodes:</strong>
-            <span class="font-semibold text-lg">
-              {@api_info.total_active_nodes}
-            </span>
-          </div>
-
-          <div class="flex items-center justify-between">
-            <strong>Remote Members:</strong>
-            <span>
-              {@api_info.active_member_count}/{@api_info.member_count} active
-            </span>
-          </div>
-
-          <div class="flex items-center justify-between">
-            <strong>Tracked Peers:</strong>
-            <span>{@api_info.peer_count}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    """
-  end
-
-  defp cache_status_display(assigns) do
-    ~H"""
-    <div class="card bg-base-200">
-      <div class="card-body p-4">
-        <h4 class="text-sm font-semibold mb-3 flex items-center gap-2">
-          <.icon name="hero-clock" class="w-4 h-4" />
-          Data Source Status
-        </h4>
-        <div class="grid md:grid-cols-3 gap-4 text-xs">
-          <div class="flex items-start gap-2">
-            <.icon name="hero-globe-alt" class="w-4 h-4 mt-0.5 text-primary" />
-            <div>
-              <div class="font-semibold">DNS Discovery</div>
-              <div class="text-base-content/70">{@cache_status.dns}</div>
-            </div>
-          </div>
-
-          <div class="flex items-start gap-2">
-            <.icon name="hero-command-line" class="w-4 h-4 mt-0.5 text-secondary" />
-            <div>
-              <div class="font-semibold">CLI Members</div>
-              <div class="text-base-content/70">{@cache_status.cli}</div>
-            </div>
-          </div>
-
-          <div class="flex items-start gap-2">
-            <.icon name="hero-server" class="w-4 h-4 mt-0.5 text-accent" />
-            <div>
-              <div class="font-semibold">Corrosion API</div>
-              <div class="text-base-content/70">{@cache_status.api}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    """
-  end
 end

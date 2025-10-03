@@ -1,4 +1,4 @@
-defmodule CorroPortWeb.MembersTable do
+defmodule CorroPortWeb.Components.ClusterLive.MembersTable do
   use Phoenix.Component
 
   # TODO: Only include members that have been seen in the last @max_idle minutes

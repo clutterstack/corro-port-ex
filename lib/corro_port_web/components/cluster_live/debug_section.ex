@@ -1,4 +1,4 @@
-defmodule CorroPortWeb.DebugSection do
+defmodule CorroPortWeb.Components.ClusterLive.DebugSection do
   use Phoenix.Component
 
   def debug_section(assigns) do

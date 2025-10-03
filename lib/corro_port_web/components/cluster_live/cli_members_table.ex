@@ -1,4 +1,4 @@
-defmodule CorroPortWeb.CLIMembersTable do
+defmodule CorroPortWeb.Components.ClusterLive.CLIMembersTable do
   use Phoenix.Component
   import CorroPortWeb.CoreComponents
   alias CorroPortWeb.DisplayHelpers
