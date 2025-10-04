@@ -23,11 +23,11 @@ import "phoenix_html"
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import topbar from "../vendor/topbar"
-import { createRealTimeMapHook } from '../vendor/fly_map_ex/js/real_time_map_hook.js'
+import { RealTimeMapHook } from '../vendor/fly_map_ex/js/real_time_map_hook.js'
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 
-let Hooks = { RealTimeMap: createRealTimeMapHook(Socket) }
+let Hooks = { RealTimeMap: RealTimeMapHook }
 
 Hooks.CopySQL = {
   mounted() {
@@ -92,6 +92,7 @@ liveSocket.connect()
 // >> liveSocket.enableLatencySim(1000)  // enabled for duration of browser session
 // >> liveSocket.disableLatencySim()
 window.liveSocket = liveSocket
+window.Phoenix = { Socket }
 
 // The lines below enable quality of life phoenix_live_reload
 // development features:
