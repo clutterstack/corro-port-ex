@@ -85,7 +85,7 @@ defmodule CorroPortWeb.PropagationLive do
     assign(socket, %{
       page_title: "Geographic Distribution",
       dns_data: %{nodes: {:ok, []}, regions: [], cache_status: %{last_updated: nil, error: nil}},
-      ack_data: %{latest_message: nil, acknowledgments: [], ack_count: 0, expected_count: 0, expected_nodes: [], regions: []},
+      ack_data: %{latest_message: nil, acknowledgments: [], ack_count: 0, regions: []},
       local_node: %{region: "unknown"},
       marker_groups: nil,  # Use nil to indicate "not loaded yet"
       last_updated: DateTime.utc_now(),
@@ -97,14 +97,8 @@ defmodule CorroPortWeb.PropagationLive do
     # Fetch DNS data directly (no caching needed)
     dns_data = CorroPort.DNSLookup.get_dns_data()
 
-    # Extract expected nodes from DNS data to avoid duplicate DNS lookup in AckTracker
-    expected_nodes = case dns_data.nodes do
-      {:ok, nodes} -> nodes
-      _ -> []
-    end
-
-    # Pass expected_nodes to avoid duplicate DNS lookup
-    ack_data = CorroPort.AckTracker.get_status(expected_nodes)
+    # Get acknowledgment data (no longer includes expected_nodes)
+    ack_data = CorroPort.AckTracker.get_status()
     local_node = CorroPort.LocalNode.get_info()
 
     marker_groups = create_region_groups(dns_data, ack_data, local_node)

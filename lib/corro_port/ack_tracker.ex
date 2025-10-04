@@ -2,10 +2,7 @@ defmodule CorroPort.AckTracker do
   @moduledoc """
   Tracks acknowledgments for the latest message sent by this node.
 
-  Uses DNS-based node discovery to get the authoritative list of cluster nodes
-  from Fly.io's DNS TXT records. Much simpler than the previous fallback-heavy approach.
-
-  Now includes:
+  Features:
   - Region extraction from acknowledgments
   - Experiment ID tracking for analytics
   - Analytics event recording
@@ -49,18 +46,9 @@ defmodule CorroPort.AckTracker do
 
   @doc """
   Get the current tracking status.
-
-  Optionally accepts expected_nodes to avoid duplicate DNS lookups.
   """
-  def get_status(expected_nodes \\ nil) do
-    GenServer.call(__MODULE__, {:get_status, expected_nodes})
-  end
-
-  @doc """
-  Get the list of nodes we expect acknowledgments from.
-  """
-  def get_dns_nodes do
-    GenServer.call(__MODULE__, :get_dns_nodes)
+  def get_status do
+    GenServer.call(__MODULE__, :get_status)
   end
 
   @doc """
@@ -153,14 +141,9 @@ defmodule CorroPort.AckTracker do
     {:reply, :ok, state}
   end
 
-  def handle_call({:get_status, expected_nodes}, _from, state) do
-    status = build_status(expected_nodes)
+  def handle_call(:get_status, _from, state) do
+    status = build_status()
     {:reply, status, state}
-  end
-
-  def handle_call(:get_dns_nodes, _from, state) do
-    nodes = get_expected_nodes()
-    {:reply, nodes, state}
   end
 
   def handle_call({:set_experiment_id, experiment_id}, _from, state) do
@@ -258,7 +241,7 @@ defmodule CorroPort.AckTracker do
     :ets.match_delete(@table_name, {{:ack, :_}, :_})
   end
 
-  defp build_status(expected_nodes \\ nil) do
+  defp build_status do
     # Get latest message
     latest_message =
       case :ets.lookup(@table_name, :latest_message) do
@@ -279,9 +262,6 @@ defmodule CorroPort.AckTracker do
       end)
       |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
 
-    # Get expected nodes from DNS-based node discovery or use provided ones
-    expected_nodes = expected_nodes || get_expected_nodes()
-
     # Extract regions from acknowledgments
     ack_regions = RegionExtractor.extract_from_acks(acknowledgments)
 
@@ -293,8 +273,6 @@ defmodule CorroPort.AckTracker do
       latest_message: latest_message,
       acknowledgments: acknowledgments,
       ack_count: length(acknowledgments),
-      expected_count: length(expected_nodes),
-      expected_nodes: expected_nodes,
       regions: ack_regions
     }
   end
@@ -302,13 +280,6 @@ defmodule CorroPort.AckTracker do
   defp broadcast_update do
     status = build_status()
     Phoenix.PubSub.broadcast(CorroPort.PubSub, "ack_events", {:ack_update, status})
-  end
-
-  defp get_expected_nodes do
-    case CorroPort.DNSLookup.get_dns_data() do
-      %{nodes: {:ok, nodes}} -> nodes
-      _ -> []
-    end
   end
 
   defp record_ack_event(message_id, originating_node, ack_node_id, timestamp, experiment_id) do

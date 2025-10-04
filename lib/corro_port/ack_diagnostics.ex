@@ -208,7 +208,6 @@ defmodule CorroPort.AckDiagnostics do
         IO.puts("  PK: #{msg.pk}")
         IO.puts("  From: #{msg.node_id}")
         IO.puts("  At: #{msg.timestamp}")
-        IO.puts("  Expected acks: #{length(status.expected_nodes)} nodes")
         IO.puts("  Received acks: #{status.ack_count}")
 
         if status.acknowledgments != [] do
@@ -220,8 +219,6 @@ defmodule CorroPort.AckDiagnostics do
         else
           IO.puts("  ❌ No acknowledgments received yet")
         end
-
-        IO.puts("  Expected from: #{inspect(status.expected_nodes)}")
     end
 
     IO.puts("")
@@ -319,7 +316,7 @@ defmodule CorroPort.AckDiagnostics do
         monitor_loop()
 
       {:ack_update, ack_status} ->
-        IO.puts("🤝 Ack update: #{ack_status.ack_count}/#{ack_status.expected_count}")
+        IO.puts("🤝 Ack update: #{ack_status.ack_count} acknowledgments")
         monitor_loop()
 
       other ->

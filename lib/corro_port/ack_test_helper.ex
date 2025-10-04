@@ -24,8 +24,7 @@ defmodule CorroPort.AckTestHelper do
 
         ack_status = CorroPort.AckTracker.get_status()
         IO.puts("\n🤝 Acknowledgment status after 2 seconds:")
-        IO.puts("  Expected: #{ack_status.expected_count}")
-        IO.puts("  Received: #{ack_status.ack_count}")
+        IO.puts("  Received: #{ack_status.ack_count} acknowledgments")
 
         if ack_status.acknowledgments != [] do
           IO.puts("  From nodes:")

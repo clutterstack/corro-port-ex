@@ -2,7 +2,13 @@ defmodule CorroPortWeb.AckStatusCard do
   use Phoenix.Component
   import CorroPortWeb.CoreComponents
 
+  attr :ack_status, :map, required: true
+  attr :ack_sender_status, :map, default: nil
+  attr :expected_nodes, :list, default: []
+
   def ack_status_card(assigns) do
+    assigns = assign(assigns, :expected_count, length(assigns.expected_nodes))
+
     ~H"""
     <div class="card bg-base-200">
       <div class="card-body">
@@ -22,8 +28,8 @@ defmodule CorroPortWeb.AckStatusCard do
           <div class="space-y-2">
             <div class="flex items-center justify-between text-sm">
               <span class="font-semibold">Acknowledgments:</span>
-              <span class={ack_progress_class(@ack_status.ack_count, @ack_status.expected_count)}>
-                {@ack_status.ack_count}/{@ack_status.expected_count}
+              <span class={ack_progress_class(@ack_status.ack_count, @expected_count)}>
+                {@ack_status.ack_count}/{@expected_count}
               </span>
             </div>
           </div>
@@ -33,7 +39,7 @@ defmodule CorroPortWeb.AckStatusCard do
             <div class="text-xs font-semibold">Node Status:</div>
             <div class="space-y-1">
               <div
-                :for={node_id <- @ack_status.expected_nodes}
+                :for={node_id <- @expected_nodes}
                 class={[
                   "flex items-center justify-between text-xs rounded px-2 py-1",
                   if(get_node_ack(node_id, @ack_status.acknowledgments),

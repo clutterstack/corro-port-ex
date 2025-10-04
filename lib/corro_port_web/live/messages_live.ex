@@ -22,6 +22,7 @@ defmodule CorroPortWeb.MessagesLive do
         messages_error: nil,
         ack_status: nil,
         ack_sender_status: nil,
+        expected_nodes: [],
         local_node_id: NodeConfig.get_corrosion_node_id(),
         last_updated: nil,
         connectivity_test_results: nil
@@ -33,7 +34,7 @@ defmodule CorroPortWeb.MessagesLive do
   # Handle acknowledgment updates
   def handle_info({:ack_update, ack_status}, socket) do
     Logger.debug(
-      "MessagesLive: Received acknowledgment update: #{ack_status.ack_count}/#{ack_status.expected_count}"
+      "MessagesLive: Received acknowledgment update: #{ack_status.ack_count} acknowledgments"
     )
 
     socket = assign(socket, :ack_status, ack_status)
@@ -163,9 +164,16 @@ defmodule CorroPortWeb.MessagesLive do
     ack_status = AckTracker.get_status()
     ack_sender_status = AckSender.get_status()
 
+    # Get expected nodes from DNS for the status card
+    expected_nodes = case CorroPort.DNSLookup.get_dns_data() do
+      %{nodes: {:ok, nodes}} -> nodes
+      _ -> []
+    end
+
     assign(socket, %{
       ack_status: ack_status,
-      ack_sender_status: ack_sender_status
+      ack_sender_status: ack_sender_status,
+      expected_nodes: expected_nodes
     })
   end
 
@@ -269,7 +277,11 @@ defmodule CorroPortWeb.MessagesLive do
       </.header>
 
     <!-- Acknowledgment Status -->
-      <AckStatusCard.ack_status_card ack_status={@ack_status} ack_sender_status={@ack_sender_status} />
+      <AckStatusCard.ack_status_card
+        ack_status={@ack_status}
+        ack_sender_status={@ack_sender_status}
+        expected_nodes={@expected_nodes}
+      />
 
     <!-- Connectivity Test Results -->
       <div :if={@connectivity_test_results} class="card bg-base-200">
