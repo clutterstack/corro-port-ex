@@ -207,6 +207,7 @@ defmodule CorroPortWeb.PropagationLive do
         real_time={true}
         channel="map:#{@map_id}"
         update_throttle={50}
+        layout={:nolegend}
       />
 
       <!-- Last Updated -->

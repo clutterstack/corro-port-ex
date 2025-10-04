@@ -184,33 +184,28 @@ defmodule CorroPortWeb.ClusterLive do
 
   defp create_region_groups(dns_data, cli_data, local_node) do
     # Build marker groups for the FlyMapEx API
+    groups = []
 
     # Our region (primary/local node)
-    local_node = if local_node.region != "unknown" do
-      %{nodes: [local_node.region], style: :local, label: "Our Node"}
+    groups = if local_node.region != "unknown" do
+      [%{nodes: [local_node.region], style: :local, label: "Our Node"} | groups]
     else
-      %{}
+      groups
     end
 
     # CLI regions
-    cli_regions = if !Enum.empty?(cli_data.regions) do
-      %{nodes: cli_data.regions, style: :cli, label: "Active Regions by CLI"}
+    groups = if !Enum.empty?(cli_data.regions) do
+      [%{nodes: cli_data.regions, style: :cli, label: "Active Regions by CLI"} | groups]
     else
-      %{}
+      groups
     end
 
     # DNS regions (excluding our region)
-    dns_regions = if !Enum.empty?(dns_data.regions) do
-    %{nodes: dns_data.regions, style: :dns, label: "App Regions by DNS"}
+    groups = if !Enum.empty?(dns_data.regions) do
+      [%{nodes: dns_data.regions, style: :dns, label: "App Regions by DNS"} | groups]
     else
-      %{}
+      groups
     end
-
-    [
-      dns_regions,
-      cli_regions,
-      local_node
-    ]
   end
 
   def render(assigns) do
