@@ -64,7 +64,7 @@ defmodule CorroPort.MixProject do
       {:tidewave, "~> 0.5", only: :dev},
       {:corro_client, git: "https://github.com/clutterstack/corro_client.git", branch: "main", override: true},
       {:corro_cli, git: "https://github.com/clutterstack/corro_cli.git", branch: "main", override: true},
-      {:fly_map_ex, git: "https://github.com/clutterstack/fly_map_ex.git", branch: "codex-wild", override: true}
+      {:fly_map_ex, git: "https://github.com/clutterstack/fly_map_ex.git", branch: "main", override: true}
     ]
   end
 

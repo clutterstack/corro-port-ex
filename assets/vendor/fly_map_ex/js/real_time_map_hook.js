@@ -464,19 +464,8 @@ export function createRealTimeMapHook(socket) {
         return false;
       }
 
-      if (!window.Phoenix) {
-        console.warn('RealTimeMapHook: Phoenix not available');
-        return false;
-      }
-
       if (!document.createElementNS) {
         console.warn('RealTimeMapHook: SVG manipulation not supported');
-        return false;
-      }
-
-      // Check if socket is available
-      if (!socket) {
-        console.warn('RealTimeMapHook: Socket not initialized');
         return false;
       }
 
@@ -547,18 +536,14 @@ export function createRealTimeMapHook(socket) {
   };
 }
 
-// For backward compatibility, export a default hook using a global socket
+// Deprecated: For backward compatibility only
+// Modern apps should use: createRealTimeMapHook(socket) with a proper Phoenix Socket instance
 export const RealTimeMapHook = {
   mounted() {
-    console.warn('RealTimeMapHook: Using deprecated export. Please use createRealTimeMapHook(socket) instead.');
-    // Try to get socket from window or LiveView
-    const socket = window.liveSocket?.socket;
-    if (!socket) {
-      console.error('RealTimeMapHook: No socket available. Use createRealTimeMapHook(socket) with a socket instance.');
-      return;
-    }
-
-    const hook = createRealTimeMapHook(socket);
-    return hook.mounted.call(this);
+    console.error(
+      'RealTimeMapHook: Deprecated export used. ' +
+      'Please use createRealTimeMapHook(socket) with a Phoenix Socket instance instead. ' +
+      'Example: new Socket("/socket", {params: {...}}) then createRealTimeMapHook(socket)'
+    );
   }
 };
