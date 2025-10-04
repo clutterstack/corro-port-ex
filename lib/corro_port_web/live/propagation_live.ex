@@ -15,7 +15,11 @@ defmodule CorroPortWeb.PropagationLive do
       Phoenix.PubSub.subscribe(CorroPort.PubSub, "ack_events")
     end
 
-    socket = fetch_all_data(socket)
+    socket =
+      socket
+      |> assign(:map_id, Ecto.UUID.generate())
+      |> fetch_all_data()
+
     {:ok, socket}
   end
 
@@ -28,11 +32,7 @@ defmodule CorroPortWeb.PropagationLive do
   def handle_event("send_message", _params, socket) do
     case CorroPort.MessagesAPI.send_and_track_message("Test propagation message") do
       {:ok, _message_data} ->
-        socket =
-          socket
-          |> assign(:ack_regions, [])  # Reset ack regions for new message
-          |> put_flash(:info, "Message sent! Tracking acknowledgments...")
-        {:noreply, socket}
+        {:noreply, put_flash(socket, :info, "Message sent! Tracking acknowledgments...")}
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to send: #{format_error(reason)}")}
@@ -43,13 +43,7 @@ defmodule CorroPortWeb.PropagationLive do
     case CorroPort.AckTracker.reset_tracking() do
       :ok ->
         Logger.info("PropagationLive: ✅ Message tracking reset successfully")
-
-        socket =
-          socket
-          |> assign(:ack_regions, [])  # Clear violet regions immediately
-          |> put_flash(:info, "Message tracking reset - all nodes are now orange (expected)")
-
-        {:noreply, socket}
+        {:noreply, put_flash(socket, :info, "Message tracking reset - all nodes are now orange (expected)")}
 
       {:error, error} ->
         Logger.warning("PropagationLive: ❌ Failed to reset tracking: #{inspect(error)}")
@@ -71,7 +65,6 @@ defmodule CorroPortWeb.PropagationLive do
 
     socket = assign(socket, %{
       ack_data: ack_data,
-      ack_regions: ack_data.regions,
       marker_groups: marker_groups
     })
 
@@ -95,11 +88,6 @@ defmodule CorroPortWeb.PropagationLive do
       dns_data: dns_data,
       ack_data: ack_data,
       local_node: local_node,
-
-      # Computed regions for map display (excluding our region)
-      dns_regions: exclude_our_region(dns_data.regions, local_node.region),
-      ack_regions: ack_data.regions,
-      our_regions: [local_node.region],
 
       # Marker groups for FlyMapEx
       marker_groups: marker_groups,
@@ -189,6 +177,9 @@ defmodule CorroPortWeb.PropagationLive do
       <!-- Enhanced World Map with Regions -->
       <FlyMapEx.render
         marker_groups={@marker_groups}
+        real_time={true}
+        channel="map:#{@map_id}"
+        update_throttle={50}
       />
 
       <!-- Last Updated -->

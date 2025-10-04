@@ -6,7 +6,6 @@ defmodule CorroPortWeb.PropagationHeader do
   Renders the propagation page header with actions and error handling.
   """
   attr :dns_data, :map, required: true
-  attr :cli_data, :map, required: true
 
   def propagation_header(assigns) do
     ~H"""
