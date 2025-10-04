@@ -33,7 +33,10 @@ defmodule CorroPortWeb.Components.ClusterLive.DNSNodesTable do
           <h3 class="card-title">
             <.icon name="hero-globe-alt" class="w-5 h-5 mr-2" /> DNS-Discovered Nodes
           </h3>
-          <div class="flex gap-2">
+          <div class="flex gap-3 items-center">
+            <span :if={@dns_data.cache_status.last_updated} class="text-xs text-base-content/60">
+              Updated {Calendar.strftime(@dns_data.cache_status.last_updated, "%H:%M:%S")}
+            </span>
             <.button phx-click="refresh_dns" class="btn btn-primary btn-sm">
               <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Refresh DNS Data
             </.button>

@@ -42,7 +42,7 @@ defmodule CorroPortWeb.ClusterLive do
     {:ok, socket}
   end
 
-  # Event handlers - unified refresh system
+  # Event handlers - targeted refresh system
 
   def handle_event("refresh_all", _params, socket) do
     Logger.debug("ClusterLive: 🔄 Full refresh triggered")
@@ -50,13 +50,18 @@ defmodule CorroPortWeb.ClusterLive do
   end
 
   def handle_event("refresh_dns", _params, socket) do
-    socket = fetch_all_data(socket)
+    socket = refresh_dns_data(socket)
     {:noreply, put_flash(socket, :info, "DNS data refreshed")}
   end
 
   def handle_event("refresh_cli", _params, socket) do
     CorroPort.CLIClusterData.refresh_members()
     {:noreply, put_flash(socket, :info, "CLI member refresh initiated...")}
+  end
+
+  def handle_event("refresh_api", _params, socket) do
+    socket = refresh_api_data(socket)
+    {:noreply, put_flash(socket, :info, "API data refreshed")}
   end
 
 
@@ -98,8 +103,6 @@ defmodule CorroPortWeb.ClusterLive do
     # Build api_data structure for DisplayHelpers compatibility
     api_data = %{
       cluster_info: cluster_info,
-      database_info: nil,
-      latest_messages: [],
       cache_status: %{
         last_updated: DateTime.utc_now(),
         error: cluster_error
@@ -120,6 +123,48 @@ defmodule CorroPortWeb.ClusterLive do
       # Computed marker groups for map display
       marker_groups: marker_groups,
 
+      last_updated: DateTime.utc_now()
+    })
+    |> maybe_flash_cluster_error(cluster_error)
+  end
+
+  defp refresh_dns_data(socket) do
+    # Fetch only DNS data
+    dns_data = CorroPort.DNSLookup.get_dns_data()
+
+    # Recompute marker groups (depends on dns_data, cli_data, local_node)
+    marker_groups = create_region_groups(dns_data, socket.assigns.cli_data, socket.assigns.local_node)
+
+    assign(socket, %{
+      dns_data: dns_data,
+      marker_groups: marker_groups,
+      last_updated: DateTime.utc_now()
+    })
+  end
+
+  defp refresh_api_data(socket) do
+    # Fetch cluster info from Corrosion API
+    conn = CorroPort.ConnectionManager.get_connection()
+    previous_cluster_info = socket.assigns.cluster_info
+
+    {cluster_info, cluster_error} =
+      case CorroClient.get_cluster_info(conn) do
+        {:ok, info} -> {info, nil}
+        {:error, reason} -> {previous_cluster_info, reason}
+      end
+
+    # Build api_data structure
+    api_data = %{
+      cluster_info: cluster_info,
+      cache_status: %{
+        last_updated: DateTime.utc_now(),
+        error: cluster_error
+      }
+    }
+
+    assign(socket, %{
+      api_data: api_data,
+      cluster_info: cluster_info,
       last_updated: DateTime.utc_now()
     })
     |> maybe_flash_cluster_error(cluster_error)
@@ -182,7 +227,6 @@ defmodule CorroPortWeb.ClusterLive do
       assigns.cli_data.regions
     )
 
-    api_info = DisplayHelpers.api_info_details(assigns.api_data)
     cli_member_data = DisplayHelpers.build_cli_member_data(assigns.cli_data)
     cli_error = DisplayHelpers.extract_cli_error(assigns.cli_data)
     cache_status = DisplayHelpers.all_cache_status(assigns.dns_data, assigns.cli_data, assigns.api_data)
@@ -192,7 +236,6 @@ defmodule CorroPortWeb.ClusterLive do
       cli_alert: cli_alert,
       api_alert: api_alert,
       summary_stats: summary_stats,
-      api_info: api_info,
       cli_member_data: cli_member_data,
       cli_error: cli_error,
       cache_status: cache_status
@@ -203,16 +246,13 @@ defmodule CorroPortWeb.ClusterLive do
       <!-- Navigation Tabs -->
       <NavTabs.nav_tabs active={:cluster} />
 
-      <!-- Header with refresh buttons -->
-      <ClusterHeader.cluster_header dns_data={@dns_data} cli_data={@cli_data} />
+      <!-- Header with refresh all button -->
+      <ClusterHeader.cluster_header />
 
       <!-- Error alerts using pre-computed configurations -->
       <.error_alert :if={@dns_alert} config={@dns_alert} />
       <.error_alert :if={@cli_alert} config={@cli_alert} />
       <.error_alert :if={@api_alert} config={@api_alert} />
-
-      <!-- About Data Sources (collapsible) -->
-      <DataSourcesInfo.data_sources_info />
 
       <!-- Enhanced World Map with Regions -->
       <FlyMapEx.render
@@ -220,29 +260,26 @@ defmodule CorroPortWeb.ClusterLive do
         theme={:monitoring}
       />
 
+      <!-- Enhanced Cluster Summary using pre-computed stats -->
+      <ClusterSummaryCard.cluster_summary_card
+        summary_stats={@summary_stats}
+      />
+
       <!-- DNS-Discovered Nodes Table -->
       <DNSNodesTable.display dns_data={@dns_data} />
 
       <!-- CLI Members Display with clean data structure -->
       <CLIMembersTable.display
+        cli_data={@cli_data}
         cli_member_data={@cli_member_data}
         cli_error={@cli_error}
       />
 
       <!-- Corrosion API (__corro_members) table entries -->
-      <MembersTable.cluster_members_table :if={@cluster_info} cluster_info={@cluster_info} />
+      <MembersTable.cluster_members_table :if={@cluster_info} cluster_info={@cluster_info} api_data={@api_data} />
 
-
-      <!-- Enhanced Cluster Summary using pre-computed stats -->
-      <ClusterSummaryCard.cluster_summary_card
-        summary_stats={@summary_stats}
-        api_info={@api_info} />
-
-      <!-- Debug Section with clean data -->
-      <DebugSection.debug_section
-        cluster_info={@api_data.cluster_info}
-        node_messages={@api_data.latest_messages}
-      />
+      <!-- About Data Sources (collapsible) -->
+      <DataSourcesInfo.data_sources_info />
 
       <!-- Cache status indicators using pre-computed status -->
       <CacheStatusCard.cache_status_card cache_status={@cache_status} />

@@ -1,5 +1,6 @@
 defmodule CorroPortWeb.Components.ClusterLive.MembersTable do
   use Phoenix.Component
+  import CorroPortWeb.CoreComponents
 
   # TODO: Only include members that have been seen in the last @max_idle minutes
   # TODO: Exclude local node, since __corro_members always shows that as down
@@ -8,7 +9,17 @@ defmodule CorroPortWeb.Components.ClusterLive.MembersTable do
     ~H"""
     <div class="card bg-base-100">
       <div class="card-body">
-        <h3 class="card-title"><pre>__corro_members</pre> table entries</h3>
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="card-title"><pre>__corro_members</pre> table entries</h3>
+          <div class="flex gap-3 items-center">
+            <span :if={@api_data.cache_status.last_updated} class="text-xs text-base-content/60">
+              Updated {Calendar.strftime(@api_data.cache_status.last_updated, "%H:%M:%S")}
+            </span>
+            <.button phx-click="refresh_api" class="btn btn-primary btn-sm">
+              <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Refresh API Data
+            </.button>
+          </div>
+        </div>
 
         <div :if={@cluster_info && Map.get(@cluster_info, :members, []) != []} class="overflow-x-auto">
           <table class="table table-zebra">
@@ -102,26 +113,6 @@ defmodule CorroPortWeb.Components.ClusterLive.MembersTable do
     </div>
     """
   end
-
-  # def debug_section(assigns) do
-  #   ~H"""
-  #   <details class="collapse collapse-arrow bg-base-200">
-  #     <summary class="collapse-title text-sm font-medium">Raw API Response looooloooo (Debug)</summary>
-  #     <div class="collapse-content">
-  #       <div :if={@cluster_info} class="mb-4">
-  #         <h4 class="font-semibold mb-2">Cluster Info:</h4>
-  #         <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@cluster_info, pretty: true) %></pre>
-  #       </div>
-  #       <div :if={@node_messages != []} class="mb-4">
-  #         <h4 class="font-semibold mb-2">Node Messages:</h4>
-  #         <pre class="bg-base-300 p-4 rounded text-xs overflow-auto"><%= Jason.encode!(@node_messages, pretty: true) %></pre>
-  #       </div>
-  #     </div>
-  #   </details>
-  #   """
-  # end
-
-  # Helper functions
 
   defp member_state_badge_class(state) do
     base_classes = "badge badge-sm"

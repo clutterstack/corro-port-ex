@@ -115,25 +115,6 @@ defmodule CorroPortWeb.DisplayHelpers do
   end
 
   @doc """
-  Determines API health status display.
-  """
-  def api_health_display(system_data) do
-    if system_data.cluster_info do
-      %{
-        content: "✓",
-        class: "text-success",
-        description: "connected"
-      }
-    else
-      %{
-        content: "✗",
-        class: "text-error",
-        description: "failed"
-      }
-    end
-  end
-
-  @doc """
   Formats cache status for display.
   """
   def cache_status_display(cache_status) do
@@ -241,7 +222,6 @@ defmodule CorroPortWeb.DisplayHelpers do
   def cluster_summary_stats(dns_data, cli_data, api_data, dns_regions, cli_regions) do
     dns_display = count_display(dns_data, :nodes)
     cli_display = count_display(cli_data, :members)
-    api_health = api_health_display(api_data)
 
     %{
       dns: %{
@@ -258,25 +238,7 @@ defmodule CorroPortWeb.DisplayHelpers do
         tooltip: data_source_tooltip(:cli),
         last_updated: cli_data.cache_status.last_updated
       },
-      api_health: api_health,
-      messages_count: length(api_data.latest_messages)
     }
-  end
-
-  @doc """
-  Gets API info details for cluster summary.
-  Returns nil if no cluster info available.
-  """
-  def api_info_details(api_data) do
-    case api_data.cluster_info do
-      nil -> nil
-      cluster_info -> %{
-        total_active_nodes: Map.get(cluster_info, "total_active_nodes", 0),
-        active_member_count: Map.get(cluster_info, "active_member_count", 0),
-        member_count: Map.get(cluster_info, "member_count", 0),
-        peer_count: Map.get(cluster_info, "peer_count", 0)
-      }
-    end
   end
 
   @doc """
