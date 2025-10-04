@@ -13,17 +13,39 @@ defmodule CorroPortWeb.PropagationLive do
     if connected?(socket) do
       # Subscribe to  acknowledgment updates
       Phoenix.PubSub.subscribe(CorroPort.PubSub, "ack_events")
+      # Fetch data asynchronously after mount completes
+      send(self(), :fetch_data)
     end
 
     socket =
       socket
       |> assign(:map_id, Ecto.UUID.generate())
-      |> fetch_all_data()
+      |> assign_initial_data()
 
     {:ok, socket}
   end
 
+  # Real-time updates from domain modules
+
+  def handle_info(:fetch_data, socket) do
+    {:noreply, fetch_all_data(socket)}
+  end
+
+  def handle_info({:ack_update, ack_data}, socket) do
+    Logger.debug("PropagationLive: Received ack status update")
+
+    marker_groups = create_region_groups(socket.assigns.dns_data, ack_data, socket.assigns.local_node)
+
+    socket = assign(socket, %{
+      ack_data: ack_data,
+      marker_groups: marker_groups
+    })
+
+    {:noreply, socket}
+  end
+
   # Event handlers - per-domain refresh
+
   def handle_event("refresh_dns", _params, socket) do
     socket = fetch_all_data(socket)
     {:noreply, put_flash(socket, :info, "DNS data refreshed")}
@@ -56,27 +78,33 @@ defmodule CorroPortWeb.PropagationLive do
     {:noreply, fetch_all_data(socket)}
   end
 
-  # Real-time updates from domain modules
-
-  def handle_info({:ack_update, ack_data}, socket) do
-    Logger.debug("PropagationLive: Received ack status update")
-
-    marker_groups = create_region_groups(socket.assigns.dns_data, ack_data, socket.assigns.local_node)
-
-    socket = assign(socket, %{
-      ack_data: ack_data,
-      marker_groups: marker_groups
-    })
-
-    {:noreply, socket}
-  end
-
   # Private functions
+
+  defp assign_initial_data(socket) do
+    # Provide placeholder data so template renders immediately
+    assign(socket, %{
+      page_title: "Geographic Distribution",
+      dns_data: %{nodes: {:ok, []}, regions: [], cache_status: %{last_updated: nil, error: nil}},
+      ack_data: %{latest_message: nil, acknowledgments: [], ack_count: 0, expected_count: 0, expected_nodes: [], regions: []},
+      local_node: %{region: "unknown"},
+      marker_groups: nil,  # Use nil to indicate "not loaded yet"
+      last_updated: DateTime.utc_now(),
+      loading: true
+    })
+  end
 
   defp fetch_all_data(socket) do
     # Fetch DNS data directly (no caching needed)
     dns_data = CorroPort.DNSLookup.get_dns_data()
-    ack_data = CorroPort.AckTracker.get_status()
+
+    # Extract expected nodes from DNS data to avoid duplicate DNS lookup in AckTracker
+    expected_nodes = case dns_data.nodes do
+      {:ok, nodes} -> nodes
+      _ -> []
+    end
+
+    # Pass expected_nodes to avoid duplicate DNS lookup
+    ack_data = CorroPort.AckTracker.get_status(expected_nodes)
     local_node = CorroPort.LocalNode.get_info()
 
     marker_groups = create_region_groups(dns_data, ack_data, local_node)
@@ -92,7 +120,8 @@ defmodule CorroPortWeb.PropagationLive do
       # Marker groups for FlyMapEx
       marker_groups: marker_groups,
 
-      last_updated: DateTime.utc_now()
+      last_updated: DateTime.utc_now(),
+      loading: false
     })
   end
 
@@ -149,13 +178,6 @@ defmodule CorroPortWeb.PropagationLive do
     end
   end
 
-  defp dns_empty_message do
-    case Application.get_env(:corro_port, :node_config)[:environment] do
-      :prod -> "(none found)"
-      _ -> "(none; no DNS in dev)"
-    end
-  end
-
   def render(assigns) do
     assigns = assign(assigns, %{
       dns_alert: DisplayHelpers.dns_alert_config(assigns.dns_data)
@@ -175,7 +197,12 @@ defmodule CorroPortWeb.PropagationLive do
       <.error_alert :if={@dns_alert} config={@dns_alert} />
 
       <!-- Enhanced World Map with Regions -->
+      <div :if={@loading} class="flex items-center justify-center py-12">
+        <div class="text-base-content/70">Loading map...</div>
+      </div>
+
       <FlyMapEx.render
+        :if={!@loading and @marker_groups}
         marker_groups={@marker_groups}
         real_time={true}
         channel="map:#{@map_id}"

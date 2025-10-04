@@ -49,9 +49,11 @@ defmodule CorroPort.AckTracker do
 
   @doc """
   Get the current tracking status.
+
+  Optionally accepts expected_nodes to avoid duplicate DNS lookups.
   """
-  def get_status do
-    GenServer.call(__MODULE__, :get_status)
+  def get_status(expected_nodes \\ nil) do
+    GenServer.call(__MODULE__, {:get_status, expected_nodes})
   end
 
   @doc """
@@ -151,8 +153,8 @@ defmodule CorroPort.AckTracker do
     {:reply, :ok, state}
   end
 
-  def handle_call(:get_status, _from, state) do
-    status = build_status()
+  def handle_call({:get_status, expected_nodes}, _from, state) do
+    status = build_status(expected_nodes)
     {:reply, status, state}
   end
 
@@ -256,7 +258,7 @@ defmodule CorroPort.AckTracker do
     :ets.match_delete(@table_name, {{:ack, :_}, :_})
   end
 
-  defp build_status do
+  defp build_status(expected_nodes \\ nil) do
     # Get latest message
     latest_message =
       case :ets.lookup(@table_name, :latest_message) do
@@ -277,8 +279,8 @@ defmodule CorroPort.AckTracker do
       end)
       |> Enum.sort_by(& &1.timestamp, {:desc, DateTime})
 
-    # Get expected nodes from DNS-based node discovery
-    expected_nodes = get_expected_nodes()
+    # Get expected nodes from DNS-based node discovery or use provided ones
+    expected_nodes = expected_nodes || get_expected_nodes()
 
     # Extract regions from acknowledgments
     ack_regions = RegionExtractor.extract_from_acks(acknowledgments)
