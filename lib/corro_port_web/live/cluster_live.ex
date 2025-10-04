@@ -139,33 +139,33 @@ defmodule CorroPortWeb.ClusterLive do
 
   defp create_region_groups(dns_data, cli_data, local_node) do
     # Build marker groups for the FlyMapEx API
-    groups = []
 
     # Our region (primary/local node)
-    groups = if local_node.region != "unknown" do
-      [%{nodes: [local_node.region], style_key: :primary, label: "Our Node"} | groups]
+    local_node = if local_node.region != "unknown" do
+      %{nodes: [local_node.region], style: :local, label: "Our Node"}
     else
-      groups
+      %{}
     end
 
-    # CLI regions (excluding our region)
-    cli_regions = exclude_our_region(cli_data.regions, local_node.region)
-    groups = if !Enum.empty?(cli_regions) do
-      [%{nodes: cli_regions, style_key: :active, label: "CLI Active Regions"} | groups]
+    # CLI regions
+    cli_regions = if !Enum.empty?(cli_data.regions) do
+      %{nodes: cli_data.regions, style: :cli, label: "Active Regions by CLI"}
     else
-      groups
+      %{}
     end
 
     # DNS regions (excluding our region)
-    dns_regions = exclude_our_region(dns_data.regions, local_node.region)
-    groups = if !Enum.empty?(dns_regions) do
-      [%{nodes: dns_regions, style_key: :expected, label: "DNS Expected Regions"} | groups]
+    dns_regions = if !Enum.empty?(dns_data.regions) do
+    %{nodes: dns_data.regions, style: :dns, label: "App Regions by DNS"}
     else
-      groups
+      %{}
     end
 
-    # Return groups in reverse order (since we prepended)
-    Enum.reverse(groups)
+    [
+      dns_regions,
+      cli_regions,
+      local_node
+    ]
   end
 
   def render(assigns) do
