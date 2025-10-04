@@ -18,7 +18,7 @@ defmodule CorroPortWeb.Router do
   scope "/", CorroPortWeb do
     pipe_through :browser
 
-    live "/", IndexLive
+    live "/", PropagationLive
     live "/cluster", ClusterLive
     live "/node", NodeLive
     live "/messages", MessagesLive

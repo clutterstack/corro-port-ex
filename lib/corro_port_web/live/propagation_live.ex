@@ -1,18 +1,17 @@
-defmodule CorroPortWeb.IndexLive do
+defmodule CorroPortWeb.PropagationLive do
   use CorroPortWeb, :live_view
   require Logger
 
   alias CorroPortWeb.{
     NavTabs,
     PropagationHeader,
-    ErrorAlerts,
+    DisplayHelpers,
     CacheStatus
   }
 
   def mount(_params, _session, socket) do
     if connected?(socket) do
-      # Subscribe to CLI cluster data and acknowledgment updates
-      CorroPort.CLIClusterData.subscribe_cli()
+      # Subscribe to  acknowledgment updates
       Phoenix.PubSub.subscribe(CorroPort.PubSub, "ack_events")
     end
 
@@ -24,11 +23,6 @@ defmodule CorroPortWeb.IndexLive do
   def handle_event("refresh_dns", _params, socket) do
     socket = fetch_all_data(socket)
     {:noreply, put_flash(socket, :info, "DNS data refreshed")}
-  end
-
-  def handle_event("refresh_cli", _params, socket) do
-    CorroPort.CLIClusterData.refresh_members()
-    {:noreply, put_flash(socket, :info, "CLI member refresh initiated...")}
   end
 
   def handle_event("send_message", _params, socket) do
@@ -48,7 +42,7 @@ defmodule CorroPortWeb.IndexLive do
   def handle_event("reset_tracking", _params, socket) do
     case CorroPort.AckTracker.reset_tracking() do
       :ok ->
-        Logger.info("IndexLive: ✅ Message tracking reset successfully")
+        Logger.info("PropagationLive: ✅ Message tracking reset successfully")
 
         socket =
           socket
@@ -58,36 +52,22 @@ defmodule CorroPortWeb.IndexLive do
         {:noreply, socket}
 
       {:error, error} ->
-        Logger.warning("IndexLive: ❌ Failed to reset tracking: #{inspect(error)}")
+        Logger.warning("PropagationLive: ❌ Failed to reset tracking: #{inspect(error)}")
         {:noreply, put_flash(socket, :error, "Failed to reset tracking: #{format_error(error)}")}
     end
   end
 
   def handle_event("refresh_all", _params, socket) do
-    Logger.debug("IndexLive: 🔄 Manual refresh triggered")
+    Logger.debug("PropagationLive: 🔄 Manual refresh triggered")
     {:noreply, fetch_all_data(socket)}
   end
 
   # Real-time updates from domain modules
-  def handle_info({:cli_members_updated, cli_data}, socket) do
-    Logger.debug("IndexLive: Received CLI members update")
-
-    new_cli_regions = exclude_our_region(cli_data.regions, socket.assigns.local_node.region)
-    marker_groups = create_region_groups(socket.assigns.dns_data, cli_data, socket.assigns.ack_data, socket.assigns.local_node)
-
-    socket = assign(socket, %{
-      cli_data: cli_data,
-      cli_regions: new_cli_regions,
-      marker_groups: marker_groups
-    })
-
-    {:noreply, socket}
-  end
 
   def handle_info({:ack_update, ack_data}, socket) do
-    Logger.debug("IndexLive: Received ack status update")
+    Logger.debug("PropagationLive: Received ack status update")
 
-    marker_groups = create_region_groups(socket.assigns.dns_data, socket.assigns.cli_data, ack_data, socket.assigns.local_node)
+    marker_groups = create_region_groups(socket.assigns.dns_data, ack_data, socket.assigns.local_node)
 
     socket = assign(socket, %{
       ack_data: ack_data,
@@ -103,25 +83,21 @@ defmodule CorroPortWeb.IndexLive do
   defp fetch_all_data(socket) do
     # Fetch DNS data directly (no caching needed)
     dns_data = CorroPort.DNSLookup.get_dns_data()
-    # Fetch from CLI cluster data (has its own caching)
-    cli_data = CorroPort.CLIClusterData.get_cli_data()
     ack_data = CorroPort.AckTracker.get_status()
     local_node = CorroPort.LocalNode.get_info()
 
-    marker_groups = create_region_groups(dns_data, cli_data, ack_data, local_node)
+    marker_groups = create_region_groups(dns_data, ack_data, local_node)
 
     assign(socket, %{
       page_title: "Geographic Distribution",
 
       # Raw data with embedded success/error states
       dns_data: dns_data,
-      cli_data: cli_data,
       ack_data: ack_data,
       local_node: local_node,
 
       # Computed regions for map display (excluding our region)
       dns_regions: exclude_our_region(dns_data.regions, local_node.region),
-      cli_regions: exclude_our_region(cli_data.regions, local_node.region),
       ack_regions: ack_data.regions,
       our_regions: [local_node.region],
 
@@ -139,30 +115,19 @@ defmodule CorroPortWeb.IndexLive do
   defp format_error(reason) do
     case reason do
       :dns_failed -> "DNS lookup failed"
-      :cli_timeout -> "CLI command timed out"
-      {:cli_failed, _} -> "CLI command failed"
-      {:parse_failed, _} -> "Failed to parse CLI output"
       :service_unavailable -> "Service unavailable"
       {:tracking_failed, _} -> "Failed to start tracking"
       _ -> "#{inspect(reason)}"
     end
   end
 
-  defp create_region_groups(dns_data, cli_data, ack_data, local_node) do
+  defp create_region_groups(dns_data, ack_data, local_node) do
     # Build marker groups for the FlyMapEx API
     groups = []
 
     # Our region (primary/local node)
     groups = if local_node.region != "unknown" do
       [%{nodes: [local_node.region], style_key: :primary, label: "Our Node"} | groups]
-    else
-      groups
-    end
-
-    # CLI regions (excluding our region)
-    cli_regions = exclude_our_region(cli_data.regions, local_node.region)
-    groups = if !Enum.empty?(cli_regions) do
-      [%{nodes: cli_regions, style_key: :active, label: "CLI Active Regions"} | groups]
     else
       groups
     end
@@ -204,6 +169,10 @@ defmodule CorroPortWeb.IndexLive do
   end
 
   def render(assigns) do
+    assigns = assign(assigns, %{
+      dns_alert: DisplayHelpers.dns_alert_config(assigns.dns_data)
+    })
+
     ~H"""
     <div class="space-y-6">
       <!-- Navigation Tabs -->
@@ -212,29 +181,34 @@ defmodule CorroPortWeb.IndexLive do
       <!-- Page Header with Actions -->
       <PropagationHeader.propagation_header
         dns_data={@dns_data}
-        cli_data={@cli_data}
       />
 
-      <!-- Error Alerts -->
-      <ErrorAlerts.error_alerts
-        dns_data={@dns_data}
-        cli_data={@cli_data}
-      />
+      <!-- Error alerts using pre-computed configurations -->
+      <.error_alert :if={@dns_alert} config={@dns_alert} />
 
       <!-- Enhanced World Map with Regions -->
       <FlyMapEx.render
         marker_groups={@marker_groups}
       />
 
-      <!-- Cache Status Indicators -->
-      <CacheStatus.cache_status
-        dns_data={@dns_data}
-        cli_data={@cli_data}
-      />
-
       <!-- Last Updated -->
       <div class="text-xs text-base-content/70 text-center">
         Page updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}
+      </div>
+    </div>
+    """
+  end
+
+  # Helper components extracted from inline template logic
+
+  defp error_alert(%{config: nil} = assigns), do: ~H""
+  defp error_alert(assigns) do
+    ~H"""
+    <div class={@config.class}>
+      <.icon name={@config.icon} class="w-5 h-5" />
+      <div>
+        <div class="font-semibold">{@config.title}</div>
+        <div class="text-sm">{@config.message}</div>
       </div>
     </div>
     """
