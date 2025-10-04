@@ -138,7 +138,7 @@ defmodule CorroPortWeb.PropagationLive do
 
     # Our region (primary/local node)
     groups = if local_node.region != "unknown" do
-      [%{nodes: [local_node.region], style_key: :primary, label: "Our Node"} | groups]
+      [%{nodes: [local_node.region], style: :local, label: "Our Node"} | groups]
     else
       groups
     end
@@ -146,14 +146,14 @@ defmodule CorroPortWeb.PropagationLive do
     # DNS regions (excluding our region)
     dns_regions = exclude_our_region(dns_data.regions, local_node.region)
     groups = if !Enum.empty?(dns_regions) do
-      [%{nodes: dns_regions, style_key: :expected, label: "DNS Expected Regions"} | groups]
+      [%{nodes: dns_regions, style: :dns, label: "DNS Expected Regions"} | groups]
     else
       groups
     end
 
     # Acknowledged regions (includes all that acknowledged, including our region)
     groups = if !Enum.empty?(ack_data.regions) do
-      [%{nodes: ack_data.regions, style_key: :acknowledged, label: "Acknowledged Messages"} | groups]
+      [%{nodes: ack_data.regions, style: :acked, label: "Acknowledged Messages"} | groups]
     else
       groups
     end
@@ -200,7 +200,7 @@ defmodule CorroPortWeb.PropagationLive do
         marker_groups={@marker_groups}
         real_time={true}
         channel="map:#{@map_id}"
-        update_throttle={50}
+        update_throttle={5}
         layout={:nolegend}
       />
 

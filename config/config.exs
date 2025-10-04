@@ -44,10 +44,10 @@ config :fly_map_ex,
   default_presets:
     %{
     local: %{colour: "#e046ffff", size: 4},
-    dns: %{colour: "#646464ff", size: 8},
+    dns: %{colour: "#969494ff", size: 6},
     api: %{colour: "#8f45ffff", size: 6},
-    cli: %{colour: "#1f91c6ff", size: 4},
-    acked: %{colour: "#46c44aff", size: 4},
+    cli: %{colour: "#4ec2f8ff", size: 4},
+    acked: %{colour: "#54f25aff", size: 4},
     }
 
 

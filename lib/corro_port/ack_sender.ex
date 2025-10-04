@@ -142,11 +142,6 @@ defmodule CorroPort.AckSender do
         local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
         if originating_node_id != local_node_id do
-          Logger.info(
-            "AckSender: 🤝 Sending acknowledgment for message from #{originating_node_id}"
-          )
-
-          # Send acknowledgment in background using direct endpoint communication
           spawn(fn -> send_acknowledgment_to_endpoint(message_map) end)
         else
           Logger.debug("AckSender: Ignoring message from self (#{local_node_id})")
@@ -161,7 +156,7 @@ defmodule CorroPort.AckSender do
       local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
       if originating_node_id && originating_node_id != local_node_id do
-        Logger.info("AckSender: 🤝 Sending acknowledgment for INSERT from #{originating_node_id}")
+        Logger.info("AckSender: INSERT change from #{originating_node_id}; spawn ack task")
 
         spawn(fn -> send_acknowledgment_to_endpoint(message_map) end)
       end
@@ -182,7 +177,7 @@ defmodule CorroPort.AckSender do
       # Check if this is the first time we're receiving this message
       case record_message_reception(message_pk) do
         :first_reception ->
-          Logger.info("AckSender: First reception of message #{message_pk}, sending acknowledgment")
+          Logger.info("AckSender: First reception of message #{message_pk}")
 
           case parse_endpoint(originating_endpoint) do
             {:ok, api_url} ->
@@ -259,7 +254,7 @@ defmodule CorroPort.AckSender do
       "message_timestamp" => message_timestamp
     }
 
-    Logger.debug("AckSender: Sending POST to #{ack_url} with payload: #{inspect(payload)}")
+    Logger.info("AckSender: Sending POST to #{ack_url} with payload: #{inspect(payload)}")
 
     case Req.post(ack_url,
            json: payload,
