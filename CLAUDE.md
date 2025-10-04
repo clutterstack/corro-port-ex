@@ -109,6 +109,18 @@ curl http://localhost:4001/api/analytics/aggregation/status | jq
 curl http://localhost:4001/api/analytics/experiments/test_exp/summary | jq
 ```
 
+### Gossip Analytics
+```elixir
+# In IEx console - check message reception statistics
+CorroPort.AckSender.get_all_reception_stats()
+
+# Find messages received multiple times via gossip
+CorroPort.AckSender.get_duplicate_receptions(2)
+
+# Check stats for specific message
+CorroPort.AckSender.get_message_stats("message_pk_here")
+```
+
 ## Architecture Overview
 
 CorroPort is an Elixir Phoenix application that provides a web interface for monitoring and interacting with Corrosion database clusters. Corrosion is a SQLite-based distributed database.
@@ -144,7 +156,7 @@ The system runs as **two independent layers** that must both be running:
 **Legacy Modules (Being Refactored)**
 - `CorroPort.CorroSubscriber` - Message subscription and acknowledgment sending
 - `CorroPort.AckTracker` - Acknowledgment state management
-- `CorroPort.AckSender` - HTTP acknowledgment sender
+- `CorroPort.AckSender` - HTTP acknowledgment sender with gossip deduplication
 - `CorroPort.CLIMemberStore` - CLI member data caching
 
 **API Layer**
@@ -159,10 +171,50 @@ The system runs as **two independent layers** that must both be running:
 ### Data Flow
 
 1. **Node Discovery**: DNS queries discover expected cluster nodes
-2. **Membership Tracking**: CLI commands track active Corrosion members  
+2. **Membership Tracking**: CLI commands track active Corrosion members
 3. **System Monitoring**: API queries provide cluster state and message counts
 4. **Real-time Updates**: PubSub broadcasts state changes to LiveViews
 5. **Message Propagation**: Nodes send test messages and track acknowledgments
+
+### Gossip Deduplication and Reception Tracking
+
+**Problem**: In a gossip protocol, nodes receive the same message multiple times from different peers. Each reception would trigger a duplicate acknowledgment without deduplication.
+
+**Solution**: `AckSender` implements in-memory deduplication with reception tracking:
+
+**Features**:
+- **ETS Cache**: Tracks `{message_pk, reception_count, first_seen, last_seen}` for each received message
+- **Automatic Deduplication**: Only sends acknowledgment on first message reception
+- **Gossip Analytics**: Tracks how many times each message arrives via gossip (heatmap data)
+- **Automatic Cleanup**: Purges entries older than 24 hours every hour
+
+**Query API** (`lib/corro_port/ack_sender.ex`):
+```elixir
+# Get stats for specific message
+AckSender.get_message_stats(message_pk)
+
+# Get all reception data (for heatmap visualization)
+AckSender.get_all_reception_stats()
+
+# Find messages with high gossip redundancy
+AckSender.get_duplicate_receptions(min_count \\ 2)
+```
+
+**Data Structure**:
+```elixir
+%{
+  message_pk: "msg123",
+  reception_count: 5,        # Received 5 times via gossip
+  first_seen: ~U[2025-01-01 10:00:00Z],
+  last_seen: ~U[2025-01-01 10:00:15Z]
+}
+```
+
+**Behavior**:
+- First reception → Send acknowledgment, log "First reception"
+- Subsequent receptions → Skip acknowledgment, log "Duplicate reception #N (via gossip)"
+
+**Performance**: Fast ETS lookups with `:read_concurrency` for high-throughput scenarios
 
 ### Configuration
 

@@ -20,6 +20,9 @@ defmodule CorroPort.AckSender do
   require Logger
 
   @ack_timeout 5_000
+  @reception_cache_table :message_reception_cache
+  @cache_ttl_hours 24
+  @cleanup_interval_ms 3_600_000  # 1 hour
 
   def child_spec(opts) do
     %{
@@ -37,15 +40,55 @@ defmodule CorroPort.AckSender do
   def run(_opts) do
     Logger.info("AckSender starting...")
 
+    # Create ETS table for message reception tracking and deduplication
+    :ets.new(@reception_cache_table, [:set, :public, :named_table, read_concurrency: true])
+    Logger.info("AckSender: Created message reception cache table")
+
     # Subscribe to CorroSubscriber's message updates
     Phoenix.PubSub.subscribe(CorroPort.PubSub, "message_updates")
+
+    # Schedule periodic cleanup of old cache entries
+    schedule_cache_cleanup()
 
     message_loop()
   end
 
   # Public API for stats/debugging
+
   def get_status do
     %{status: :running}
+  end
+
+  @doc """
+  Get reception statistics for a specific message.
+  Returns nil if message hasn't been received.
+  """
+  def get_message_stats(message_pk) do
+    case :ets.lookup(@reception_cache_table, message_pk) do
+      [{^message_pk, stats}] -> stats
+      [] -> nil
+    end
+  end
+
+  @doc """
+  Get all message reception data for heatmap visualization.
+  Returns list of %{message_pk, reception_count, first_seen, last_seen}.
+  """
+  def get_all_reception_stats do
+    @reception_cache_table
+    |> :ets.tab2list()
+    |> Enum.map(fn {message_pk, stats} ->
+      Map.put(stats, :message_pk, message_pk)
+    end)
+    |> Enum.sort_by(& &1.last_seen, {:desc, DateTime})
+  end
+
+  @doc """
+  Get messages with high gossip redundancy (received multiple times).
+  """
+  def get_duplicate_receptions(min_count \\ 2) do
+    get_all_reception_stats()
+    |> Enum.filter(fn stats -> stats.reception_count >= min_count end)
   end
 
   # Private message handling loop
@@ -77,6 +120,11 @@ defmodule CorroPort.AckSender do
         message_loop()
 
       {:subscription_closed, _} ->
+        message_loop()
+
+      :cleanup_cache ->
+        cleanup_old_entries()
+        schedule_cache_cleanup()
         message_loop()
 
       msg ->
@@ -131,18 +179,29 @@ defmodule CorroPort.AckSender do
     message_timestamp = Map.get(message_map, "timestamp")
 
     if originating_endpoint && message_pk do
-      case parse_endpoint(originating_endpoint) do
-        {:ok, api_url} ->
-          send_http_acknowledgment(
-            api_url,
-            originating_endpoint,
-            message_pk,
-            message_timestamp,
-            local_node_id
-          )
+      # Check if this is the first time we're receiving this message
+      case record_message_reception(message_pk) do
+        :first_reception ->
+          Logger.info("AckSender: First reception of message #{message_pk}, sending acknowledgment")
 
-        {:error, reason} ->
-          Logger.warning("AckSender: Could not parse endpoint #{originating_endpoint}: #{reason}")
+          case parse_endpoint(originating_endpoint) do
+            {:ok, api_url} ->
+              send_http_acknowledgment(
+                api_url,
+                originating_endpoint,
+                message_pk,
+                message_timestamp,
+                local_node_id
+              )
+
+            {:error, reason} ->
+              Logger.warning("AckSender: Could not parse endpoint #{originating_endpoint}: #{reason}")
+          end
+
+        {:duplicate, reception_count} ->
+          Logger.info(
+            "AckSender: Duplicate reception ##{reception_count} of message #{message_pk} (via gossip), skipping acknowledgment"
+          )
       end
     else
       Logger.warning(
@@ -234,6 +293,60 @@ defmodule CorroPort.AckSender do
         Logger.warning(
           "AckSender: Acknowledgment failed to #{originating_endpoint}: #{inspect(reason)}"
         )
+    end
+  end
+
+  # Message reception tracking and deduplication
+
+  defp record_message_reception(message_pk) do
+    now = DateTime.utc_now()
+
+    case :ets.lookup(@reception_cache_table, message_pk) do
+      [] ->
+        # First time seeing this message
+        stats = %{
+          reception_count: 1,
+          first_seen: now,
+          last_seen: now
+        }
+
+        :ets.insert(@reception_cache_table, {message_pk, stats})
+        :first_reception
+
+      [{^message_pk, stats}] ->
+        # We've seen this message before - increment counter
+        updated_stats = %{
+          stats
+          | reception_count: stats.reception_count + 1,
+            last_seen: now
+        }
+
+        :ets.insert(@reception_cache_table, {message_pk, updated_stats})
+        {:duplicate, updated_stats.reception_count}
+    end
+  end
+
+  defp schedule_cache_cleanup do
+    Process.send_after(self(), :cleanup_cache, @cleanup_interval_ms)
+  end
+
+  defp cleanup_old_entries do
+    cutoff_time = DateTime.utc_now() |> DateTime.add(-@cache_ttl_hours, :hour)
+
+    deleted_count =
+      @reception_cache_table
+      |> :ets.tab2list()
+      |> Enum.reduce(0, fn {message_pk, stats}, count ->
+        if DateTime.compare(stats.last_seen, cutoff_time) == :lt do
+          :ets.delete(@reception_cache_table, message_pk)
+          count + 1
+        else
+          count
+        end
+      end)
+
+    if deleted_count > 0 do
+      Logger.info("AckSender: Cleaned up #{deleted_count} old message reception entries")
     end
   end
 end
