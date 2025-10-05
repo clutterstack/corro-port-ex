@@ -397,15 +397,53 @@ defmodule CorroPort.ConfigManager do
   end
 
   defp get_active_node_ids do
-    # Get active CLI members
+    # Get all node configs (has UUID -> node_id mapping)
+    node_configs = case get_all_node_configs() do
+      {:ok, configs} -> configs
+      {:error, _} -> []
+    end
+
+    # Build UUID -> node_id map
+    uuid_to_node_id = Map.new(node_configs, fn config ->
+      {config.corrosion_actor_id, config.node_id}
+    end)
+
+    Logger.debug("get_active_node_ids: Found #{map_size(uuid_to_node_id)} UUID mappings in node_configs")
+
+    # Get active CLI members (has UUIDs as "id" field)
     case CorroPort.CLIClusterData.get_members() do
-      %{members: {:ok, members}} when is_list(members) ->
-        Enum.map(members, fn member ->
-          # CLI members have actor_id like "dev-node1", "dev-node2", etc.
-          Map.get(member, "actor_id", "unknown")
+      %{members: members} when is_list(members) ->
+        Logger.debug("get_active_node_ids: Found #{length(members)} CLI members")
+
+        # Map CLI member UUIDs to node_ids
+        mapped_results = Enum.map(members, fn member ->
+          uuid = Map.get(member, "id", "unknown")
+          node_id = Map.get(uuid_to_node_id, uuid)
+          {uuid, node_id}
         end)
 
+        # Log unmapped UUIDs
+        unmapped = Enum.filter(mapped_results, fn {_uuid, node_id} -> is_nil(node_id) end)
+        if length(unmapped) > 0 do
+          Logger.warning("get_active_node_ids: #{length(unmapped)} CLI members not in node_configs: #{inspect(Enum.map(unmapped, fn {uuid, _} -> uuid end))}")
+          Logger.warning("These nodes need to run NodeIdentityReporter to register their identity")
+        end
+
+        # Extract non-nil node_ids
+        node_ids =
+          mapped_results
+          |> Enum.map(fn {_uuid, node_id} -> node_id end)
+          |> Enum.reject(&is_nil/1)
+
+        # Always include local node (CLI members only shows *other* nodes)
+        local_node_id = NodeConfig.get_corrosion_node_id()
+        all_node_ids = [local_node_id | node_ids] |> Enum.uniq()
+
+        Logger.info("get_active_node_ids: Resolved #{length(all_node_ids)} active node_ids (including local): #{inspect(all_node_ids)}")
+        all_node_ids
+
       _ ->
+        Logger.warning("get_active_node_ids: No CLI members found, using local node only")
         # Fallback: just use local node
         [NodeConfig.get_corrosion_node_id()]
     end

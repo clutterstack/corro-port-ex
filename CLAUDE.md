@@ -409,5 +409,11 @@ This distinction is critical since both modules handle similar data sources but 
 
 ## Development Guidelines
 
+
 - Use Tidewave tools if possible before resorting to unix tools
 - Use CorroClient.transaction to make changes to the Corrosion database and CorroClient.query to read from it.
+
+
+## Prod deployment
+
+Deployed on Fly.io. VMs are built from the Dockerfile in this project.
