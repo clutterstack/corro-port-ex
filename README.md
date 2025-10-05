@@ -17,7 +17,8 @@ CorroPort runs as **two independent layers**:
 
 1. Elixir and Phoenix
 2. Corrosion binary for your platform (place in `corrosion/corrosion-mac`)
-3. Config files for each node (pre-generated in `corrosion/config-node*.toml`)
+3. Canonical config files are included in `corrosion/configs/canonical/`
+   - Runtime configs are auto-generated at startup from canonical configs
 
 ### Quick Start - Recommended Workflow
 
@@ -144,3 +145,53 @@ rm analytics/analytics_node*.db*
 rm logs/corrosion-node*.log
 rm logs/node*.log
 ```
+
+## Configuration Management
+
+CorroPort uses a **canonical/runtime config split** for safe runtime editing with easy fallback:
+
+```
+corrosion/configs/
+├── canonical/      # Known-good baseline configs (committed to git)
+│   ├── node1.toml
+│   ├── node2.toml
+│   └── node3.toml
+└── runtime/        # Active configs (gitignored, auto-generated)
+    └── (copied from canonical at startup)
+```
+
+### How It Works
+
+1. **Startup**: Scripts copy `canonical/` → `runtime/`
+2. **Runtime Editing**: Edit bootstrap configs via NodeLive UI at `/node`
+   - Changes are written to runtime configs only
+   - Canonical configs remain unchanged as baseline
+3. **Fallback**: Restore known-good config when needed
+
+### Fallback to Known-Good Config
+
+**Option 1: Programmatic restore**
+```elixir
+# In IEx console
+CorroPort.ConfigManager.restore_canonical_config()
+CorroPort.ConfigManager.restart_corrosion()
+```
+
+**Option 2: Restart cluster (auto-restores)**
+```bash
+./scripts/cluster-stop.sh
+./scripts/overmind-start.sh 3  # Automatically copies canonical → runtime
+```
+
+**Option 3: Manual**
+```bash
+cp corrosion/configs/canonical/node1.toml corrosion/configs/runtime/node1.toml
+```
+
+### Testing the Fallback Mechanism
+
+```bash
+./scripts/test-config-fallback.sh
+```
+
+See [`docs/CONFIG_MANAGEMENT.md`](docs/CONFIG_MANAGEMENT.md) for complete documentation.

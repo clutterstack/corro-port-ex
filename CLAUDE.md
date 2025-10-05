@@ -297,6 +297,40 @@ See module docs for `CorroPort.ConfigManager` and `CorroPort.CorroSubscriber` fo
 - `NODE_ID` - Node identifier for multi-node setups
 - Configuration managed in `lib/corro_port/node_config.ex`
 
+**Corrosion Configuration Architecture**
+
+The project uses a canonical/runtime config split for safe runtime editing with easy fallback:
+
+```
+corrosion/configs/
+├── canonical/      # Known-good baseline configs (committed to git)
+│   ├── node1.toml
+│   ├── node2.toml
+│   └── node3.toml
+└── runtime/        # Active configs (gitignored, editable via NodeLive UI)
+    └── (auto-generated from canonical at startup)
+```
+
+**How It Works:**
+- Startup scripts copy `canonical/` → `runtime/`
+- Corrosion agents use runtime configs
+- ConfigManager edits runtime configs only (via NodeLive UI)
+- Canonical configs remain unchanged as baseline
+
+**Fallback to Known-Good Config:**
+```elixir
+# Option 1: Programmatic restore
+CorroPort.ConfigManager.restore_canonical_config()
+
+# Option 2: Restart cluster (auto-restores from canonical)
+./scripts/cluster-stop.sh
+./scripts/overmind-start.sh 3
+```
+
+**Documentation:**
+- `docs/CONFIG_MANAGEMENT.md` - Local config file management and fallback mechanisms
+- `docs/BOOTSTRAP.md` - Cluster-wide distributed configuration via node_configs table, including architecture, data flow, critical bugs fixed, and race condition details
+
 ### Testing Multi-Node Clusters
 
 The application is designed for multi-node cluster testing:
@@ -376,3 +410,4 @@ This distinction is critical since both modules handle similar data sources but 
 ## Development Guidelines
 
 - Use Tidewave tools if possible before resorting to unix tools
+- Use CorroClient.transaction to make changes to the Corrosion database and CorroClient.query to read from it.

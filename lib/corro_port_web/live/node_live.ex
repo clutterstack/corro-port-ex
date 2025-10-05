@@ -4,6 +4,7 @@ defmodule CorroPortWeb.NodeLive do
 
   alias CorroPort.{NodeConfig, ConnectionManager, ConfigManager}
   alias CorroPortWeb.NavTabs
+  alias CorroPortWeb.NodeLive.BootstrapConfigComponent
 
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -93,7 +94,7 @@ defmodule CorroPortWeb.NodeLive do
     {:noreply, assign(socket, :bootstrap_input, value)}
   end
 
-  def handle_event("update_cluster_config_input", %{"value" => value}, socket) do
+  def handle_event("update_cluster_config_input", %{"bootstrap_hosts" => value}, socket) do
     {:noreply, assign(socket, :cluster_config_input, value)}
   end
 
@@ -103,11 +104,18 @@ defmodule CorroPortWeb.NodeLive do
   end
 
   def handle_event("select_node", %{"node_id" => node_id}, socket) do
+    # Normalize empty string to nil
+    node_id = if node_id == "", do: nil, else: node_id
+
     # Load current config for selected node
     config_input =
-      case ConfigManager.get_node_config(node_id) do
-        {:ok, config} -> Enum.join(config.bootstrap_hosts, ", ")
-        {:error, _} -> ""
+      if node_id do
+        case ConfigManager.get_node_config(node_id) do
+          {:ok, config} -> Enum.join(config.bootstrap_hosts, ", ")
+          {:error, _} -> ""
+        end
+      else
+        ""
       end
 
     socket =
@@ -118,19 +126,21 @@ defmodule CorroPortWeb.NodeLive do
     {:noreply, socket}
   end
 
-  def handle_event("update_cluster_config", _params, socket) do
+  def handle_event("update_cluster_config", params, socket) do
     Logger.info("Updating cluster configuration...")
+
+    bootstrap_hosts = Map.get(params, "bootstrap_hosts", "")
 
     result =
       case socket.assigns.cluster_config_mode do
         :all ->
-          ConfigManager.set_all_node_configs(socket.assigns.cluster_config_input)
+          ConfigManager.set_all_node_configs(bootstrap_hosts)
 
         :single ->
           if socket.assigns.selected_node_id do
             ConfigManager.set_node_config(
               socket.assigns.selected_node_id,
-              socket.assigns.cluster_config_input
+              bootstrap_hosts
             )
           else
             {:error, "No node selected"}
@@ -304,24 +314,47 @@ defmodule CorroPortWeb.NodeLive do
         {:error, _} -> []
       end
 
-    # Get active nodes from CLI member store
-    active_nodes = get_active_nodes()
+    # Get active nodes with friendly labels
+    active_nodes = get_active_nodes_with_labels()
 
     socket
     |> assign(:cluster_configs, cluster_configs)
     |> assign(:active_nodes, active_nodes)
   end
 
-  defp get_active_nodes do
-    case CorroPort.CLIClusterData.get_members() do
-      %{members: {:ok, members}} when is_list(members) ->
-        Enum.map(members, fn member ->
-          Map.get(member, "actor_id", "unknown")
-        end)
-
-      _ ->
-        []
+  defp get_active_nodes_with_labels do
+    # Get CLI members (has UUIDs)
+    cli_members = case CorroPort.CLIClusterData.get_members() do
+      %{members: members} when is_list(members) -> members
+      _ -> []
     end
+
+    # Get node configs (has UUID -> node_id mapping)
+    node_configs = case ConfigManager.get_all_node_configs() do
+      {:ok, configs} -> configs
+      {:error, _} -> []
+    end
+
+    # Build UUID -> node_id map
+    uuid_to_node_id = Map.new(node_configs, fn config ->
+      {config.corrosion_actor_id, config.node_id}
+    end)
+
+    # Map CLI members to {node_id, label} tuples
+    Enum.map(cli_members, fn member ->
+      uuid = Map.get(member, "id", "unknown")
+      addr = Map.get(member, "display_addr", "")
+
+      # Try to find friendly node_id, fallback to UUID
+      case Map.get(uuid_to_node_id, uuid) do
+        nil ->
+          # Fallback: use UUID as node_id (won't match ConfigSubscriber, but at least visible)
+          %{node_id: uuid, label: addr}
+        node_id ->
+          # Best: use actual node_id that ConfigSubscriber expects
+          %{node_id: node_id, label: "#{node_id} (#{addr})"}
+      end
+    end)
   end
 
   defp get_node_info do
@@ -668,106 +701,13 @@ defmodule CorroPortWeb.NodeLive do
         </div>
       </div>
 
-    <!-- Bootstrap Configuration (Overmind Only) -->
-      <div class="card bg-base-100">
-        <div class="card-body">
-          <h3 class="card-title text-lg">
-            Bootstrap Configuration (Local Node)
-            <span :if={!@overmind_available} class="badge badge-warning badge-sm ml-2">
-              Overmind Required
-            </span>
-            <span :if={@overmind_available && !@is_production} class="badge badge-info badge-sm ml-2">
-              Development
-            </span>
-          </h3>
-
-          <div :if={!@overmind_available} class="alert alert-info">
-            <.icon name="hero-information-circle" class="w-5 h-5" />
-            <span>
-              This feature requires Overmind to manage the Corrosion process. Start the cluster with <code class="font-mono bg-base-300 px-1">./scripts/overmind-start.sh</code>
-            </span>
-          </div>
-
-          <div :if={@overmind_available} class="space-y-4">
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text">Current Bootstrap Hosts</span>
-              </label>
-              <div class="bg-base-200 p-3 rounded font-mono text-sm">
-                {if @bootstrap_hosts == "", do: "(empty)", else: @bootstrap_hosts}
-              </div>
-            </div>
-
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text">New Bootstrap Hosts (comma-separated)</span>
-                <span class="label-text-alt">Format: host1:port1, host2:port2</span>
-              </label>
-              <input
-                type="text"
-                name="value"
-                class="input input-bordered w-full font-mono text-sm"
-                value={@bootstrap_input}
-                phx-keyup="update_bootstrap_input"
-                placeholder="app.internal:8787, other.internal:8787"
-                disabled={@bootstrap_status == :restarting}
-              />
-            </div>
-
-            <div class="flex gap-2">
-              <button
-                class="btn btn-primary"
-                phx-click="update_bootstrap"
-                disabled={@bootstrap_status == :restarting}
-              >
-                <.icon
-                  :if={@bootstrap_status == :restarting}
-                  name="hero-arrow-path"
-                  class="w-4 h-4 mr-2 animate-spin"
-                />
-                <.icon :if={@bootstrap_status != :restarting} name="hero-cog-6-tooth" class="w-4 h-4 mr-2" />
-                {if @bootstrap_status == :restarting, do: "Restarting Corrosion...", else: "Update & Restart Corrosion"}
-              </button>
-
-              <button
-                :if={@bootstrap_status in [:error, :timeout]}
-                class="btn btn-warning"
-                phx-click="rollback_bootstrap"
-              >
-                <.icon name="hero-arrow-uturn-left" class="w-4 h-4 mr-2" />
-                Rollback to Backup
-              </button>
-            </div>
-
-            <div :if={@bootstrap_status == :restarting} class="alert alert-info">
-              <.icon name="hero-arrow-path" class="w-5 h-5 animate-spin" />
-              <span>Corrosion is restarting. This may take a few seconds...</span>
-            </div>
-
-            <div :if={@bootstrap_status == :ready} class="alert alert-success">
-              <.icon name="hero-check-circle" class="w-5 h-5" />
-              <span>Corrosion has restarted successfully!</span>
-            </div>
-
-            <div :if={@bootstrap_status == :timeout} class="alert alert-error">
-              <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-              <span>
-                Corrosion restart timed out. The process may still be starting. Check logs or use the rollback button.
-              </span>
-            </div>
-
-            <div class="text-xs text-base-content/70">
-              <strong>Note:</strong>
-              Updating bootstrap will regenerate the Corrosion config file and restart the Corrosion agent via Overmind. The Phoenix application will remain running.
-              <span :if={!@is_production}>
-                <br />
-                <strong>Development:</strong>
-                Config file: <code class="font-mono bg-base-300 px-1">{NodeConfig.get_config_path()}</code>
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+    <BootstrapConfigComponent.bootstrap_config
+        bootstrap_hosts={@bootstrap_hosts}
+        bootstrap_input={@bootstrap_input}
+        bootstrap_status={@bootstrap_status}
+        overmind_available={@overmind_available}
+        is_production={@is_production}
+      />
 
     <!-- Cluster-wide Configuration Management -->
       <div class="card bg-base-100">
@@ -816,58 +756,61 @@ defmodule CorroPortWeb.NodeLive do
             </button>
           </div>
 
-          <!-- Single Node Mode: Node Selector -->
-          <div :if={@cluster_config_mode == :single} class="form-control mb-4">
-            <label class="label">
-              <span class="label-text">Select Target Node</span>
-            </label>
-            <select
-              class="select select-bordered w-full"
-              phx-change="select_node"
-              name="node_id"
-            >
-              <option value="" disabled={@selected_node_id != nil} selected={@selected_node_id == nil}>
-                Choose a node...
-              </option>
-              <option
-                :for={node_id <- @active_nodes}
-                value={node_id}
-                selected={@selected_node_id == node_id}
+          <!-- Configuration Form -->
+          <form phx-submit="update_cluster_config">
+            <!-- Single Node Mode: Node Selector -->
+            <div :if={@cluster_config_mode == :single} class="form-control mb-4">
+              <label class="label">
+                <span class="label-text">Select Target Node</span>
+              </label>
+              <select
+                class="select select-bordered w-full"
+                phx-change="select_node"
+                name="node_id"
               >
-                {node_id}
-              </option>
-            </select>
-          </div>
+                <option value="" selected={@selected_node_id == nil}>
+                  Choose a node...
+                </option>
+                <option
+                  :for={node <- @active_nodes}
+                  value={node.node_id}
+                  selected={@selected_node_id == node.node_id}
+                >
+                  {node.label}
+                </option>
+              </select>
+            </div>
 
-          <!-- Bootstrap Hosts Input -->
-          <div class="form-control mb-4">
-            <label class="label">
-              <span class="label-text">
-                {if @cluster_config_mode == :all, do: "Bootstrap Hosts for All Nodes", else: "Bootstrap Hosts"}
-              </span>
-              <span class="label-text-alt">Format: host1:port1, host2:port2</span>
-            </label>
-            <input
-              type="text"
-              class="input input-bordered w-full font-mono text-sm"
-              value={@cluster_config_input}
-              phx-keyup="update_cluster_config_input"
-              name="value"
-              placeholder="127.0.0.1:8787, 127.0.0.1:8788"
-            />
-          </div>
+            <!-- Bootstrap Hosts Input -->
+            <div class="form-control mb-4">
+              <label class="label">
+                <span class="label-text">
+                  {if @cluster_config_mode == :all, do: "Bootstrap Hosts for All Nodes", else: "Bootstrap Hosts"}
+                </span>
+                <span class="label-text-alt">Format: host1:port1, host2:port2</span>
+              </label>
+              <input
+                type="text"
+                class="input input-bordered w-full font-mono text-sm"
+                value={@cluster_config_input}
+                name="bootstrap_hosts"
+                placeholder="127.0.0.1:8787, 127.0.0.1:8788"
+                phx-change="update_cluster_config_input"
+              />
+            </div>
 
-          <!-- Update Button -->
-          <button
-            class="btn btn-primary"
-            phx-click="update_cluster_config"
-            disabled={@cluster_config_mode == :single && @selected_node_id == nil}
-          >
-            <.icon name="hero-cog-6-tooth" class="w-4 h-4 mr-2" />
-            {if @cluster_config_mode == :all,
-              do: "Update All Nodes",
-              else: "Update #{@selected_node_id || "Selected Node"}"}
-          </button>
+            <!-- Update Button -->
+            <button
+              type="submit"
+              class="btn btn-primary"
+              disabled={@cluster_config_mode == :single && @selected_node_id == nil}
+            >
+              <.icon name="hero-cog-6-tooth" class="w-4 h-4 mr-2" />
+              {if @cluster_config_mode == :all,
+                do: "Update All Nodes",
+                else: "Update Selected Node"}
+            </button>
+          </form>
 
           <!-- Current Cluster Configs Table -->
           <div :if={length(@cluster_configs) > 0} class="mt-6">

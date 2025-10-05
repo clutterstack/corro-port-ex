@@ -29,7 +29,8 @@ if [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
     echo "Stop all cluster nodes"
     echo ""
     echo "This script stops all overmind daemons and Phoenix processes."
-    echo "It finds .overmind-node*.sock files and .phoenix-node*.pid files."
+    echo "Overmind processes are found by Procfile pattern (not socket files)."
+    echo "Phoenix processes are found by .phoenix-node*.pid files."
     echo ""
     exit 0
 fi
@@ -40,22 +41,39 @@ echo ""
 STOPPED_COUNT=0
 
 # Stop all overmind daemons
+# Note: Socket files may not exist for background nodes, so we find overmind by Procfile pattern
 if [ -n "$OVERMIND_BIN" ] && [ -f "$OVERMIND_BIN" ]; then
-    for socket_file in .overmind-node*.sock; do
-        if [ -e "$socket_file" ]; then
-            # Extract node number
-            if [[ "$socket_file" =~ overmind-node([0-9]+) ]]; then
-                NODE_NUM="${BASH_REMATCH[1]}"
-            else
-                continue
-            fi
+    # Find all overmind processes with Procfile.node*-corrosion pattern
+    OVERMIND_PIDS=$(pgrep -f "overmind.*Procfile\.node[0-9]+-corrosion" || true)
 
-            echo "  Stopping overmind for node $NODE_NUM..."
-            OVERMIND_SOCKET="$socket_file" "$OVERMIND_BIN" quit 2>/dev/null || true
-            STOPPED_COUNT=$((STOPPED_COUNT + 1))
-            rm -f "$socket_file"
-        fi
-    done
+    if [ -n "$OVERMIND_PIDS" ]; then
+        echo "Found overmind processes to stop..."
+
+        for pid in $OVERMIND_PIDS; do
+            # Extract node number from command line
+            CMD=$(ps -p "$pid" -o command= 2>/dev/null || true)
+
+            if [[ "$CMD" =~ Procfile\.node([0-9]+)-corrosion ]]; then
+                NODE_NUM="${BASH_REMATCH[1]}"
+                SOCKET_PATH=".overmind-node${NODE_NUM}.sock"
+
+                echo "  Stopping overmind for node $NODE_NUM (PID: $pid)..."
+
+                # Try graceful shutdown via socket first
+                if [ -e "$SOCKET_PATH" ]; then
+                    OVERMIND_SOCKET="$SOCKET_PATH" "$OVERMIND_BIN" quit 2>/dev/null || true
+                else
+                    # Socket doesn't exist, send SIGTERM directly
+                    kill "$pid" 2>/dev/null || true
+                fi
+
+                STOPPED_COUNT=$((STOPPED_COUNT + 1))
+
+                # Clean up socket if it exists
+                rm -f "$SOCKET_PATH"
+            fi
+        done
+    fi
 fi
 
 # Stop Phoenix processes

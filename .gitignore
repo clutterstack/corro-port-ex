@@ -85,6 +85,12 @@ corrosion/*
 !corrosion/schemas/
 !corrosion/schemas/**
 !corrosion/wrapper.sh
+!corrosion/configs/
+!corrosion/configs/canonical/
+!corrosion/configs/canonical/**
+!corrosion/configs/README.md
+# Ignore runtime configs (these are regenerated from canonical)
+corrosion/configs/runtime/
 
 # Local Mac Overmind
 *-macos-arm64

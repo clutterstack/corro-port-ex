@@ -54,7 +54,17 @@ defmodule CorroPort.ConfigSubscriber do
     local_node_id = NodeConfig.get_corrosion_node_id()
     Logger.info("ConfigSubscriber: Starting for node #{local_node_id}")
 
-    {:ok, %__MODULE__{status: :initialising, local_node_id: local_node_id},
+    # Load current config to avoid restarting on initial subscription data
+    last_config = case ConfigManager.get_node_config(local_node_id) do
+      {:ok, config} ->
+        Logger.debug("ConfigSubscriber: Loaded existing config: #{inspect(config.bootstrap_hosts)}")
+        config
+      {:error, _} ->
+        Logger.debug("ConfigSubscriber: No existing config found")
+        nil
+    end
+
+    {:ok, %__MODULE__{status: :initialising, local_node_id: local_node_id, last_config: last_config},
      {:continue, :start_subscription}}
   end
 
@@ -215,7 +225,11 @@ defmodule CorroPort.ConfigSubscriber do
     {:error, :missing_required_fields}
   end
 
-  defp config_changed?(nil, _new_config), do: true
+  # On first config (nil), only restart if bootstrap_hosts is non-empty
+  # This prevents restarting when NodeIdentityReporter sets actor_id on empty config
+  defp config_changed?(nil, new_config) do
+    new_config.bootstrap_hosts != []
+  end
 
   defp config_changed?(last_config, new_config) do
     last_config.bootstrap_hosts != new_config.bootstrap_hosts

@@ -1,5 +1,6 @@
 # Procfile for Node 3 - Corrosion only
 # Phoenix runs separately
 # Ports: Corrosion API=8083, Gossip=8789
+# Using runtime config (editable via NodeLive)
 
-corrosion: ./corrosion/corrosion-mac agent --config ./corrosion/config-node3.toml
+corrosion: ./corrosion/corrosion-mac agent --config ./corrosion/configs/runtime/node3.toml

@@ -1,0 +1,17 @@
+# Canonical development config for node 3
+# This is the known-good baseline config
+# Runtime edits are made to corrosion/configs/runtime/node3.toml
+[db]
+path = "corrosion/dev-node3.db"
+schema_paths = ["corrosion/schemas"]
+
+[gossip]
+addr = "127.0.0.1:8789"
+bootstrap = ["127.0.0.1:8787", "127.0.0.1:8788"]
+plaintext = true
+
+[api]
+addr = "127.0.0.1:8083"
+
+[admin]
+path = "/tmp/corrosion/node3_admin.sock"

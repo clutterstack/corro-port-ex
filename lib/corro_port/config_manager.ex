@@ -2,8 +2,16 @@ defmodule CorroPort.ConfigManager do
   @moduledoc """
   Manages Corrosion configuration file updates and process restarts.
 
-  Production-only module for dynamically updating corrosion.toml and
-  restarting the Corrosion agent via Overmind.
+  ## Configuration Architecture
+
+  In development, uses a canonical/runtime config split:
+  - **Canonical configs**: Known-good baseline configs in `corrosion/configs/canonical/`
+  - **Runtime configs**: Active configs in `corrosion/configs/runtime/` (editable via UI)
+  - Startup scripts copy canonical → runtime
+  - This module edits only runtime configs
+  - Fallback: Delete runtime config and restart to restore canonical baseline
+
+  In production, dynamically generates configs based on environment variables.
 
   ## Coordinated Restart Mechanism
 
@@ -171,6 +179,60 @@ defmodule CorroPort.ConfigManager do
   end
 
   @doc """
+  Restores the canonical configuration file (development only).
+
+  In development, copies the canonical config to runtime config, replacing any edits.
+  This provides a quick way to return to the known-good baseline configuration.
+
+  Returns {:ok, message} or {:error, reason}.
+  """
+  def restore_canonical_config do
+    if NodeConfig.production?() do
+      {:error, "Canonical config restore is only available in development"}
+    else
+      runtime_config = NodeConfig.get_config_path()
+      canonical_config = get_canonical_config_path()
+
+      cond do
+        !File.exists?(canonical_config) ->
+          {:error, "No canonical config found at #{canonical_config}"}
+
+        true ->
+          case File.cp(canonical_config, runtime_config) do
+            :ok ->
+              Logger.info("Runtime config restored from canonical: #{canonical_config}")
+              {:ok, "Configuration restored from canonical baseline"}
+
+            {:error, reason} ->
+              {:error, "Failed to restore canonical config: #{inspect(reason)}"}
+          end
+      end
+    end
+  end
+
+  @doc """
+  Gets the path to the canonical config file for the current node (development only).
+  """
+  def get_canonical_config_path do
+    if NodeConfig.production?() do
+      nil
+    else
+      node_config = NodeConfig.app_node_config()
+      node_id_raw = node_config[:node_id] || "1"
+
+      # Extract numeric node ID from "dev-node1" -> "1"
+      node_id =
+        case Regex.run(~r/node(\d+)/, node_id_raw) do
+          [_, num] -> num
+          _ -> node_id_raw
+        end
+
+      project_root = File.cwd!()
+      Path.join([project_root, "corrosion", "configs", "canonical", "node#{node_id}.toml"])
+    end
+  end
+
+  @doc """
   Waits for Corrosion to become responsive after restart.
   Polls the API for up to max_attempts with delay_ms between attempts.
   """
@@ -208,7 +270,6 @@ defmodule CorroPort.ConfigManager do
   """
   def get_node_config(node_id) do
     conn = ConnectionManager.get_connection()
-
     query = "SELECT * FROM node_configs WHERE node_id = ? LIMIT 1"
 
     case CorroClient.query(conn, query, [node_id]) do
@@ -242,13 +303,13 @@ defmodule CorroPort.ConfigManager do
       # Convert to JSON array
       hosts_json = Jason.encode!(parsed_hosts)
 
-      # Use UPSERT (INSERT OR REPLACE)
+      # Use transaction for write operations with parameterized query
       query = """
       INSERT OR REPLACE INTO node_configs (node_id, bootstrap_hosts, updated_at, updated_by)
       VALUES (?, ?, ?, ?)
       """
 
-      case CorroClient.query(conn, query, [node_id, hosts_json, timestamp, local_node_id]) do
+      case CorroClient.transaction(conn, [{query, [node_id, hosts_json, timestamp, local_node_id]}]) do
         {:ok, _} ->
           Logger.info("Updated node_configs for #{node_id}: #{hosts_json}")
           {:ok, "Config updated for #{node_id}"}
@@ -277,20 +338,32 @@ defmodule CorroPort.ConfigManager do
       else
         Logger.info("Updating configs for #{length(active_nodes)} active nodes: #{inspect(active_nodes)}")
 
-        results =
+        # Write ALL configs in a single transaction to avoid race condition
+        # where ConfigSubscriber restarts Corrosion mid-write
+        conn = ConnectionManager.get_connection()
+        local_node_id = NodeConfig.get_corrosion_node_id()
+        timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
+        hosts_json = Jason.encode!(parsed_hosts)
+
+        query = """
+        INSERT OR REPLACE INTO node_configs (node_id, bootstrap_hosts, updated_at, updated_by)
+        VALUES (?, ?, ?, ?)
+        """
+
+        # Build list of parameterized queries for transaction
+        queries =
           Enum.map(active_nodes, fn node_id ->
-            case set_node_config(node_id, parsed_hosts) do
-              {:ok, _} -> {:ok, node_id}
-              {:error, reason} -> {:error, {node_id, reason}}
-            end
+            {query, [node_id, hosts_json, timestamp, local_node_id]}
           end)
 
-        errors = Enum.filter(results, &match?({:error, _}, &1))
+        case CorroClient.transaction(conn, queries) do
+          {:ok, _} ->
+            Logger.info("Updated configs for #{length(active_nodes)} nodes in single transaction")
+            {:ok, "Updated configs for #{length(active_nodes)} nodes"}
 
-        if Enum.empty?(errors) do
-          {:ok, "Updated configs for #{length(active_nodes)} nodes"}
-        else
-          {:error, "Some updates failed: #{inspect(errors)}"}
+          {:error, reason} ->
+            Logger.error("Failed to update configs in transaction: #{inspect(reason)}")
+            {:error, reason}
         end
       end
     end
@@ -315,6 +388,7 @@ defmodule CorroPort.ConfigManager do
 
     %{
       node_id: node_id,
+      corrosion_actor_id: Map.get(row, "corrosion_actor_id"),
       bootstrap_hosts: bootstrap_hosts,
       bootstrap_hosts_display: Enum.join(bootstrap_hosts, ", "),
       updated_at: updated_at,
@@ -339,15 +413,42 @@ defmodule CorroPort.ConfigManager do
 
   @doc """
   Checks if this node is running under overmind.
-  Returns true if overmind socket file exists (local) or running in production.
+  Returns true if overmind process is running for this node or running in production.
+
+  In development, checks both:
+  1. Socket file existence (reliable for node 1)
+  2. Running overmind process with matching Procfile (fallback for background nodes)
   """
   def running_under_overmind? do
     if NodeConfig.production?() do
       true
     else
-      # Check if local overmind socket exists
+      # Check if local overmind socket exists OR overmind process is running
       socket_path = get_overmind_socket_path()
-      File.exists?(socket_path)
+      File.exists?(socket_path) or overmind_process_running?()
+    end
+  end
+
+  defp overmind_process_running? do
+    # Get the expected Procfile name for this node
+    node_id = NodeConfig.app_node_config()[:node_id] || "1"
+
+    numeric_id =
+      case Regex.run(~r/node(\d+)/, node_id) do
+        [_, num] -> num
+        _ -> node_id
+      end
+
+    procfile_name = "Procfile.node#{numeric_id}-corrosion"
+
+    # Check if overmind is running with this Procfile
+    case System.cmd("pgrep", ["-f", "overmind.*#{procfile_name}"], stderr_to_stdout: true) do
+      {output, 0} when output != "" ->
+        Logger.debug("Found overmind process for #{procfile_name}")
+        true
+
+      _ ->
+        false
     end
   end
 
@@ -371,8 +472,8 @@ defmodule CorroPort.ConfigManager do
 
   defp get_overmind_socket_path do
     if NodeConfig.production?() do
-      # Production doesn't use explicit socket path
-      nil
+      # Production: overmind uses default .overmind.sock in working directory
+      "/app/.overmind.sock"
     else
       # Local development: .overmind-node1.sock, .overmind-node2.sock, etc.
       # Extract numeric node ID from "dev-node1" -> "1"

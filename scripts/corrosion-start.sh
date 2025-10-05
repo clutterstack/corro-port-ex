@@ -83,21 +83,42 @@ fi
 echo "Starting $NUM_AGENTS corrosion agent(s)..."
 echo ""
 
-# Create logs directory if it doesn't exist
+# Create config directories
+mkdir -p corrosion/configs/canonical
+mkdir -p corrosion/configs/runtime
 mkdir -p logs
+
+# Prepare runtime configs from canonical configs
+echo "Preparing runtime configuration files..."
+for i in $(seq 1 $NUM_AGENTS); do
+    CANONICAL_CONFIG="corrosion/configs/canonical/node$i.toml"
+    RUNTIME_CONFIG="corrosion/configs/runtime/node$i.toml"
+
+    if [ -f "$CANONICAL_CONFIG" ]; then
+        # Copy canonical to runtime if canonical exists
+        cp "$CANONICAL_CONFIG" "$RUNTIME_CONFIG"
+        if [ "$VERBOSE" = true ]; then
+            echo "  Copied canonical config for node $i"
+        fi
+    elif [ ! -f "$RUNTIME_CONFIG" ]; then
+        # No canonical and no runtime = error
+        echo "Error: No config found for node $i"
+        echo "  Expected canonical: $CANONICAL_CONFIG"
+        echo "  Expected runtime:   $RUNTIME_CONFIG"
+        echo ""
+        echo "Hint: Run ./scripts/overmind-start.sh to generate configs, or"
+        echo "      create canonical configs in corrosion/configs/canonical/"
+        exit 1
+    fi
+done
 
 # Check for already running agents
 RUNNING_COUNT=0
 for i in $(seq 1 $NUM_AGENTS); do
-    CONFIG_FILE="corrosion/config-node$i.toml"
-
-    if [ ! -f "$CONFIG_FILE" ]; then
-        echo "Error: Config file not found: $CONFIG_FILE"
-        exit 1
-    fi
+    RUNTIME_CONFIG="corrosion/configs/runtime/node$i.toml"
 
     # Check if already running
-    if pgrep -f "corrosion.*config-node$i.toml" > /dev/null; then
+    if pgrep -f "corrosion.*runtime/node$i.toml" > /dev/null; then
         echo "Agent $i: Already running (skipping)"
         RUNNING_COUNT=$((RUNNING_COUNT + 1))
     fi
@@ -106,21 +127,21 @@ done
 # Start agents that aren't running
 STARTED_COUNT=0
 for i in $(seq 1 $NUM_AGENTS); do
-    CONFIG_FILE="corrosion/config-node$i.toml"
+    RUNTIME_CONFIG="corrosion/configs/runtime/node$i.toml"
     LOG_FILE="logs/corrosion-node$i.log"
 
     # Skip if already running
-    if pgrep -f "corrosion.*config-node$i.toml" > /dev/null; then
+    if pgrep -f "corrosion.*runtime/node$i.toml" > /dev/null; then
         continue
     fi
 
     echo "Agent $i: Starting..."
 
     if [ "$VERBOSE" = true ]; then
-        $BINARY agent --config "$CONFIG_FILE" > "$LOG_FILE" 2>&1 &
+        $BINARY agent --config "$RUNTIME_CONFIG" > "$LOG_FILE" 2>&1 &
         echo "         Log: $LOG_FILE"
     else
-        $BINARY agent --config "$CONFIG_FILE" > "$LOG_FILE" 2>&1 &
+        $BINARY agent --config "$RUNTIME_CONFIG" > "$LOG_FILE" 2>&1 &
     fi
 
     PID=$!
