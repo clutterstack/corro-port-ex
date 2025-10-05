@@ -34,12 +34,18 @@ defmodule CorroPortWeb.NodeLive do
         error: nil,
         loading: true,
         last_updated: nil,
-        # Bootstrap configuration
+        # Bootstrap configuration (local node)
         bootstrap_hosts: bootstrap_hosts,
         bootstrap_input: bootstrap_hosts,
         bootstrap_status: nil,
         overmind_available: overmind_available,
-        is_production: NodeConfig.production?()
+        is_production: NodeConfig.production?(),
+        # Cluster-wide configuration
+        cluster_config_mode: :single,  # :single or :all
+        cluster_configs: [],
+        cluster_config_input: bootstrap_hosts,
+        selected_node_id: nil,
+        active_nodes: []
       })
 
     {:ok, fetch_node_data(socket)}
@@ -85,6 +91,68 @@ defmodule CorroPortWeb.NodeLive do
 
   def handle_event("update_bootstrap_input", %{"value" => value}, socket) do
     {:noreply, assign(socket, :bootstrap_input, value)}
+  end
+
+  def handle_event("update_cluster_config_input", %{"value" => value}, socket) do
+    {:noreply, assign(socket, :cluster_config_input, value)}
+  end
+
+  def handle_event("set_cluster_mode", %{"mode" => mode}, socket) do
+    mode_atom = String.to_existing_atom(mode)
+    {:noreply, assign(socket, :cluster_config_mode, mode_atom)}
+  end
+
+  def handle_event("select_node", %{"node_id" => node_id}, socket) do
+    # Load current config for selected node
+    config_input =
+      case ConfigManager.get_node_config(node_id) do
+        {:ok, config} -> Enum.join(config.bootstrap_hosts, ", ")
+        {:error, _} -> ""
+      end
+
+    socket =
+      socket
+      |> assign(:selected_node_id, node_id)
+      |> assign(:cluster_config_input, config_input)
+
+    {:noreply, socket}
+  end
+
+  def handle_event("update_cluster_config", _params, socket) do
+    Logger.info("Updating cluster configuration...")
+
+    result =
+      case socket.assigns.cluster_config_mode do
+        :all ->
+          ConfigManager.set_all_node_configs(socket.assigns.cluster_config_input)
+
+        :single ->
+          if socket.assigns.selected_node_id do
+            ConfigManager.set_node_config(
+              socket.assigns.selected_node_id,
+              socket.assigns.cluster_config_input
+            )
+          else
+            {:error, "No node selected"}
+          end
+      end
+
+    socket =
+      case result do
+        {:ok, message} ->
+          socket
+          |> put_flash(:info, message)
+          |> fetch_cluster_configs()
+
+        {:error, reason} ->
+          put_flash(socket, :error, "Failed to update config: #{inspect(reason)}")
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_event("refresh_cluster_configs", _params, socket) do
+    {:noreply, fetch_cluster_configs(socket)}
   end
 
   def handle_event("update_bootstrap", _params, socket) do
@@ -225,6 +293,35 @@ defmodule CorroPortWeb.NodeLive do
       last_updated: DateTime.utc_now(),
       error: nil
     })
+    |> fetch_cluster_configs()
+  end
+
+  defp fetch_cluster_configs(socket) do
+    # Get all node configs from node_configs table
+    cluster_configs =
+      case ConfigManager.get_all_node_configs() do
+        {:ok, configs} -> configs
+        {:error, _} -> []
+      end
+
+    # Get active nodes from CLI member store
+    active_nodes = get_active_nodes()
+
+    socket
+    |> assign(:cluster_configs, cluster_configs)
+    |> assign(:active_nodes, active_nodes)
+  end
+
+  defp get_active_nodes do
+    case CorroPort.CLIClusterData.get_members() do
+      %{members: {:ok, members}} when is_list(members) ->
+        Enum.map(members, fn member ->
+          Map.get(member, "actor_id", "unknown")
+        end)
+
+      _ ->
+        []
+    end
   end
 
   defp get_node_info do
@@ -575,7 +672,7 @@ defmodule CorroPortWeb.NodeLive do
       <div class="card bg-base-100">
         <div class="card-body">
           <h3 class="card-title text-lg">
-            Bootstrap Configuration
+            Bootstrap Configuration (Local Node)
             <span :if={!@overmind_available} class="badge badge-warning badge-sm ml-2">
               Overmind Required
             </span>
@@ -668,6 +765,138 @@ defmodule CorroPortWeb.NodeLive do
                 Config file: <code class="font-mono bg-base-300 px-1">{NodeConfig.get_config_path()}</code>
               </span>
             </div>
+          </div>
+        </div>
+      </div>
+
+    <!-- Cluster-wide Configuration Management -->
+      <div class="card bg-base-100">
+        <div class="card-body">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="card-title text-lg">
+              Cluster-wide Configuration
+              <span class="badge badge-primary badge-sm ml-2">
+                Distributed via Corrosion
+              </span>
+            </h3>
+            <button class="btn btn-sm btn-ghost" phx-click="refresh_cluster_configs">
+              <.icon name="hero-arrow-path" class="w-4 h-4" />
+            </button>
+          </div>
+
+          <div class="alert alert-info mb-4">
+            <.icon name="hero-information-circle" class="w-5 h-5" />
+            <div class="text-sm">
+              <p>Changes are stored in the <code class="font-mono bg-base-300 px-1">node_configs</code> Corrosion table and gossiped to all nodes.</p>
+              <p>Each node's ConfigSubscriber automatically applies changes and restarts Corrosion.</p>
+            </div>
+          </div>
+
+          <!-- Mode Selection -->
+          <div class="flex gap-2 mb-4">
+            <button
+              class={[
+                "btn",
+                if(@cluster_config_mode == :all, do: "btn-primary", else: "btn-outline")
+              ]}
+              phx-click="set_cluster_mode"
+              phx-value-mode="all"
+            >
+              Update All Nodes
+            </button>
+            <button
+              class={[
+                "btn",
+                if(@cluster_config_mode == :single, do: "btn-primary", else: "btn-outline")
+              ]}
+              phx-click="set_cluster_mode"
+              phx-value-mode="single"
+            >
+              Update Single Node
+            </button>
+          </div>
+
+          <!-- Single Node Mode: Node Selector -->
+          <div :if={@cluster_config_mode == :single} class="form-control mb-4">
+            <label class="label">
+              <span class="label-text">Select Target Node</span>
+            </label>
+            <select
+              class="select select-bordered w-full"
+              phx-change="select_node"
+              name="node_id"
+            >
+              <option value="" disabled={@selected_node_id != nil} selected={@selected_node_id == nil}>
+                Choose a node...
+              </option>
+              <option
+                :for={node_id <- @active_nodes}
+                value={node_id}
+                selected={@selected_node_id == node_id}
+              >
+                {node_id}
+              </option>
+            </select>
+          </div>
+
+          <!-- Bootstrap Hosts Input -->
+          <div class="form-control mb-4">
+            <label class="label">
+              <span class="label-text">
+                {if @cluster_config_mode == :all, do: "Bootstrap Hosts for All Nodes", else: "Bootstrap Hosts"}
+              </span>
+              <span class="label-text-alt">Format: host1:port1, host2:port2</span>
+            </label>
+            <input
+              type="text"
+              class="input input-bordered w-full font-mono text-sm"
+              value={@cluster_config_input}
+              phx-keyup="update_cluster_config_input"
+              name="value"
+              placeholder="127.0.0.1:8787, 127.0.0.1:8788"
+            />
+          </div>
+
+          <!-- Update Button -->
+          <button
+            class="btn btn-primary"
+            phx-click="update_cluster_config"
+            disabled={@cluster_config_mode == :single && @selected_node_id == nil}
+          >
+            <.icon name="hero-cog-6-tooth" class="w-4 h-4 mr-2" />
+            {if @cluster_config_mode == :all,
+              do: "Update All Nodes",
+              else: "Update #{@selected_node_id || "Selected Node"}"}
+          </button>
+
+          <!-- Current Cluster Configs Table -->
+          <div :if={length(@cluster_configs) > 0} class="mt-6">
+            <h4 class="font-semibold mb-2">Current Node Configurations</h4>
+            <div class="overflow-x-auto">
+              <table class="table table-zebra table-sm">
+                <thead>
+                  <tr>
+                    <th>Node ID</th>
+                    <th>Bootstrap Hosts</th>
+                    <th>Last Updated</th>
+                    <th>Updated By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr :for={config <- @cluster_configs}>
+                    <td class="font-mono text-xs">{config.node_id}</td>
+                    <td class="font-mono text-xs">{config.bootstrap_hosts_display}</td>
+                    <td class="text-xs">{config.updated_at}</td>
+                    <td class="font-mono text-xs">{config.updated_by}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div :if={length(@cluster_configs) == 0} class="alert alert-warning mt-4">
+            <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+            <span>No cluster configs found in node_configs table. Use the form above to create initial configs.</span>
           </div>
         </div>
       </div>

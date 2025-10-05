@@ -17,6 +17,7 @@ defmodule CorroPort.Application do
 
       # Core data services (legacy - kept for compatibility)
       CorroPort.CorroSubscriber,
+      CorroPort.ConfigSubscriber,
       CorroPort.AckTracker,
       CorroPort.AckSender,
       CorroPort.CLIClusterData,

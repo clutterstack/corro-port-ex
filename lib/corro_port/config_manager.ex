@@ -178,7 +178,164 @@ defmodule CorroPort.ConfigManager do
     wait_for_corrosion_recursive(max_attempts, delay_ms, 1)
   end
 
+  # Cluster-wide config management functions
+
+  @doc """
+  Gets all node configs from the node_configs table.
+  Returns {:ok, configs} or {:error, reason}.
+  """
+  def get_all_node_configs do
+    conn = ConnectionManager.get_connection()
+
+    case CorroClient.query(conn, "SELECT * FROM node_configs ORDER BY node_id") do
+      {:ok, rows} ->
+        configs =
+          Enum.map(rows, fn row ->
+            parse_node_config_row(row)
+          end)
+
+        {:ok, configs}
+
+      {:error, reason} ->
+        Logger.error("Failed to query node_configs: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Gets the bootstrap config for a specific node from node_configs table.
+  Returns {:ok, config} or {:error, reason}.
+  """
+  def get_node_config(node_id) do
+    conn = ConnectionManager.get_connection()
+
+    query = "SELECT * FROM node_configs WHERE node_id = ? LIMIT 1"
+
+    case CorroClient.query(conn, query, [node_id]) do
+      {:ok, [row]} ->
+        {:ok, parse_node_config_row(row)}
+
+      {:ok, []} ->
+        {:error, :not_found}
+
+      {:error, reason} ->
+        Logger.error("Failed to query node_config for #{node_id}: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Updates the bootstrap config for a specific node in the node_configs table.
+  The change will be gossiped to all nodes, and the target node's ConfigSubscriber
+  will apply it automatically.
+
+  ## Parameters
+  - node_id: The target node's ID (e.g., "dev-node2")
+  - bootstrap_hosts: List of host:port strings or comma-separated string
+  """
+  def set_node_config(node_id, bootstrap_hosts) when is_list(bootstrap_hosts) or is_binary(bootstrap_hosts) do
+    with {:ok, parsed_hosts} <- parse_and_validate_hosts(bootstrap_hosts) do
+      conn = ConnectionManager.get_connection()
+      local_node_id = NodeConfig.get_corrosion_node_id()
+      timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
+
+      # Convert to JSON array
+      hosts_json = Jason.encode!(parsed_hosts)
+
+      # Use UPSERT (INSERT OR REPLACE)
+      query = """
+      INSERT OR REPLACE INTO node_configs (node_id, bootstrap_hosts, updated_at, updated_by)
+      VALUES (?, ?, ?, ?)
+      """
+
+      case CorroClient.query(conn, query, [node_id, hosts_json, timestamp, local_node_id]) do
+        {:ok, _} ->
+          Logger.info("Updated node_configs for #{node_id}: #{hosts_json}")
+          {:ok, "Config updated for #{node_id}"}
+
+        {:error, reason} ->
+          Logger.error("Failed to update node_configs for #{node_id}: #{inspect(reason)}")
+          {:error, reason}
+      end
+    end
+  end
+
+  @doc """
+  Updates bootstrap config for all active nodes in the cluster.
+  Queries CLIMemberStore for active members and updates each one.
+
+  ## Parameters
+  - bootstrap_hosts: List of host:port strings or comma-separated string
+  """
+  def set_all_node_configs(bootstrap_hosts) do
+    with {:ok, parsed_hosts} <- parse_and_validate_hosts(bootstrap_hosts) do
+      # Get all active nodes from CLI member store
+      active_nodes = get_active_node_ids()
+
+      if Enum.empty?(active_nodes) do
+        {:error, "No active nodes found"}
+      else
+        Logger.info("Updating configs for #{length(active_nodes)} active nodes: #{inspect(active_nodes)}")
+
+        results =
+          Enum.map(active_nodes, fn node_id ->
+            case set_node_config(node_id, parsed_hosts) do
+              {:ok, _} -> {:ok, node_id}
+              {:error, reason} -> {:error, {node_id, reason}}
+            end
+          end)
+
+        errors = Enum.filter(results, &match?({:error, _}, &1))
+
+        if Enum.empty?(errors) do
+          {:ok, "Updated configs for #{length(active_nodes)} nodes"}
+        else
+          {:error, "Some updates failed: #{inspect(errors)}"}
+        end
+      end
+    end
+  end
+
   # Private functions
+
+  defp parse_node_config_row(row) do
+    %{
+      "node_id" => node_id,
+      "bootstrap_hosts" => hosts_json,
+      "updated_at" => updated_at,
+      "updated_by" => updated_by
+    } = row
+
+    # Parse JSON array
+    bootstrap_hosts =
+      case Jason.decode(hosts_json) do
+        {:ok, hosts} when is_list(hosts) -> hosts
+        _ -> []
+      end
+
+    %{
+      node_id: node_id,
+      bootstrap_hosts: bootstrap_hosts,
+      bootstrap_hosts_display: Enum.join(bootstrap_hosts, ", "),
+      updated_at: updated_at,
+      updated_by: updated_by
+    }
+  end
+
+  defp get_active_node_ids do
+    # Get active CLI members
+    case CorroPort.CLIClusterData.get_members() do
+      %{members: {:ok, members}} when is_list(members) ->
+        Enum.map(members, fn member ->
+          # CLI members have actor_id like "dev-node1", "dev-node2", etc.
+          Map.get(member, "actor_id", "unknown")
+        end)
+
+      _ ->
+        # Fallback: just use local node
+        [NodeConfig.get_corrosion_node_id()]
+    end
+  end
 
   @doc """
   Checks if this node is running under overmind.
