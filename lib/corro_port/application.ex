@@ -5,7 +5,10 @@ defmodule CorroPort.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
+    # Dev clustering helper (only in dev)
+    dev_cluster = if Mix.env() == :dev, do: [CorroPort.DevClusterConnector], else: []
+
+    children = dev_cluster ++ [
       CorroPortWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:corro_port, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: CorroPort.PubSub},
@@ -19,6 +22,7 @@ defmodule CorroPort.Application do
       CorroPort.CorroSubscriber,
       CorroPort.ConfigSubscriber,
       CorroPort.NodeIdentityReporter,
+      CorroPort.ClusterConfigCoordinator,
       CorroPort.AckTracker,
       CorroPort.AckSender,
       CorroPort.CLIClusterData,

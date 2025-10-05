@@ -2,7 +2,7 @@ defmodule CorroPortWeb.NodeLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPort.{NodeConfig, ConnectionManager, ConfigManager}
+  alias CorroPort.{NodeConfig, ConnectionManager, ConfigManager, ClusterConfigCoordinator}
   alias CorroPortWeb.NavTabs
   alias CorroPortWeb.NodeLive.BootstrapConfigComponent
 
@@ -137,7 +137,8 @@ defmodule CorroPortWeb.NodeLive do
     result =
       case socket.assigns.cluster_config_mode do
         :all ->
-          ConfigManager.set_all_node_configs(bootstrap_hosts)
+          # Use PubSub-based coordination for cluster-wide updates
+          ClusterConfigCoordinator.broadcast_config_update(bootstrap_hosts)
 
         :single ->
           if socket.assigns.selected_node_id do
@@ -152,18 +153,25 @@ defmodule CorroPortWeb.NodeLive do
 
     socket =
       case result do
-        # All nodes update with node_ids list
-        {:ok, message, node_ids} when is_list(node_ids) ->
-          Logger.info("Config update initiated for nodes: #{inspect(node_ids)}")
+        # All nodes update via PubSub - returns connected Elixir nodes
+        {:ok, elixir_nodes} when is_list(elixir_nodes) ->
+          Logger.info("Config update broadcast to #{length(elixir_nodes)} Elixir nodes: #{inspect(elixir_nodes)}")
 
-          # Start cluster readiness check
-          initial_status = ConfigManager.check_cluster_status(node_ids)
-          Process.send_after(self(), {:check_cluster_readiness, node_ids, 0}, 2000)
+          # Start status polling to track update progress
+          Process.send_after(self(), {:check_update_status, elixir_nodes, 0}, 1000)
+
+          initial_status = %{
+            ready: false,
+            ready_count: 0,
+            total: length(elixir_nodes),
+            ready_nodes: [],
+            missing_nodes: elixir_nodes
+          }
 
           socket
-          |> assign(:updated_node_ids, node_ids)
+          |> assign(:updated_node_ids, elixir_nodes)
           |> assign(:cluster_readiness_status, initial_status)
-          |> put_flash(:info, "#{message}. Waiting for cluster to be ready...")
+          |> put_flash(:info, "Config update broadcast to #{length(elixir_nodes)} nodes. Waiting for completion...")
           |> fetch_cluster_configs()
 
         # Single node update (no node_ids list)
@@ -258,38 +266,63 @@ defmodule CorroPortWeb.NodeLive do
     end
   end
 
-  def handle_info({:check_cluster_readiness, expected_node_ids, attempt}, socket) do
-    max_attempts = 30
-    status = ConfigManager.check_cluster_status(expected_node_ids)
+  def handle_info({:check_update_status, expected_elixir_nodes, attempt}, socket) do
+    max_attempts = 60  # 60 seconds total (1s intervals)
+    status_map = ClusterConfigCoordinator.get_update_status()
 
-    Logger.debug("Cluster readiness check (attempt #{attempt + 1}/#{max_attempts}): #{status.ready_count}/#{status.total} ready")
+    Logger.debug("Update status check (attempt #{attempt + 1}/#{max_attempts}): #{inspect(status_map)}")
 
-    socket = assign(socket, :cluster_readiness_status, status)
+    # Count successes and failures
+    success_nodes = Enum.filter(status_map, fn {_node, info} -> info.status == :success end) |> Enum.map(fn {node, _} -> node end)
+    failed_nodes = Enum.filter(status_map, fn {_node, info} -> info.status == :error end) |> Enum.map(fn {node, _} -> node end)
+    pending_nodes = Enum.filter(status_map, fn {_node, info} -> info.status == :pending end) |> Enum.map(fn {node, _} -> node end)
+
+    total = length(expected_elixir_nodes)
+    ready_count = length(success_nodes)
+
+    display_status = %{
+      ready: ready_count == total && Enum.empty?(failed_nodes),
+      ready_count: ready_count,
+      total: total,
+      ready_nodes: Enum.map(success_nodes, &Atom.to_string/1),
+      missing_nodes: Enum.map(pending_nodes ++ failed_nodes, &Atom.to_string/1)
+    }
+
+    socket = assign(socket, :cluster_readiness_status, display_status)
 
     cond do
-      status.ready ->
-        # All nodes ready!
-        Logger.info("Cluster ready: All #{status.total} nodes connected")
+      # All nodes succeeded
+      ready_count == total && Enum.empty?(failed_nodes) ->
+        Logger.info("Cluster config update complete: All #{total} nodes succeeded")
         socket =
           socket
           |> assign(:cluster_readiness_status, nil)
           |> assign(:updated_node_ids, [])
-          |> put_flash(:info, "Cluster ready! All #{status.total} nodes have restarted successfully.")
+          |> put_flash(:info, "Cluster config updated successfully on all #{total} nodes!")
 
         {:noreply, socket}
 
-      attempt >= max_attempts ->
-        # Timeout
-        Logger.warning("Cluster readiness timeout. Ready: #{status.ready_count}/#{status.total}, Missing: #{inspect(status.missing_nodes)}")
+      # Some nodes failed
+      not Enum.empty?(failed_nodes) && Enum.empty?(pending_nodes) ->
+        Logger.error("Cluster config update failed on some nodes: #{inspect(failed_nodes)}")
         socket =
           socket
-          |> put_flash(:error, "Cluster readiness timeout. #{status.ready_count}/#{status.total} nodes ready. Missing: #{Enum.join(status.missing_nodes, ", ")}")
+          |> put_flash(:error, "Config update failed on #{length(failed_nodes)} nodes: #{inspect(failed_nodes)}")
 
         {:noreply, socket}
 
+      # Timeout waiting for pending nodes
+      attempt >= max_attempts ->
+        Logger.warning("Cluster config update timeout. Success: #{ready_count}/#{total}, Pending: #{inspect(pending_nodes)}, Failed: #{inspect(failed_nodes)}")
+        socket =
+          socket
+          |> put_flash(:error, "Update timeout. #{ready_count}/#{total} succeeded. Pending: #{Enum.join(Enum.map(pending_nodes, &Atom.to_string/1), ", ")}")
+
+        {:noreply, socket}
+
+      # Keep polling
       true ->
-        # Keep polling
-        Process.send_after(self(), {:check_cluster_readiness, expected_node_ids, attempt + 1}, 2000)
+        Process.send_after(self(), {:check_update_status, expected_elixir_nodes, attempt + 1}, 1000)
         {:noreply, socket}
     end
   end
