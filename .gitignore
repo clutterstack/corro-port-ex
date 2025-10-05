@@ -58,6 +58,9 @@ ehthumbs.db
 # Logs
 *.log
 
+# Process management
+*.pid
+
 # Claude Code/Codex-related files
 .claude
 CLAUDE.md

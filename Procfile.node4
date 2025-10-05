@@ -1,0 +1,5 @@
+# Procfile for Node 4
+# Ports: Phoenix=4004, Corrosion API=8084, Gossip=8790
+
+corrosion: ./corrosion/corrosion-mac agent --config ./corrosion/config-node4.toml
+phoenix: NODE_ID=4 mix phx.server

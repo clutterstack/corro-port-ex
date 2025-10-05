@@ -1,0 +1,5 @@
+# Procfile for Node 3
+# Ports: Phoenix=4003, Corrosion API=8083, Gossip=8789
+
+corrosion: ./corrosion/corrosion-mac agent --config ./corrosion/config-node3.toml
+phoenix: NODE_ID=3 mix phx.server

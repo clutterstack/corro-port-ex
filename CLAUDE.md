@@ -18,6 +18,29 @@ mix assets.build
 **IMPORTANT**: CorroPort requires Corrosion database agents to be running before starting Phoenix nodes.
 
 #### Quick Start - Local Cluster Development
+
+**Recommended: All-in-one cluster startup (overmind in daemon mode, no tmux)**
+```bash
+# Start integrated cluster (corrosion via overmind + Phoenix, node 1 in foreground with iex)
+./scripts/overmind-start.sh 3          # Start 3-node cluster
+./scripts/overmind-start.sh 5          # Start 5-node cluster
+
+# Each node's corrosion runs via overmind daemon (enables bootstrap config editing in NodeLive)
+# Node 1 Phoenix runs in foreground with iex shell (only Elixir logs shown)
+# Nodes 2+ Phoenix run in background as simple processes
+# Ctrl-C stops all nodes automatically
+
+# View all logs
+tail -f logs/node1-corrosion.log       # Node 1 corrosion logs
+tail -f logs/node1-overmind.log        # Node 1 overmind logs
+tail -f logs/node2-phoenix.log         # Node 2 Phoenix logs
+tail -f logs/node3-corrosion.log       # Node 3 corrosion logs
+
+# Manual cleanup if needed
+./scripts/cluster-stop.sh
+```
+
+**Alternative: Separate corrosion and Phoenix startup**
 ```bash
 # 1. Start corrosion agents (database layer)
 ./scripts/corrosion-start.sh 3
@@ -216,6 +239,52 @@ AckSender.get_duplicate_receptions(min_count \\ 2)
 
 **Performance**: Fast ETS lookups with `:read_concurrency` for high-throughput scenarios
 
+### Corrosion Restart Coordination
+
+**Problem**: Restarting Corrosion while subscriptions are active creates race conditions:
+- CorroSubscriber tries to reconnect before Corrosion is fully initialised
+- Subscription database creation fails (unable to open database file errors)
+- Connection refused errors from premature reconnection attempts
+
+**Solution**: `ConfigManager` and `CorroSubscriber` coordinate via PubSub on the `"corrosion_lifecycle"` topic.
+
+#### Restart Lifecycle
+
+When `ConfigManager.restart_corrosion/0` is called:
+
+1. **Pre-restart notification** - Broadcasts `{:corrosion_restarting}` to all subscribers
+2. **Grace period** - Waits 500ms for active subscriptions to gracefully close
+3. **Restart execution** - Executes `overmind restart corrosion` command
+4. **Health check** - Polls Corrosion API until responsive (up to 15 attempts @ 1s each)
+5. **Initialisation grace** - Additional 3.5s wait for subscription endpoint to stabilise
+6. **Post-restart notification** - Broadcasts `{:corrosion_ready}` to resume subscriptions
+
+#### CorroSubscriber Coordination
+
+1. **Receives `{:corrosion_restarting}`**
+   - Stops active subscription via `CorroClient.Subscriber.stop/1`
+   - Sets state to `:paused_for_restart`
+   - Broadcasts `{:subscription_paused_for_restart}` event
+
+2. **Ignores disconnect/error callbacks**
+   - While in `:paused_for_restart` state, ignores `{:subscription_disconnected}` and `{:subscription_error}`
+   - Prevents stopped subscriber's callbacks from corrupting the coordinated state
+
+3. **Receives `{:corrosion_ready}`**
+   - Only processes if currently in `:paused_for_restart` state
+   - Triggers subscription restart via `handle_continue(:start_subscription)`
+   - Returns to `:connected` state once subscription is live
+
+#### Key Implementation Details
+
+- **PubSub Topic**: `"corrosion_lifecycle"`
+- **Events**: `{:corrosion_restarting}`, `{:corrosion_ready}`
+- **State Guard**: `:paused_for_restart` state prevents callback interference
+- **Timing**: 500ms pause + API health check + 3.5s grace = ~18s total restart time
+- **Backward Compatible**: Non-overmind setups unaffected
+
+See module docs for `CorroPort.ConfigManager` and `CorroPort.CorroSubscriber` for full details.
+
 ### Configuration
 
 **Node Configuration**
@@ -232,22 +301,40 @@ AckSender.get_duplicate_receptions(min_count \\ 2)
 
 The application is designed for multi-node cluster testing:
 
-1. Start 3-node cluster: `./scripts/dev-cluster-iex.sh --verbose 3`
+**Recommended approach (overmind in daemon mode, no tmux):**
+1. Start 3-node cluster: `./scripts/overmind-start.sh 3`
+   - Each node's corrosion runs via overmind daemon
+   - Node 1 Phoenix runs in foreground with iex shell
+   - Nodes 2-3 Phoenix run in background
+   - View logs: `tail -f logs/node2-phoenix.log`
+   - Edit bootstrap config via NodeLive UI at http://localhost:4001/node
 2. Access nodes at:
    - Node 1: http://localhost:4001/cluster
-   - Node 2: http://localhost:4002/cluster  
+   - Node 2: http://localhost:4002/cluster
    - Node 3: http://localhost:4003/cluster
 3. Send test messages and observe acknowledgment propagation
 4. Use "Send Message" button to test cross-node communication
 5. Monitor real-time updates in the web interface
+6. Stop all nodes: Press Ctrl+C in the terminal
+
+**Alternative (separate corrosion/Phoenix):**
+1. Start cluster: `./scripts/dev-cluster-iex.sh --verbose 3`
+2. Same access URLs and testing process as above
 
 ### Key Files for Understanding
 
+**Application Code:**
 - `lib/corro_port/application.ex` - Application supervision tree
 - `lib/corro_port_web/live/cluster_live.ex` - Main monitoring interface
 - `lib/corro_port/corro_client.ex` - Database client implementation
 - `lib/corro_port/cluster_api.ex` - High-level cluster queries
-- `scripts/dev-cluster.sh` - Multi-node development setup
+
+**Development Scripts:**
+- `scripts/overmind-start.sh` - All-in-one cluster startup (recommended, overmind in daemon mode, no tmux)
+- `scripts/cluster-stop.sh` - Stop all overmind daemons and Phoenix processes
+- `scripts/dev-cluster-iex.sh` - Multi-node Phoenix startup (separate from corrosion)
+- `scripts/corrosion-start.sh` - Corrosion agent startup (alternative method)
+- `scripts/corrosion-stop.sh` - Corrosion agent cleanup (alternative method)
 
 ### Development Notes
 

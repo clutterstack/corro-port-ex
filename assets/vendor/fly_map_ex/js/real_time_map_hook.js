@@ -258,6 +258,8 @@ export function createRealTimeMapHook(socket) {
   },
 
   renderGroupMarkers(group) {
+    if (!this.activeMarkers) return;
+
     // Remove existing markers for this group
     this.activeMarkers.forEach((marker, markerId) => {
       if (markerId.startsWith(`${group.id}-`)) {
@@ -284,8 +286,10 @@ export function createRealTimeMapHook(socket) {
   },
 
   clearClientMarkers() {
-    this.activeMarkers.forEach(marker => marker.remove());
-    this.activeMarkers.clear();
+    if (this.activeMarkers) {
+      this.activeMarkers.forEach(marker => marker.remove());
+      this.activeMarkers.clear();
+    }
   },
 
   applyThemeToSvg(theme) {
@@ -323,7 +327,7 @@ export function createRealTimeMapHook(socket) {
       this.channel.push('state_sync', {
         client_state: {
           last_update: this.clientState.lastUpdate,
-          marker_count: this.activeMarkers.size
+          marker_count: this.activeMarkers ? this.activeMarkers.size : 0
         }
       });
     }
@@ -369,7 +373,7 @@ export function createRealTimeMapHook(socket) {
     });
   },
 
-  handleChannelError(error) {
+  handleChannelError(_error) {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.attemptReconnect();
     } else {
@@ -469,10 +473,11 @@ export function createRealTimeMapHook(socket) {
         return false;
       }
 
-      // Check if map SVG exists
-      const mapSvg = document.getElementById(this.mapId || 'fly-region-map');
+      // Check if map SVG exists (read mapId from dataset since this.mapId isn't set yet)
+      const mapId = this.el.dataset.mapId || 'fly-region-map';
+      const mapSvg = document.getElementById(mapId);
       if (!mapSvg) {
-        console.warn('RealTimeMapHook: Map SVG not found');
+        console.warn('RealTimeMapHook: Map SVG not found:', mapId);
         return false;
       }
 

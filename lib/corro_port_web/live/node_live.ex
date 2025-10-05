@@ -2,7 +2,7 @@ defmodule CorroPortWeb.NodeLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPort.{NodeConfig, ConnectionManager}
+  alias CorroPort.{NodeConfig, ConnectionManager, ConfigManager}
   alias CorroPortWeb.NavTabs
 
   def mount(_params, _session, socket) do
@@ -10,6 +10,16 @@ defmodule CorroPortWeb.NodeLive do
       # Subscribe to any relevant updates
       Phoenix.PubSub.subscribe(CorroPort.PubSub, "node_updates")
     end
+
+    # Get current bootstrap config
+    bootstrap_hosts =
+      case ConfigManager.get_current_bootstrap() do
+        {:ok, hosts} -> Enum.join(hosts, ", ")
+        {:error, _} -> ""
+      end
+
+    # Check if running under overmind (production or local overmind cluster)
+    overmind_available = ConfigManager.running_under_overmind?()
 
     socket =
       assign(socket, %{
@@ -23,7 +33,13 @@ defmodule CorroPortWeb.NodeLive do
         api_cx_test: nil,
         error: nil,
         loading: true,
-        last_updated: nil
+        last_updated: nil,
+        # Bootstrap configuration
+        bootstrap_hosts: bootstrap_hosts,
+        bootstrap_input: bootstrap_hosts,
+        bootstrap_status: nil,
+        overmind_available: overmind_available,
+        is_production: NodeConfig.production?()
       })
 
     {:ok, fetch_node_data(socket)}
@@ -63,6 +79,85 @@ defmodule CorroPortWeb.NodeLive do
       {:error, reason} ->
         Logger.error("Couldn't read config file: #{inspect(reason)}")
         socket = put_flash(socket, :error, "Failed to read config: #{inspect(reason)}")
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("update_bootstrap_input", %{"value" => value}, socket) do
+    {:noreply, assign(socket, :bootstrap_input, value)}
+  end
+
+  def handle_event("update_bootstrap", _params, socket) do
+    Logger.info("Updating bootstrap configuration...")
+
+    case ConfigManager.update_bootstrap(socket.assigns.bootstrap_input, true) do
+      {:ok, message} ->
+        # Wait for Corrosion to restart and become responsive
+        socket =
+          socket
+          |> assign(:bootstrap_status, :restarting)
+          |> put_flash(:info, "#{message}. Waiting for Corrosion to restart...")
+
+        # Schedule a delayed check for Corrosion connectivity
+        Process.send_after(self(), :check_corrosion_ready, 2000)
+
+        {:noreply, socket}
+
+      {:error, reason} ->
+        Logger.error("Failed to update bootstrap: #{inspect(reason)}")
+
+        socket =
+          socket
+          |> assign(:bootstrap_status, :error)
+          |> put_flash(:error, "Failed to update bootstrap: #{reason}")
+
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("rollback_bootstrap", _params, socket) do
+    Logger.info("Rolling back bootstrap configuration...")
+
+    case ConfigManager.rollback_config() do
+      {:ok, message} ->
+        socket =
+          socket
+          |> assign(:bootstrap_status, :rolled_back)
+          |> put_flash(:info, message)
+          |> fetch_node_data()
+
+        {:noreply, socket}
+
+      {:error, reason} ->
+        socket = put_flash(socket, :error, "Rollback failed: #{reason}")
+        {:noreply, socket}
+    end
+  end
+
+  def handle_info(:check_corrosion_ready, socket) do
+    case ConfigManager.wait_for_corrosion(10, 1000) do
+      {:ok, message} ->
+        Logger.info("Corrosion is ready: #{message}")
+
+        socket =
+          socket
+          |> assign(:bootstrap_status, :ready)
+          |> put_flash(:info, "Corrosion has restarted successfully!")
+          |> fetch_node_data()
+
+        {:noreply, socket}
+
+      {:error, reason} ->
+        Logger.error("Corrosion did not become ready: #{reason}")
+
+        socket =
+          socket
+          |> assign(:bootstrap_status, :timeout)
+          |> put_flash(
+            :error,
+            "Corrosion restart timed out. Check logs or try rollback."
+          )
+
         {:noreply, socket}
     end
   end
@@ -476,6 +571,107 @@ defmodule CorroPortWeb.NodeLive do
         </div>
       </div>
 
+    <!-- Bootstrap Configuration (Overmind Only) -->
+      <div class="card bg-base-100">
+        <div class="card-body">
+          <h3 class="card-title text-lg">
+            Bootstrap Configuration
+            <span :if={!@overmind_available} class="badge badge-warning badge-sm ml-2">
+              Overmind Required
+            </span>
+            <span :if={@overmind_available && !@is_production} class="badge badge-info badge-sm ml-2">
+              Development
+            </span>
+          </h3>
+
+          <div :if={!@overmind_available} class="alert alert-info">
+            <.icon name="hero-information-circle" class="w-5 h-5" />
+            <span>
+              This feature requires Overmind to manage the Corrosion process. Start the cluster with <code class="font-mono bg-base-300 px-1">./scripts/overmind-start.sh</code>
+            </span>
+          </div>
+
+          <div :if={@overmind_available} class="space-y-4">
+            <div class="form-control">
+              <label class="label">
+                <span class="label-text">Current Bootstrap Hosts</span>
+              </label>
+              <div class="bg-base-200 p-3 rounded font-mono text-sm">
+                {if @bootstrap_hosts == "", do: "(empty)", else: @bootstrap_hosts}
+              </div>
+            </div>
+
+            <div class="form-control">
+              <label class="label">
+                <span class="label-text">New Bootstrap Hosts (comma-separated)</span>
+                <span class="label-text-alt">Format: host1:port1, host2:port2</span>
+              </label>
+              <input
+                type="text"
+                name="value"
+                class="input input-bordered w-full font-mono text-sm"
+                value={@bootstrap_input}
+                phx-keyup="update_bootstrap_input"
+                placeholder="app.internal:8787, other.internal:8787"
+                disabled={@bootstrap_status == :restarting}
+              />
+            </div>
+
+            <div class="flex gap-2">
+              <button
+                class="btn btn-primary"
+                phx-click="update_bootstrap"
+                disabled={@bootstrap_status == :restarting}
+              >
+                <.icon
+                  :if={@bootstrap_status == :restarting}
+                  name="hero-arrow-path"
+                  class="w-4 h-4 mr-2 animate-spin"
+                />
+                <.icon :if={@bootstrap_status != :restarting} name="hero-cog-6-tooth" class="w-4 h-4 mr-2" />
+                {if @bootstrap_status == :restarting, do: "Restarting Corrosion...", else: "Update & Restart Corrosion"}
+              </button>
+
+              <button
+                :if={@bootstrap_status in [:error, :timeout]}
+                class="btn btn-warning"
+                phx-click="rollback_bootstrap"
+              >
+                <.icon name="hero-arrow-uturn-left" class="w-4 h-4 mr-2" />
+                Rollback to Backup
+              </button>
+            </div>
+
+            <div :if={@bootstrap_status == :restarting} class="alert alert-info">
+              <.icon name="hero-arrow-path" class="w-5 h-5 animate-spin" />
+              <span>Corrosion is restarting. This may take a few seconds...</span>
+            </div>
+
+            <div :if={@bootstrap_status == :ready} class="alert alert-success">
+              <.icon name="hero-check-circle" class="w-5 h-5" />
+              <span>Corrosion has restarted successfully!</span>
+            </div>
+
+            <div :if={@bootstrap_status == :timeout} class="alert alert-error">
+              <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+              <span>
+                Corrosion restart timed out. The process may still be starting. Check logs or use the rollback button.
+              </span>
+            </div>
+
+            <div class="text-xs text-base-content/70">
+              <strong>Note:</strong>
+              Updating bootstrap will regenerate the Corrosion config file and restart the Corrosion agent via Overmind. The Phoenix application will remain running.
+              <span :if={!@is_production}>
+                <br />
+                <strong>Development:</strong>
+                Config file: <code class="font-mono bg-base-300 px-1">{NodeConfig.get_config_path()}</code>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
 
     <!-- Database Information -->
       <div :if={@db_info} class="card bg-base-100">
@@ -555,8 +751,8 @@ defmodule CorroPortWeb.NodeLive do
     """
   end
 
-  def connection_indicator(api_cx_test = assigns) do
-    assigns = assign( assigns, :corro_status, connectivity_status(assigns.api_cx_test) )
+  def connection_indicator(assigns) do
+    assigns = assign(assigns, :corro_status, connectivity_status(assigns.api_cx_test))
     ~H"""
     <div class="flex flex-wrap items-center gap-2 rounded-lg bg-base-200 px-3 py-2 text-sm">
       <.icon name={@corro_status.icon} class="h-4 w-4" />

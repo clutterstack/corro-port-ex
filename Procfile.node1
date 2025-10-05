@@ -1,0 +1,5 @@
+# Procfile for Node 1
+# Ports: Phoenix=4001, Corrosion API=8081, Gossip=8787
+
+corrosion: ./corrosion/corrosion-mac agent --config ./corrosion/config-node1.toml
+phoenix: NODE_ID=1 mix phx.server

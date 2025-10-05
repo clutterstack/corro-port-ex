@@ -78,6 +78,11 @@ defmodule CorroPortWeb.PropagationLive do
     {:noreply, fetch_all_data(socket)}
   end
 
+  def handle_event("fallback_to_server", %{"reason" => reason}, socket) do
+    Logger.debug("PropagationLive: Real-time map hook fell back to server rendering (#{reason})")
+    {:noreply, socket}
+  end
+
   # Private functions
 
   defp assign_initial_data(socket) do

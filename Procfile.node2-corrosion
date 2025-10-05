@@ -1,0 +1,5 @@
+# Procfile for Node 2 - Corrosion only
+# Phoenix runs separately
+# Ports: Corrosion API=8082, Gossip=8788
+
+corrosion: ./corrosion/corrosion-mac agent --config ./corrosion/config-node2.toml

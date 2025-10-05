@@ -21,6 +21,31 @@ CorroPort runs as **two independent layers**:
 
 ### Quick Start - Recommended Workflow
 
+**All-in-One Startup (Simplest - No tmux)**
+
+```bash
+# Start integrated cluster (corrosion + Phoenix)
+./scripts/overmind-start.sh 3
+
+# Node 1 runs in foreground with iex shell (only Elixir logs shown)
+# Nodes 2-3 run in background as simple processes
+# Ctrl-C stops all nodes automatically
+
+# Access the web interface:
+#    Node 1: http://localhost:4001
+#    Node 2: http://localhost:4002
+#    Node 3: http://localhost:4003
+
+# View background node logs:
+tail -f logs/node2-phoenix.log
+tail -f logs/node3-corrosion.log
+
+# Show corrosion logs in terminal (optional):
+./scripts/overmind-start.sh 3 --show-corrosion
+```
+
+**Alternative: Separate Corrosion and Phoenix Startup**
+
 ```bash
 # 1. Start Corrosion agents (database layer)
 ./scripts/corrosion-start.sh 3
@@ -28,10 +53,7 @@ CorroPort runs as **two independent layers**:
 # 2. Start Phoenix cluster (application layer)
 ./scripts/dev-cluster-iex.sh --verbose 3
 
-# 3. Access the web interface:
-#    Node 1: http://localhost:4001 (interactive terminal)
-#    Node 2: http://localhost:4002 (background)
-#    Node 3: http://localhost:4003 (background)
+# 3. Access the web interface (same URLs as above)
 
 # 4. When done:
 #    Press Ctrl-C to stop Phoenix cluster
@@ -103,11 +125,15 @@ Each node uses consistent port offsets:
 ### Cleanup
 
 ```bash
-# Stop Phoenix nodes
+# Stop all nodes (if using overmind-start.sh)
+# Press Ctrl-C in the terminal
+# Or manually: ./scripts/cluster-stop.sh
+
+# Stop Phoenix nodes (if using separate startup)
 # Press Ctrl-C in terminal running dev-cluster-iex.sh
 # Or kill individual processes if running manually
 
-# Stop Corrosion agents
+# Stop Corrosion agents (if using separate startup)
 ./scripts/corrosion-stop.sh
 
 # Clean up databases (optional - removes all data)
