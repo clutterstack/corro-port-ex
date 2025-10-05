@@ -46,7 +46,10 @@ defmodule CorroPortWeb.NodeLive do
         cluster_configs: [],
         cluster_config_input: bootstrap_hosts,
         selected_node_id: nil,
-        active_nodes: []
+        active_nodes: [],
+        # Cluster readiness tracking
+        cluster_readiness_status: nil,  # nil | %{ready: bool, ready_count: N, total: N, ...}
+        updated_node_ids: []  # Track which nodes were updated for readiness check
       })
 
     {:ok, fetch_node_data(socket)}
@@ -149,6 +152,21 @@ defmodule CorroPortWeb.NodeLive do
 
     socket =
       case result do
+        # All nodes update with node_ids list
+        {:ok, message, node_ids} when is_list(node_ids) ->
+          Logger.info("Config update initiated for nodes: #{inspect(node_ids)}")
+
+          # Start cluster readiness check
+          initial_status = ConfigManager.check_cluster_status(node_ids)
+          Process.send_after(self(), {:check_cluster_readiness, node_ids, 0}, 2000)
+
+          socket
+          |> assign(:updated_node_ids, node_ids)
+          |> assign(:cluster_readiness_status, initial_status)
+          |> put_flash(:info, "#{message}. Waiting for cluster to be ready...")
+          |> fetch_cluster_configs()
+
+        # Single node update (no node_ids list)
         {:ok, message} ->
           socket
           |> put_flash(:info, message)
@@ -236,6 +254,42 @@ defmodule CorroPortWeb.NodeLive do
             "Corrosion restart timed out. Check logs or try rollback."
           )
 
+        {:noreply, socket}
+    end
+  end
+
+  def handle_info({:check_cluster_readiness, expected_node_ids, attempt}, socket) do
+    max_attempts = 30
+    status = ConfigManager.check_cluster_status(expected_node_ids)
+
+    Logger.debug("Cluster readiness check (attempt #{attempt + 1}/#{max_attempts}): #{status.ready_count}/#{status.total} ready")
+
+    socket = assign(socket, :cluster_readiness_status, status)
+
+    cond do
+      status.ready ->
+        # All nodes ready!
+        Logger.info("Cluster ready: All #{status.total} nodes connected")
+        socket =
+          socket
+          |> assign(:cluster_readiness_status, nil)
+          |> assign(:updated_node_ids, [])
+          |> put_flash(:info, "Cluster ready! All #{status.total} nodes have restarted successfully.")
+
+        {:noreply, socket}
+
+      attempt >= max_attempts ->
+        # Timeout
+        Logger.warning("Cluster readiness timeout. Ready: #{status.ready_count}/#{status.total}, Missing: #{inspect(status.missing_nodes)}")
+        socket =
+          socket
+          |> put_flash(:error, "Cluster readiness timeout. #{status.ready_count}/#{status.total} nodes ready. Missing: #{Enum.join(status.missing_nodes, ", ")}")
+
+        {:noreply, socket}
+
+      true ->
+        # Keep polling
+        Process.send_after(self(), {:check_cluster_readiness, expected_node_ids, attempt + 1}, 2000)
         {:noreply, socket}
     end
   end
@@ -811,6 +865,45 @@ defmodule CorroPortWeb.NodeLive do
                 else: "Update Selected Node"}
             </button>
           </form>
+
+          <!-- Cluster Readiness Status -->
+          <div :if={@cluster_readiness_status} class="alert mt-4" class={[
+            "alert",
+            if(@cluster_readiness_status.ready, do: "alert-success", else: "alert-info")
+          ]}>
+            <.icon name={
+              if @cluster_readiness_status.ready do
+                "hero-check-circle"
+              else
+                "hero-arrow-path"
+              end
+            } class={[
+              "w-5 h-5",
+              if(!@cluster_readiness_status.ready, do: "animate-spin")
+            ]} />
+            <div>
+              <div class="font-semibold">
+                {if @cluster_readiness_status.ready do
+                  "Cluster Ready"
+                else
+                  "Waiting for cluster nodes..."
+                end}
+              </div>
+              <div class="text-sm">
+                {if @cluster_readiness_status.ready do
+                  "All #{@cluster_readiness_status.total} nodes have restarted successfully"
+                else
+                  "#{@cluster_readiness_status.ready_count}/#{@cluster_readiness_status.total} nodes ready"
+                end}
+                {if length(@cluster_readiness_status.ready_nodes) > 0 do
+                  " (#{Enum.join(@cluster_readiness_status.ready_nodes, ", ")})"
+                end}
+              </div>
+              <div :if={length(@cluster_readiness_status.missing_nodes) > 0} class="text-xs mt-1 opacity-80">
+                Missing: {Enum.join(@cluster_readiness_status.missing_nodes, ", ")}
+              </div>
+            </div>
+          </div>
 
           <!-- Current Cluster Configs Table -->
           <div :if={length(@cluster_configs) > 0} class="mt-6">

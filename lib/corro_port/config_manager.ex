@@ -240,6 +240,112 @@ defmodule CorroPort.ConfigManager do
     wait_for_corrosion_recursive(max_attempts, delay_ms, 1)
   end
 
+  @doc """
+  Waits for cluster nodes to become ready after a config update.
+
+  Polls CLI members until all expected node_ids appear with connected status.
+  Returns {:ok, message} when all nodes are ready, or {:error, status} on timeout.
+
+  ## Parameters
+  - expected_node_ids: List of node_ids that should be in the cluster
+  - max_attempts: Maximum polling attempts (default: 30)
+  - delay_ms: Delay between attempts in milliseconds (default: 2000)
+
+  ## Returns
+  - {:ok, message} - All nodes are connected
+  - {:error, %{ready: [...], missing: [...], total: N, ready_count: M}} - Timeout with status
+  """
+  def wait_for_cluster_ready(expected_node_ids, max_attempts \\ 30, delay_ms \\ 2000) do
+    wait_for_cluster_recursive(expected_node_ids, max_attempts, delay_ms, 1)
+  end
+
+  @doc """
+  Checks current cluster readiness status.
+  Returns %{ready: boolean, nodes: [...], ready_count: N, total: N}
+  """
+  def check_cluster_status(expected_node_ids) do
+    # Get all node configs to map UUIDs to node_ids
+    node_configs = case get_all_node_configs() do
+      {:ok, configs} -> configs
+      {:error, _} -> []
+    end
+
+    uuid_to_node_id = Map.new(node_configs, fn config ->
+      {config.corrosion_actor_id, config.node_id}
+    end)
+
+    Logger.debug("check_cluster_status: UUID → node_id mapping from node_configs:")
+    Enum.each(uuid_to_node_id, fn {uuid, node_id} ->
+      Logger.debug("  #{uuid} → #{node_id}")
+    end)
+
+    # Get CLI members
+    cli_members = case CorroPort.CLIClusterData.get_members() do
+      %{members: members} when is_list(members) -> members
+      _ -> []
+    end
+
+    Logger.debug("check_cluster_status: Found #{length(cli_members)} CLI members")
+
+    # Map CLI members to node_ids with status
+    all_member_info = Enum.map(cli_members, fn member ->
+      uuid = Map.get(member, "id")
+      node_id = Map.get(uuid_to_node_id, uuid)
+      status = Map.get(member, "display_status", "unknown")
+      %{node_id: node_id, uuid: uuid, status: status}
+    end)
+
+    Logger.debug("check_cluster_status: CLI member details: #{inspect(all_member_info)}")
+    Logger.debug("check_cluster_status: Expected node_ids: #{inspect(expected_node_ids)}")
+
+    ready_nodes =
+      all_member_info
+      |> Enum.filter(fn %{node_id: node_id, status: status} ->
+        node_id in expected_node_ids && status == "connected"
+      end)
+
+    # Always include local node if expected (CLI members doesn't show it)
+    local_node_id = NodeConfig.get_corrosion_node_id()
+    ready_node_ids = Enum.map(ready_nodes, & &1.node_id)
+
+    Logger.debug("check_cluster_status: Ready nodes from CLI: #{inspect(ready_node_ids)}")
+    Logger.debug("check_cluster_status: Local node_id: #{local_node_id}")
+
+    ready_node_ids = if local_node_id in expected_node_ids do
+      # Check if local Corrosion is responsive
+      local_ready = case ConnectionManager.test_connection() do
+        :ok ->
+          Logger.debug("check_cluster_status: Local Corrosion is responsive")
+          true
+        _ ->
+          Logger.debug("check_cluster_status: Local Corrosion is NOT responsive")
+          false
+      end
+
+      if local_ready do
+        [local_node_id | ready_node_ids] |> Enum.uniq()
+      else
+        ready_node_ids
+      end
+    else
+      Logger.debug("check_cluster_status: Local node not in expected list")
+      ready_node_ids
+    end
+
+    missing_node_ids = expected_node_ids -- ready_node_ids
+
+    Logger.debug("check_cluster_status: Final ready_node_ids: #{inspect(ready_node_ids)}")
+    Logger.debug("check_cluster_status: Missing node_ids: #{inspect(missing_node_ids)}")
+
+    %{
+      ready: Enum.empty?(missing_node_ids),
+      ready_nodes: ready_node_ids,
+      missing_nodes: missing_node_ids,
+      ready_count: length(ready_node_ids),
+      total: length(expected_node_ids)
+    }
+  end
+
   # Cluster-wide config management functions
 
   @doc """
@@ -359,7 +465,7 @@ defmodule CorroPort.ConfigManager do
         case CorroClient.transaction(conn, queries) do
           {:ok, _} ->
             Logger.info("Updated configs for #{length(active_nodes)} nodes in single transaction")
-            {:ok, "Updated configs for #{length(active_nodes)} nodes"}
+            {:ok, "Updated configs for #{length(active_nodes)} nodes", active_nodes}
 
           {:error, reason} ->
             Logger.error("Failed to update configs in transaction: #{inspect(reason)}")
@@ -738,6 +844,35 @@ defmodule CorroPort.ConfigManager do
       _ ->
         Process.sleep(delay_ms)
         wait_for_corrosion_recursive(attempts_left - 1, delay_ms, attempt + 1)
+    end
+  end
+
+  defp wait_for_cluster_recursive(expected_node_ids, 0, _delay_ms, attempt) do
+    status = check_cluster_status(expected_node_ids)
+    Logger.warning(
+      "Cluster readiness timeout after #{attempt - 1} attempts. " <>
+      "Ready: #{status.ready_count}/#{status.total} nodes. " <>
+      "Missing: #{inspect(status.missing_nodes)}"
+    )
+    {:error, status}
+  end
+
+  defp wait_for_cluster_recursive(expected_node_ids, attempts_left, delay_ms, attempt) do
+    status = check_cluster_status(expected_node_ids)
+
+    if status.ready do
+      Logger.info(
+        "Cluster ready: #{status.ready_count}/#{status.total} nodes connected " <>
+        "(attempt #{attempt}). Nodes: #{inspect(status.ready_nodes)}"
+      )
+      {:ok, "All #{status.total} nodes are ready"}
+    else
+      Logger.debug(
+        "Cluster not ready (#{status.ready_count}/#{status.total}), " <>
+        "missing: #{inspect(status.missing_nodes)}, retrying..."
+      )
+      Process.sleep(delay_ms)
+      wait_for_cluster_recursive(expected_node_ids, attempts_left - 1, delay_ms, attempt + 1)
     end
   end
 end
