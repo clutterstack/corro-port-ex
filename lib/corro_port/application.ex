@@ -6,7 +6,12 @@ defmodule CorroPort.Application do
   @impl true
   def start(_type, _args) do
     # Dev clustering helper (only in dev)
-    dev_cluster = if Mix.env() == :dev, do: [CorroPort.DevClusterConnector], else: []
+    # Use config value instead of Mix.env() which isn't available in releases
+    dev_cluster = if Application.get_env(:corro_port, :dev_routes, false) do
+      [CorroPort.DevClusterConnector]
+    else
+      []
+    end
 
     children = dev_cluster ++ [
       CorroPortWeb.Telemetry,
@@ -20,7 +25,7 @@ defmodule CorroPort.Application do
 
       # Core data services (legacy - kept for compatibility)
       CorroPort.CorroSubscriber,
-      CorroPort.ConfigSubscriber,
+      # ConfigSubscriber removed - now using PubSub-based ClusterConfigCoordinator
       CorroPort.NodeIdentityReporter,
       CorroPort.ClusterConfigCoordinator,
       CorroPort.AckTracker,

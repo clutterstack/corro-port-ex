@@ -110,21 +110,14 @@ defmodule CorroPortWeb.NodeLive do
     # Normalize empty string to nil
     node_id = if node_id == "", do: nil, else: node_id
 
-    # Load current config for selected node
-    config_input =
-      if node_id do
-        case ConfigManager.get_node_config(node_id) do
-          {:ok, config} -> Enum.join(config.bootstrap_hosts, ", ")
-          {:error, _} -> ""
-        end
-      else
-        ""
-      end
+    # Note: We no longer pre-populate the config input from the node_configs table
+    # since we're using PubSub-based coordination instead. User must enter the desired
+    # bootstrap config manually.
 
     socket =
       socket
       |> assign(:selected_node_id, node_id)
-      |> assign(:cluster_config_input, config_input)
+      |> assign(:cluster_config_input, "")
 
     {:noreply, socket}
   end
@@ -142,7 +135,8 @@ defmodule CorroPortWeb.NodeLive do
 
         :single ->
           if socket.assigns.selected_node_id do
-            ConfigManager.set_node_config(
+            # Use PubSub-based coordination for single-node updates
+            ClusterConfigCoordinator.broadcast_config_update_to_node(
               socket.assigns.selected_node_id,
               bootstrap_hosts
             )
@@ -814,8 +808,9 @@ defmodule CorroPortWeb.NodeLive do
           <div class="alert alert-info mb-4">
             <.icon name="hero-information-circle" class="w-5 h-5" />
             <div class="text-sm">
-              <p>Changes are stored in the <code class="font-mono bg-base-300 px-1">node_configs</code> Corrosion table and gossiped to all nodes.</p>
-              <p>Each node's ConfigSubscriber automatically applies changes and restarts Corrosion.</p>
+              <p>Changes are broadcast via Elixir PubSub to all nodes in the cluster.</p>
+              <p>Each node's ClusterConfigCoordinator applies changes locally and restarts Corrosion.</p>
+              <p class="text-warning mt-1">This approach is safe even if Corrosion gossip is broken by bad bootstrap config.</p>
             </div>
           </div>
 

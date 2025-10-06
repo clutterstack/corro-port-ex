@@ -52,7 +52,16 @@ defmodule CorroPort.ClusterConfigCoordinator do
   that should receive the update (including local node).
   """
   def broadcast_config_update(bootstrap_hosts) do
-    GenServer.call(__MODULE__, {:broadcast_update, bootstrap_hosts})
+    GenServer.call(__MODULE__, {:broadcast_update, bootstrap_hosts, :all})
+  end
+
+  @doc """
+  Broadcasts a bootstrap config update to a specific node in the Elixir cluster.
+
+  Returns {:ok, [node_id]} if successful.
+  """
+  def broadcast_config_update_to_node(node_id, bootstrap_hosts) do
+    GenServer.call(__MODULE__, {:broadcast_update, bootstrap_hosts, {:single, node_id}})
   end
 
   @doc """
@@ -78,11 +87,16 @@ defmodule CorroPort.ClusterConfigCoordinator do
   end
 
   @impl true
-  def handle_call({:broadcast_update, bootstrap_hosts}, _from, state) do
+  def handle_call({:broadcast_update, bootstrap_hosts, target}, _from, state) do
     local_node_id = NodeConfig.get_corrosion_node_id()
     timestamp = DateTime.utc_now()
 
-    Logger.info("ClusterConfigCoordinator: Broadcasting config update from #{local_node_id}")
+    {target_description, target_node_id} = case target do
+      :all -> {"all nodes", nil}
+      {:single, node_id} -> {"node #{node_id}", node_id}
+    end
+
+    Logger.info("ClusterConfigCoordinator: Broadcasting config update from #{local_node_id} to #{target_description}")
 
     # Get all connected Elixir nodes (including self)
     connected_nodes = [Node.self() | Node.list()]
@@ -90,11 +104,11 @@ defmodule CorroPort.ClusterConfigCoordinator do
 
     Logger.info("ClusterConfigCoordinator: Broadcasting to #{node_count} Elixir nodes: #{inspect(connected_nodes)}")
 
-    # Broadcast to all nodes via PubSub
+    # Broadcast to all nodes via PubSub (they'll filter by target_node_id)
     Phoenix.PubSub.broadcast(
       CorroPort.PubSub,
       @pubsub_topic,
-      {:update_bootstrap, bootstrap_hosts, local_node_id, timestamp}
+      {:update_bootstrap, bootstrap_hosts, local_node_id, timestamp, target_node_id}
     )
 
     # Initialize status tracking for expected responses
@@ -105,10 +119,15 @@ defmodule CorroPort.ClusterConfigCoordinator do
 
     state = %{state |
       update_status: initial_status,
-      last_update: %{hosts: bootstrap_hosts, from: local_node_id, timestamp: timestamp}
+      last_update: %{hosts: bootstrap_hosts, from: local_node_id, timestamp: timestamp, target: target}
     }
 
-    {:reply, {:ok, connected_nodes}, state}
+    expected_nodes = case target do
+      :all -> connected_nodes
+      {:single, node_id} -> [node_id]
+    end
+
+    {:reply, {:ok, expected_nodes}, state}
   end
 
   @impl true
@@ -117,29 +136,38 @@ defmodule CorroPort.ClusterConfigCoordinator do
   end
 
   @impl true
-  def handle_info({:update_bootstrap, bootstrap_hosts, from_node, timestamp}, state) do
+  def handle_info({:update_bootstrap, bootstrap_hosts, from_node, timestamp, target_node_id}, state) do
     local_node_id = NodeConfig.get_corrosion_node_id()
 
-    Logger.info(
-      "ClusterConfigCoordinator: Received config update from #{from_node} at #{timestamp}. " <>
-      "Applying to local node #{local_node_id}"
-    )
+    # Check if this update is for us (nil means all nodes, otherwise check match)
+    should_apply = is_nil(target_node_id) || target_node_id == local_node_id
 
-    # Apply the config update locally
-    result = ConfigManager.update_bootstrap(bootstrap_hosts, true)
+    if should_apply do
+      Logger.info(
+        "ClusterConfigCoordinator: Received config update from #{from_node} at #{timestamp}. " <>
+        "Applying to local node #{local_node_id}"
+      )
 
-    # Broadcast result back
-    response = case result do
-      {:ok, message} ->
-        Logger.info("ClusterConfigCoordinator: Successfully applied config update on #{local_node_id}")
-        {:update_success, Node.self(), local_node_id, message, timestamp}
+      # Apply the config update locally
+      result = ConfigManager.update_bootstrap(bootstrap_hosts, true)
 
-      {:error, reason} ->
-        Logger.error("ClusterConfigCoordinator: Failed to apply config update on #{local_node_id}: #{inspect(reason)}")
-        {:update_error, Node.self(), local_node_id, reason, timestamp}
+      # Broadcast result back
+      response = case result do
+        {:ok, message} ->
+          Logger.info("ClusterConfigCoordinator: Successfully applied config update on #{local_node_id}")
+          {:update_success, Node.self(), local_node_id, message, timestamp}
+
+        {:error, reason} ->
+          Logger.error("ClusterConfigCoordinator: Failed to apply config update on #{local_node_id}: #{inspect(reason)}")
+          {:update_error, Node.self(), local_node_id, reason, timestamp}
+      end
+
+      Phoenix.PubSub.broadcast(CorroPort.PubSub, @pubsub_topic, response)
+    else
+      Logger.debug(
+        "ClusterConfigCoordinator: Ignoring config update targeted at #{target_node_id} (local node is #{local_node_id})"
+      )
     end
-
-    Phoenix.PubSub.broadcast(CorroPort.PubSub, @pubsub_topic, response)
 
     {:noreply, state}
   end
