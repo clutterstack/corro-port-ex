@@ -32,7 +32,9 @@ defmodule CorroPort.Application do
           CorroPort.NodeIdentityReporter,
           CorroPort.ClusterConfigCoordinator,
           CorroPort.AckTracker,
+          CorroPort.PubSubAckTaskSupervisor,
           CorroPort.AckSender,
+          CorroPort.PubSubAckListener,
           CorroPort.CLIClusterData,
 
           # Analytics modules

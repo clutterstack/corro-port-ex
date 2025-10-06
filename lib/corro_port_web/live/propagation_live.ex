@@ -63,6 +63,16 @@ defmodule CorroPortWeb.PropagationLive do
     end
   end
 
+  def handle_event("test_pubsub", _params, socket) do
+    case CorroPort.PubSubAckTester.send_test_request() do
+      {:ok, _request_data} ->
+        {:noreply, put_flash(socket, :info, "PubSub test sent! Tracking acknowledgments...")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to send test: #{format_error(reason)}")}
+    end
+  end
+
   def handle_event("reset_tracking", _params, socket) do
     case CorroPort.AckTracker.reset_tracking() do
       :ok ->

@@ -2,7 +2,7 @@ defmodule CorroPortWeb.MessagesLive do
   use CorroPortWeb, :live_view
   require Logger
 
-  alias CorroPort.{MessagesAPI, NodeConfig, AckTracker, AckSender}
+  alias CorroPort.{MessagesAPI, NodeConfig, AckTracker, AckSender, PubSubAckTester}
   alias CorroPortWeb.{AllMessagesTable, AckStatusCard, NavTabs}
 
   def mount(_params, _session, socket) do
@@ -98,6 +98,26 @@ defmodule CorroPortWeb.MessagesLive do
 
       {:error, error} ->
         socket = put_flash(socket, :error, "Failed to send message: #{inspect(error)}")
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("test_pubsub", _params, socket) do
+    case PubSubAckTester.send_test_request() do
+      {:ok, _request_data} ->
+        socket =
+          put_flash(
+            socket,
+            :info,
+            "PubSub test broadcast sent! Tracking acknowledgments..."
+          )
+
+        {:noreply, socket}
+
+      {:error, reason} ->
+        socket =
+          put_flash(socket, :error, "Failed to send PubSub test: #{format_pubsub_error(reason)}")
+
         {:noreply, socket}
     end
   end
@@ -253,6 +273,12 @@ defmodule CorroPortWeb.MessagesLive do
     end
   end
 
+  defp format_pubsub_error({:tracking_failed, reason}) do
+    "Tracking failed: #{inspect(reason)}"
+  end
+
+  defp format_pubsub_error(reason), do: inspect(reason)
+
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
@@ -272,6 +298,9 @@ defmodule CorroPortWeb.MessagesLive do
             disabled={!(@ack_status && @ack_status.latest_message)}
           >
             <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Reset Tracking
+          </.button>
+          <.button phx-click="test_pubsub" class="btn btn-secondary btn-outline">
+            <.icon name="hero-signal" class="w-4 h-4 mr-2" /> Test Cluster PubSub
           </.button>
           <.button phx-click="send_message" variant="primary">
             <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" /> Send Message

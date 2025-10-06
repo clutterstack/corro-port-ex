@@ -18,6 +18,7 @@ defmodule CorroPort.AckSender do
   """
 
   require Logger
+  alias CorroPort.AckHttp
 
   @ack_timeout 5_000
   @reception_cache_table :message_reception_cache
@@ -143,7 +144,7 @@ defmodule CorroPort.AckSender do
         local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
         if originating_node_id != local_node_id do
-          spawn(fn -> send_acknowledgment_to_endpoint(message_map) end)
+          start_async_ack(message_map)
         else
           Logger.debug("AckSender: Ignoring message from self (#{local_node_id})")
         end
@@ -157,9 +158,9 @@ defmodule CorroPort.AckSender do
       local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
       if originating_node_id && originating_node_id != local_node_id do
-        Logger.info("AckSender: INSERT change from #{originating_node_id}; spawn ack task")
+        Logger.info("AckSender: INSERT change from #{originating_node_id}; start ack task")
 
-        spawn(fn -> send_acknowledgment_to_endpoint(message_map) end)
+        start_async_ack(message_map)
       end
     else
       Logger.debug("AckSender: Ignoring #{change_type} change")
@@ -180,7 +181,7 @@ defmodule CorroPort.AckSender do
         :first_reception ->
           Logger.info("AckSender: First reception of message #{message_pk}")
 
-          case parse_endpoint(originating_endpoint) do
+          case AckHttp.parse_endpoint(originating_endpoint) do
             {:ok, api_url} ->
               send_http_acknowledgment(
                 api_url,
@@ -208,38 +209,17 @@ defmodule CorroPort.AckSender do
     end
   end
 
-  defp parse_endpoint(endpoint) when is_binary(endpoint) do
-    case endpoint do
-      # IPv6 with brackets: [2001:db8::1]:8081
-      "[" <> rest ->
-        case String.split(rest, "]:") do
-          [ipv6, port_str] ->
-            case Integer.parse(port_str) do
-              {_port, ""} -> {:ok, "http://[#{ipv6}]:#{port_str}"}
-              _ -> {:error, "Invalid port in IPv6 endpoint: #{endpoint}"}
-            end
+  defp start_async_ack(message_map) do
+    case Task.Supervisor.start_child(
+           CorroPort.PubSubAckTaskSupervisor,
+           fn -> send_acknowledgment_to_endpoint(message_map) end
+         ) do
+      {:ok, _pid} ->
+        :ok
 
-          _ ->
-            {:error, "Invalid IPv6 endpoint format: #{endpoint}"}
-        end
-
-      # IPv4 or hostname: 127.0.0.1:8081
-      _ ->
-        case String.split(endpoint, ":") do
-          [ip, port_str] ->
-            case Integer.parse(port_str) do
-              {_port, ""} -> {:ok, "http://#{ip}:#{port_str}"}
-              _ -> {:error, "Invalid port in endpoint: #{endpoint}"}
-            end
-
-          _ ->
-            {:error, "Invalid endpoint format: #{endpoint}"}
-        end
+      {:error, reason} ->
+        Logger.warning("AckSender: failed to start ack task: #{inspect(reason)}")
     end
-  end
-
-  defp parse_endpoint(endpoint) do
-    {:error, "Endpoint must be a string, got: #{inspect(endpoint)}"}
   end
 
   defp send_http_acknowledgment(
@@ -249,7 +229,8 @@ defmodule CorroPort.AckSender do
          message_timestamp,
          local_node_id
        ) do
-    ack_url = "#{api_url}/api/acknowledge"
+    path = "/api/acknowledge"
+    ack_url = AckHttp.build_url(api_url, path)
 
     payload = %{
       "message_pk" => message_pk,
@@ -259,11 +240,7 @@ defmodule CorroPort.AckSender do
 
     Logger.info("AckSender: Sending POST to #{ack_url} with payload: #{inspect(payload)}")
 
-    case Req.post(ack_url,
-           json: payload,
-           headers: [{"content-type", "application/json"}],
-           receive_timeout: @ack_timeout
-         ) do
+    case AckHttp.post_ack(api_url, path, payload, receive_timeout: @ack_timeout) do
       {:ok, %{status: 200, body: body}} ->
         Logger.info("AckSender: ✅ Successfully sent acknowledgment to #{originating_endpoint}")
         Logger.debug("AckSender: Response: #{inspect(body)}")
@@ -279,17 +256,22 @@ defmodule CorroPort.AckSender do
           "AckSender: Acknowledgment failed to #{originating_endpoint}: HTTP #{status}: #{inspect(body)}"
         )
 
-      {:error, %{reason: :timeout}} ->
+      {:error, %Req.TransportError{reason: :timeout}} ->
         Logger.warning(
           "AckSender: Acknowledgment timed out to #{originating_endpoint} after #{@ack_timeout}ms"
         )
 
-      {:error, %{reason: :econnrefused}} ->
+      {:error, %Req.TransportError{reason: :econnrefused}} ->
         Logger.warning("AckSender: Connection refused to #{originating_endpoint} at #{ack_url}")
 
-      {:error, reason} ->
+      {:error, %Req.TransportError{reason: reason}} ->
         Logger.warning(
           "AckSender: Acknowledgment failed to #{originating_endpoint}: #{inspect(reason)}"
+        )
+
+      {:error, exception} ->
+        Logger.warning(
+          "AckSender: Acknowledgment failed to #{originating_endpoint}: #{Exception.message(exception)}"
         )
     end
   end

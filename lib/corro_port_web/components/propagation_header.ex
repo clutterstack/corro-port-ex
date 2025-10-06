@@ -5,7 +5,7 @@ defmodule CorroPortWeb.PropagationHeader do
   @doc """
   Renders the propagation page header with actions and error handling.
   """
-  attr :dns_data, :map, required: true
+  attr(:dns_data, :map, required: true)
 
   def propagation_header(assigns) do
     ~H"""
@@ -22,6 +22,10 @@ defmodule CorroPortWeb.PropagationHeader do
         <div class="flex gap-2">
           <.button phx-click="reset_tracking" class="btn btn-warning btn-outline">
             <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Reset Tracking
+          </.button>
+
+          <.button phx-click="test_pubsub" class="btn btn-secondary btn-outline">
+            <.icon name="hero-signal" class="w-4 h-4 mr-2" /> Test Cluster PubSub
           </.button>
 
           <.button phx-click="send_message" variant="primary">

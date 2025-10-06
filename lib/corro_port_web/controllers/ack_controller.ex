@@ -28,6 +28,25 @@ defmodule CorroPortWeb.AcknowledgmentController do
     end
   end
 
+  @doc """
+  Receives acknowledgment from the PubSub cluster test flow.
+  """
+  def acknowledge_pubsub(conn, params) do
+    case validate_pubsub_ack_params(params) do
+      {:ok, ack_data} ->
+        handle_pubsub_acknowledgment(conn, ack_data)
+
+      {:error, reason} ->
+        Logger.warning(
+          "AcknowledgmentController: Invalid PubSub acknowledgment request: #{inspect(reason)}"
+        )
+
+        conn
+        |> put_status(:bad_request)
+        |> json(%{error: "Invalid request: #{reason}"})
+    end
+  end
+
   defp validate_ack_params(params) do
     required_fields = ["message_pk", "ack_node_id"]
 
@@ -39,6 +58,23 @@ defmodule CorroPortWeb.AcknowledgmentController do
            ack_node_id: params["ack_node_id"],
            # optional, for logging
            message_timestamp: params["message_timestamp"]
+         }}
+
+      {:error, missing_fields} ->
+        {:error, "Missing required fields: #{Enum.join(missing_fields, ", ")}"}
+    end
+  end
+
+  defp validate_pubsub_ack_params(params) do
+    required_fields = ["request_id", "ack_node_id"]
+
+    case check_required_fields(params, required_fields) do
+      :ok ->
+        {:ok,
+         %{
+           request_id: params["request_id"],
+           ack_node_id: params["ack_node_id"],
+           timestamp: params["timestamp"]
          }}
 
       {:error, missing_fields} ->
@@ -102,6 +138,38 @@ defmodule CorroPortWeb.AcknowledgmentController do
           error: "Failed to record acknowledgment",
           reason: inspect(reason)
         })
+    end
+  end
+
+  defp handle_pubsub_acknowledgment(conn, ack_data) do
+    Logger.info(
+      "AcknowledgmentController: Received PubSub acknowledgment from #{ack_data.ack_node_id}"
+    )
+
+    case CorroPort.AckTracker.add_acknowledgment(ack_data.ack_node_id) do
+      :ok ->
+        conn
+        |> put_status(:ok)
+        |> json(%{
+          status: "acknowledged",
+          message: "PubSub acknowledgment recorded",
+          ack_node_id: ack_data.ack_node_id,
+          request_id: ack_data.request_id
+        })
+
+      {:error, :no_message_tracked} ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{error: "No request currently being tracked"})
+
+      {:error, reason} ->
+        Logger.error(
+          "AcknowledgmentController: Failed to record PubSub acknowledgment: #{inspect(reason)}"
+        )
+
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{error: "Failed to record acknowledgment", reason: inspect(reason)})
     end
   end
 
