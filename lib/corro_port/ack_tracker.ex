@@ -111,7 +111,13 @@ defmodule CorroPort.AckTracker do
         :ets.insert(@table_name, {ack_key, ack_value})
 
         # Record acknowledgment event in analytics if experiment is active
-        record_ack_event(message_data.pk, message_data.node_id, ack_node_id, current_time, state.experiment_id)
+        record_ack_event(
+          message_data.pk,
+          message_data.node_id,
+          ack_node_id,
+          current_time,
+          state.experiment_id
+        )
 
         broadcast_update()
 
@@ -293,7 +299,8 @@ defmodule CorroPort.AckTracker do
         message_id,
         experiment_id,
         originating_node,
-        ack_node_id,  # target_node is the ack sender
+        # target_node is the ack sender
+        ack_node_id,
         :acked,
         timestamp,
         region
@@ -303,5 +310,4 @@ defmodule CorroPort.AckTracker do
       :ok
     end
   end
-
 end

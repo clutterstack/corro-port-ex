@@ -3,13 +3,14 @@ defmodule CorroPortWeb.Components.ClusterLive.CLIMembersTable do
   import CorroPortWeb.CoreComponents
   alias CorroPortWeb.DisplayHelpers
 
- def display(assigns) do
+  def display(assigns) do
     # Pre-compute display content using helper functions
-    status_info = if assigns.cli_member_data do
-      DisplayHelpers.build_cli_status_info(assigns.cli_member_data)
-    else
-      nil
-    end
+    status_info =
+      if assigns.cli_member_data do
+        DisplayHelpers.build_cli_status_info(assigns.cli_member_data)
+      else
+        nil
+      end
 
     assigns = assign(assigns, :status_info, status_info)
 
@@ -37,25 +38,24 @@ defmodule CorroPortWeb.Components.ClusterLive.CLIMembersTable do
             </span>
           </div>
         </div>
-
-        <!-- Error Display -->
-        <.cli_error_alert :if={DisplayHelpers.should_show_cli_error?(@cli_error)} cli_error={@cli_error} />
-
-        <!-- CLI Results -->
+        
+    <!-- Error Display -->
+        <.cli_error_alert
+          :if={DisplayHelpers.should_show_cli_error?(@cli_error)}
+          cli_error={@cli_error}
+        />
+        
+    <!-- CLI Results -->
         <.cli_results_section
           :if={DisplayHelpers.has_successful_cli_members?(@cli_member_data)}
           cli_member_data={@cli_member_data}
         />
-
-        <!-- Empty State -->
-        <.cli_empty_state
-          :if={DisplayHelpers.show_cli_empty_state?(@cli_member_data, @cli_error)}
-        />
-
-        <!-- Loading State -->
-        <.cli_loading_state
-          :if={DisplayHelpers.show_cli_loading_state?(@cli_member_data)}
-        />
+        
+    <!-- Empty State -->
+        <.cli_empty_state :if={DisplayHelpers.show_cli_empty_state?(@cli_member_data, @cli_error)} />
+        
+    <!-- Loading State -->
+        <.cli_loading_state :if={DisplayHelpers.show_cli_loading_state?(@cli_member_data)} />
       </div>
     </div>
     """
@@ -81,7 +81,6 @@ defmodule CorroPortWeb.Components.ClusterLive.CLIMembersTable do
   defp cli_results_section(assigns) do
     ~H"""
     <div class="space-y-4">
-
       <div class="overflow-x-auto">
         <table class="table table-zebra">
           <thead>
@@ -144,5 +143,4 @@ defmodule CorroPortWeb.Components.ClusterLive.CLIMembersTable do
     </div>
     """
   end
-
 end

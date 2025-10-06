@@ -107,7 +107,12 @@ defmodule CorroPort.ConfigManager do
          :ok <- validate_overmind_running() do
       # Step 1: Notify subscribers to pause
       Logger.info("ConfigManager: Broadcasting :corrosion_restarting")
-      Phoenix.PubSub.broadcast(CorroPort.PubSub, @corrosion_lifecycle_topic, {:corrosion_restarting})
+
+      Phoenix.PubSub.broadcast(
+        CorroPort.PubSub,
+        @corrosion_lifecycle_topic,
+        {:corrosion_restarting}
+      )
 
       # Give subscribers time to gracefully close
       Process.sleep(500)
@@ -139,12 +144,20 @@ defmodule CorroPort.ConfigManager do
 
               # Step 5: Notify subscribers to resume
               Logger.info("ConfigManager: Broadcasting :corrosion_ready")
-              Phoenix.PubSub.broadcast(CorroPort.PubSub, @corrosion_lifecycle_topic, {:corrosion_ready})
+
+              Phoenix.PubSub.broadcast(
+                CorroPort.PubSub,
+                @corrosion_lifecycle_topic,
+                {:corrosion_ready}
+              )
 
               {:ok, output}
 
             {:error, reason} ->
-              Logger.error("ConfigManager: Corrosion failed to become responsive: #{inspect(reason)}")
+              Logger.error(
+                "ConfigManager: Corrosion failed to become responsive: #{inspect(reason)}"
+              )
+
               {:error, "Corrosion restart succeeded but failed health check: #{inspect(reason)}"}
           end
 
@@ -265,35 +278,40 @@ defmodule CorroPort.ConfigManager do
   """
   def check_cluster_status(expected_node_ids) do
     # Get all node configs to map UUIDs to node_ids
-    node_configs = case get_all_node_configs() do
-      {:ok, configs} -> configs
-      {:error, _} -> []
-    end
+    node_configs =
+      case get_all_node_configs() do
+        {:ok, configs} -> configs
+        {:error, _} -> []
+      end
 
-    uuid_to_node_id = Map.new(node_configs, fn config ->
-      {config.corrosion_actor_id, config.node_id}
-    end)
+    uuid_to_node_id =
+      Map.new(node_configs, fn config ->
+        {config.corrosion_actor_id, config.node_id}
+      end)
 
     Logger.debug("check_cluster_status: UUID → node_id mapping from node_configs:")
+
     Enum.each(uuid_to_node_id, fn {uuid, node_id} ->
       Logger.debug("  #{uuid} → #{node_id}")
     end)
 
     # Get CLI members
-    cli_members = case CorroPort.CLIClusterData.get_members() do
-      %{members: members} when is_list(members) -> members
-      _ -> []
-    end
+    cli_members =
+      case CorroPort.CLIClusterData.get_members() do
+        %{members: members} when is_list(members) -> members
+        _ -> []
+      end
 
     Logger.debug("check_cluster_status: Found #{length(cli_members)} CLI members")
 
     # Map CLI members to node_ids with status
-    all_member_info = Enum.map(cli_members, fn member ->
-      uuid = Map.get(member, "id")
-      node_id = Map.get(uuid_to_node_id, uuid)
-      status = Map.get(member, "display_status", "unknown")
-      %{node_id: node_id, uuid: uuid, status: status}
-    end)
+    all_member_info =
+      Enum.map(cli_members, fn member ->
+        uuid = Map.get(member, "id")
+        node_id = Map.get(uuid_to_node_id, uuid)
+        status = Map.get(member, "display_status", "unknown")
+        %{node_id: node_id, uuid: uuid, status: status}
+      end)
 
     Logger.debug("check_cluster_status: CLI member details: #{inspect(all_member_info)}")
     Logger.debug("check_cluster_status: Expected node_ids: #{inspect(expected_node_ids)}")
@@ -311,26 +329,29 @@ defmodule CorroPort.ConfigManager do
     Logger.debug("check_cluster_status: Ready nodes from CLI: #{inspect(ready_node_ids)}")
     Logger.debug("check_cluster_status: Local node_id: #{local_node_id}")
 
-    ready_node_ids = if local_node_id in expected_node_ids do
-      # Check if local Corrosion is responsive
-      local_ready = case ConnectionManager.test_connection() do
-        :ok ->
-          Logger.debug("check_cluster_status: Local Corrosion is responsive")
-          true
-        _ ->
-          Logger.debug("check_cluster_status: Local Corrosion is NOT responsive")
-          false
-      end
+    ready_node_ids =
+      if local_node_id in expected_node_ids do
+        # Check if local Corrosion is responsive
+        local_ready =
+          case ConnectionManager.test_connection() do
+            :ok ->
+              Logger.debug("check_cluster_status: Local Corrosion is responsive")
+              true
 
-      if local_ready do
-        [local_node_id | ready_node_ids] |> Enum.uniq()
+            _ ->
+              Logger.debug("check_cluster_status: Local Corrosion is NOT responsive")
+              false
+          end
+
+        if local_ready do
+          [local_node_id | ready_node_ids] |> Enum.uniq()
+        else
+          ready_node_ids
+        end
       else
+        Logger.debug("check_cluster_status: Local node not in expected list")
         ready_node_ids
       end
-    else
-      Logger.debug("check_cluster_status: Local node not in expected list")
-      ready_node_ids
-    end
 
     missing_node_ids = expected_node_ids -- ready_node_ids
 
@@ -400,7 +421,8 @@ defmodule CorroPort.ConfigManager do
   - node_id: The target node's ID (e.g., "dev-node2")
   - bootstrap_hosts: List of host:port strings or comma-separated string
   """
-  def set_node_config(node_id, bootstrap_hosts) when is_list(bootstrap_hosts) or is_binary(bootstrap_hosts) do
+  def set_node_config(node_id, bootstrap_hosts)
+      when is_list(bootstrap_hosts) or is_binary(bootstrap_hosts) do
     with {:ok, parsed_hosts} <- parse_and_validate_hosts(bootstrap_hosts) do
       conn = ConnectionManager.get_connection()
       local_node_id = NodeConfig.get_corrosion_node_id()
@@ -415,7 +437,9 @@ defmodule CorroPort.ConfigManager do
       VALUES (?, ?, ?, ?)
       """
 
-      case CorroClient.transaction(conn, [{query, [node_id, hosts_json, timestamp, local_node_id]}]) do
+      case CorroClient.transaction(conn, [
+             {query, [node_id, hosts_json, timestamp, local_node_id]}
+           ]) do
         {:ok, _} ->
           Logger.info("Updated node_configs for #{node_id}: #{hosts_json}")
           {:ok, "Config updated for #{node_id}"}
@@ -442,7 +466,9 @@ defmodule CorroPort.ConfigManager do
       if Enum.empty?(active_nodes) do
         {:error, "No active nodes found"}
       else
-        Logger.info("Updating configs for #{length(active_nodes)} active nodes: #{inspect(active_nodes)}")
+        Logger.info(
+          "Updating configs for #{length(active_nodes)} active nodes: #{inspect(active_nodes)}"
+        )
 
         # Write ALL configs in a single transaction to avoid race condition
         # where ConfigSubscriber restarts Corrosion mid-write
@@ -504,17 +530,21 @@ defmodule CorroPort.ConfigManager do
 
   defp get_active_node_ids do
     # Get all node configs (has UUID -> node_id mapping)
-    node_configs = case get_all_node_configs() do
-      {:ok, configs} -> configs
-      {:error, _} -> []
-    end
+    node_configs =
+      case get_all_node_configs() do
+        {:ok, configs} -> configs
+        {:error, _} -> []
+      end
 
     # Build UUID -> node_id map
-    uuid_to_node_id = Map.new(node_configs, fn config ->
-      {config.corrosion_actor_id, config.node_id}
-    end)
+    uuid_to_node_id =
+      Map.new(node_configs, fn config ->
+        {config.corrosion_actor_id, config.node_id}
+      end)
 
-    Logger.debug("get_active_node_ids: Found #{map_size(uuid_to_node_id)} UUID mappings in node_configs")
+    Logger.debug(
+      "get_active_node_ids: Found #{map_size(uuid_to_node_id)} UUID mappings in node_configs"
+    )
 
     # Get active CLI members (has UUIDs as "id" field)
     case CorroPort.CLIClusterData.get_members() do
@@ -522,17 +552,24 @@ defmodule CorroPort.ConfigManager do
         Logger.debug("get_active_node_ids: Found #{length(members)} CLI members")
 
         # Map CLI member UUIDs to node_ids
-        mapped_results = Enum.map(members, fn member ->
-          uuid = Map.get(member, "id", "unknown")
-          node_id = Map.get(uuid_to_node_id, uuid)
-          {uuid, node_id}
-        end)
+        mapped_results =
+          Enum.map(members, fn member ->
+            uuid = Map.get(member, "id", "unknown")
+            node_id = Map.get(uuid_to_node_id, uuid)
+            {uuid, node_id}
+          end)
 
         # Log unmapped UUIDs
         unmapped = Enum.filter(mapped_results, fn {_uuid, node_id} -> is_nil(node_id) end)
+
         if length(unmapped) > 0 do
-          Logger.warning("get_active_node_ids: #{length(unmapped)} CLI members not in node_configs: #{inspect(Enum.map(unmapped, fn {uuid, _} -> uuid end))}")
-          Logger.warning("These nodes need to run NodeIdentityReporter to register their identity")
+          Logger.warning(
+            "get_active_node_ids: #{length(unmapped)} CLI members not in node_configs: #{inspect(Enum.map(unmapped, fn {uuid, _} -> uuid end))}"
+          )
+
+          Logger.warning(
+            "These nodes need to run NodeIdentityReporter to register their identity"
+          )
         end
 
         # Extract non-nil node_ids
@@ -545,7 +582,10 @@ defmodule CorroPort.ConfigManager do
         local_node_id = NodeConfig.get_corrosion_node_id()
         all_node_ids = [local_node_id | node_ids] |> Enum.uniq()
 
-        Logger.info("get_active_node_ids: Resolved #{length(all_node_ids)} active node_ids (including local): #{inspect(all_node_ids)}")
+        Logger.info(
+          "get_active_node_ids: Resolved #{length(all_node_ids)} active node_ids (including local): #{inspect(all_node_ids)}"
+        )
+
         all_node_ids
 
       _ ->
@@ -604,11 +644,13 @@ defmodule CorroPort.ConfigManager do
     else
       project_root = File.cwd!()
 
-      relative_path = case :os.type() do
-        {:unix, :darwin} -> "overmind-v2.5.1-macos-arm64"
-        {:unix, :linux} -> "overmind-v2.5.1-linux-amd64"
-        _ -> "overmind" # Fallback
-      end
+      relative_path =
+        case :os.type() do
+          {:unix, :darwin} -> "overmind-v2.5.1-macos-arm64"
+          {:unix, :linux} -> "overmind-v2.5.1-linux-amd64"
+          # Fallback
+          _ -> "overmind"
+        end
 
       Path.join(project_root, relative_path)
     end
@@ -626,7 +668,8 @@ defmodule CorroPort.ConfigManager do
       numeric_id =
         case Regex.run(~r/node(\d+)/, node_id) do
           [_, num] -> num
-          _ -> node_id  # Fallback to full node_id if no match
+          # Fallback to full node_id if no match
+          _ -> node_id
         end
 
       project_root = File.cwd!()
@@ -638,7 +681,8 @@ defmodule CorroPort.ConfigManager do
     if running_under_overmind?() do
       :ok
     else
-      {:error, "This operation requires overmind. Start the cluster with ./scripts/overmind-start.sh"}
+      {:error,
+       "This operation requires overmind. Start the cluster with ./scripts/overmind-start.sh"}
     end
   end
 
@@ -849,11 +893,13 @@ defmodule CorroPort.ConfigManager do
 
   defp wait_for_cluster_recursive(expected_node_ids, 0, _delay_ms, attempt) do
     status = check_cluster_status(expected_node_ids)
+
     Logger.warning(
       "Cluster readiness timeout after #{attempt - 1} attempts. " <>
-      "Ready: #{status.ready_count}/#{status.total} nodes. " <>
-      "Missing: #{inspect(status.missing_nodes)}"
+        "Ready: #{status.ready_count}/#{status.total} nodes. " <>
+        "Missing: #{inspect(status.missing_nodes)}"
     )
+
     {:error, status}
   end
 
@@ -863,14 +909,16 @@ defmodule CorroPort.ConfigManager do
     if status.ready do
       Logger.info(
         "Cluster ready: #{status.ready_count}/#{status.total} nodes connected " <>
-        "(attempt #{attempt}). Nodes: #{inspect(status.ready_nodes)}"
+          "(attempt #{attempt}). Nodes: #{inspect(status.ready_nodes)}"
       )
+
       {:ok, "All #{status.total} nodes are ready"}
     else
       Logger.debug(
         "Cluster not ready (#{status.ready_count}/#{status.total}), " <>
-        "missing: #{inspect(status.missing_nodes)}, retrying..."
+          "missing: #{inspect(status.missing_nodes)}, retrying..."
       )
+
       Process.sleep(delay_ms)
       wait_for_cluster_recursive(expected_node_ids, attempts_left - 1, delay_ms, attempt + 1)
     end

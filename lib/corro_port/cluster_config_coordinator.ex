@@ -80,10 +80,12 @@ defmodule CorroPort.ClusterConfigCoordinator do
     Phoenix.PubSub.subscribe(CorroPort.PubSub, @pubsub_topic)
     Logger.info("ClusterConfigCoordinator: Started and subscribed to #{@pubsub_topic}")
 
-    {:ok, %{
-      update_status: %{},  # node_id => %{status, message, timestamp}
-      last_update: nil
-    }}
+    {:ok,
+     %{
+       # node_id => %{status, message, timestamp}
+       update_status: %{},
+       last_update: nil
+     }}
   end
 
   @impl true
@@ -91,18 +93,23 @@ defmodule CorroPort.ClusterConfigCoordinator do
     local_node_id = NodeConfig.get_corrosion_node_id()
     timestamp = DateTime.utc_now()
 
-    {target_description, target_node_id} = case target do
-      :all -> {"all nodes", nil}
-      {:single, node_id} -> {"node #{node_id}", node_id}
-    end
+    {target_description, target_node_id} =
+      case target do
+        :all -> {"all nodes", nil}
+        {:single, node_id} -> {"node #{node_id}", node_id}
+      end
 
-    Logger.info("ClusterConfigCoordinator: Broadcasting config update from #{local_node_id} to #{target_description}")
+    Logger.info(
+      "ClusterConfigCoordinator: Broadcasting config update from #{local_node_id} to #{target_description}"
+    )
 
     # Get all connected Elixir nodes (including self)
     connected_nodes = [Node.self() | Node.list()]
     node_count = length(connected_nodes)
 
-    Logger.info("ClusterConfigCoordinator: Broadcasting to #{node_count} Elixir nodes: #{inspect(connected_nodes)}")
+    Logger.info(
+      "ClusterConfigCoordinator: Broadcasting to #{node_count} Elixir nodes: #{inspect(connected_nodes)}"
+    )
 
     # Broadcast to all nodes via PubSub (they'll filter by target_node_id)
     Phoenix.PubSub.broadcast(
@@ -113,19 +120,27 @@ defmodule CorroPort.ClusterConfigCoordinator do
 
     # Initialize status tracking for expected responses
     # We'll get responses from all nodes (including ourselves)
-    initial_status = Map.new(connected_nodes, fn node ->
-      {node, %{status: :pending, message: "Waiting for response", timestamp: timestamp}}
-    end)
+    initial_status =
+      Map.new(connected_nodes, fn node ->
+        {node, %{status: :pending, message: "Waiting for response", timestamp: timestamp}}
+      end)
 
-    state = %{state |
-      update_status: initial_status,
-      last_update: %{hosts: bootstrap_hosts, from: local_node_id, timestamp: timestamp, target: target}
+    state = %{
+      state
+      | update_status: initial_status,
+        last_update: %{
+          hosts: bootstrap_hosts,
+          from: local_node_id,
+          timestamp: timestamp,
+          target: target
+        }
     }
 
-    expected_nodes = case target do
-      :all -> connected_nodes
-      {:single, node_id} -> [node_id]
-    end
+    expected_nodes =
+      case target do
+        :all -> connected_nodes
+        {:single, node_id} -> [node_id]
+      end
 
     {:reply, {:ok, expected_nodes}, state}
   end
@@ -136,7 +151,10 @@ defmodule CorroPort.ClusterConfigCoordinator do
   end
 
   @impl true
-  def handle_info({:update_bootstrap, bootstrap_hosts, from_node, timestamp, target_node_id}, state) do
+  def handle_info(
+        {:update_bootstrap, bootstrap_hosts, from_node, timestamp, target_node_id},
+        state
+      ) do
     local_node_id = NodeConfig.get_corrosion_node_id()
 
     # Check if this update is for us (nil means all nodes, otherwise check match)
@@ -145,22 +163,29 @@ defmodule CorroPort.ClusterConfigCoordinator do
     if should_apply do
       Logger.info(
         "ClusterConfigCoordinator: Received config update from #{from_node} at #{timestamp}. " <>
-        "Applying to local node #{local_node_id}"
+          "Applying to local node #{local_node_id}"
       )
 
       # Apply the config update locally
       result = ConfigManager.update_bootstrap(bootstrap_hosts, true)
 
       # Broadcast result back
-      response = case result do
-        {:ok, message} ->
-          Logger.info("ClusterConfigCoordinator: Successfully applied config update on #{local_node_id}")
-          {:update_success, Node.self(), local_node_id, message, timestamp}
+      response =
+        case result do
+          {:ok, message} ->
+            Logger.info(
+              "ClusterConfigCoordinator: Successfully applied config update on #{local_node_id}"
+            )
 
-        {:error, reason} ->
-          Logger.error("ClusterConfigCoordinator: Failed to apply config update on #{local_node_id}: #{inspect(reason)}")
-          {:update_error, Node.self(), local_node_id, reason, timestamp}
-      end
+            {:update_success, Node.self(), local_node_id, message, timestamp}
+
+          {:error, reason} ->
+            Logger.error(
+              "ClusterConfigCoordinator: Failed to apply config update on #{local_node_id}: #{inspect(reason)}"
+            )
+
+            {:update_error, Node.self(), local_node_id, reason, timestamp}
+        end
 
       Phoenix.PubSub.broadcast(CorroPort.PubSub, @pubsub_topic, response)
     else
@@ -174,38 +199,44 @@ defmodule CorroPort.ClusterConfigCoordinator do
 
   @impl true
   def handle_info({:update_success, elixir_node, node_id, message, timestamp}, state) do
-    Logger.info("ClusterConfigCoordinator: Received success from #{elixir_node} (#{node_id}): #{message}")
+    Logger.info(
+      "ClusterConfigCoordinator: Received success from #{elixir_node} (#{node_id}): #{message}"
+    )
 
     # Update status tracking
-    state = if Map.has_key?(state.update_status, elixir_node) do
-      put_in(state, [:update_status, elixir_node], %{
-        status: :success,
-        message: message,
-        timestamp: timestamp,
-        node_id: node_id
-      })
-    else
-      state
-    end
+    state =
+      if Map.has_key?(state.update_status, elixir_node) do
+        put_in(state, [:update_status, elixir_node], %{
+          status: :success,
+          message: message,
+          timestamp: timestamp,
+          node_id: node_id
+        })
+      else
+        state
+      end
 
     {:noreply, state}
   end
 
   @impl true
   def handle_info({:update_error, elixir_node, node_id, reason, timestamp}, state) do
-    Logger.error("ClusterConfigCoordinator: Received error from #{elixir_node} (#{node_id}): #{inspect(reason)}")
+    Logger.error(
+      "ClusterConfigCoordinator: Received error from #{elixir_node} (#{node_id}): #{inspect(reason)}"
+    )
 
     # Update status tracking
-    state = if Map.has_key?(state.update_status, elixir_node) do
-      put_in(state, [:update_status, elixir_node], %{
-        status: :error,
-        message: inspect(reason),
-        timestamp: timestamp,
-        node_id: node_id
-      })
-    else
-      state
-    end
+    state =
+      if Map.has_key?(state.update_status, elixir_node) do
+        put_in(state, [:update_status, elixir_node], %{
+          status: :error,
+          message: inspect(reason),
+          timestamp: timestamp,
+          node_id: node_id
+        })
+      else
+        state
+      end
 
     {:noreply, state}
   end

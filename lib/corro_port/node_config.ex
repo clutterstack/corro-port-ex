@@ -52,7 +52,8 @@ defmodule CorroPort.NodeConfig do
   def get_corrosion_node_id do
     if production?() do
       # In production, use the full node_id which includes region prefix
-      Keyword.fetch!(app_node_config(), :node_id) || Keyword.fetch!(app_node_config(), :fly_machine_id) || "unknown"
+      Keyword.fetch!(app_node_config(), :node_id) ||
+        Keyword.fetch!(app_node_config(), :fly_machine_id) || "unknown"
     else
       # In development, use the configured node_id directly
       Keyword.fetch!(app_node_config(), :node_id) || "unknown"
@@ -71,7 +72,6 @@ defmodule CorroPort.NodeConfig do
   Returns nil if not running on fly.io.
   """
   def get_fly_config do
-
     if production?() do
       %{
         app_name: Keyword.fetch!(app_node_config(), :fly_app_name),

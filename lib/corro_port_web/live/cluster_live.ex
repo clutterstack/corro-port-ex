@@ -64,19 +64,20 @@ defmodule CorroPortWeb.ClusterLive do
     {:noreply, put_flash(socket, :info, "API data refreshed")}
   end
 
-
   # Real-time updates from domain modules
 
   def handle_info({:cli_members_updated, cli_data}, socket) do
     Logger.debug("ClusterLive: Received CLI members update")
 
     # Recreate marker groups with updated CLI data
-    marker_groups = create_region_groups(socket.assigns.dns_data, cli_data, socket.assigns.local_node)
+    marker_groups =
+      create_region_groups(socket.assigns.dns_data, cli_data, socket.assigns.local_node)
 
-    socket = assign(socket, %{
-      cli_data: cli_data,
-      marker_groups: marker_groups
-    })
+    socket =
+      assign(socket, %{
+        cli_data: cli_data,
+        marker_groups: marker_groups
+      })
 
     {:noreply, socket}
   end
@@ -122,7 +123,6 @@ defmodule CorroPortWeb.ClusterLive do
 
       # Computed marker groups for map display
       marker_groups: marker_groups,
-
       last_updated: DateTime.utc_now()
     })
     |> maybe_flash_cluster_error(cluster_error)
@@ -133,7 +133,8 @@ defmodule CorroPortWeb.ClusterLive do
     dns_data = CorroPort.DNSLookup.get_dns_data()
 
     # Recompute marker groups (depends on dns_data, cli_data, local_node)
-    marker_groups = create_region_groups(dns_data, socket.assigns.cli_data, socket.assigns.local_node)
+    marker_groups =
+      create_region_groups(dns_data, socket.assigns.cli_data, socket.assigns.local_node)
 
     assign(socket, %{
       dns_data: dns_data,
@@ -179,7 +180,11 @@ defmodule CorroPortWeb.ClusterLive do
   end
 
   defp maybe_flash_cluster_error(socket, error) do
-    put_flash(socket, :error, "Failed to refresh __corro_members from Corrosion API. Showing last successful data. Reason: #{inspect(error)}")
+    put_flash(
+      socket,
+      :error,
+      "Failed to refresh __corro_members from Corrosion API. Showing last successful data. Reason: #{inspect(error)}"
+    )
   end
 
   defp create_region_groups(dns_data, cli_data, local_node) do
@@ -187,25 +192,28 @@ defmodule CorroPortWeb.ClusterLive do
     groups = []
 
     # Our region (primary/local node)
-    groups = if local_node.region != "unknown" do
-      [%{nodes: [local_node.region], style: :local, label: "Our Node"} | groups]
-    else
-      groups
-    end
+    groups =
+      if local_node.region != "unknown" do
+        [%{nodes: [local_node.region], style: :local, label: "Our Node"} | groups]
+      else
+        groups
+      end
 
     # CLI regions
-    groups = if !Enum.empty?(cli_data.regions) do
-      [%{nodes: cli_data.regions, style: :cli, label: "Active Regions by CLI"} | groups]
-    else
-      groups
-    end
+    groups =
+      if !Enum.empty?(cli_data.regions) do
+        [%{nodes: cli_data.regions, style: :cli, label: "Active Regions by CLI"} | groups]
+      else
+        groups
+      end
 
     # DNS regions (excluding our region)
-    groups = if !Enum.empty?(dns_data.regions) do
-      [%{nodes: dns_data.regions, style: :dns, label: "App Regions by DNS"} | groups]
-    else
-      groups
-    end
+    groups =
+      if !Enum.empty?(dns_data.regions) do
+        [%{nodes: dns_data.regions, style: :dns, label: "App Regions by DNS"} | groups]
+      else
+        groups
+      end
   end
 
   def render(assigns) do
@@ -214,72 +222,75 @@ defmodule CorroPortWeb.ClusterLive do
     cli_alert = DisplayHelpers.cli_alert_config(assigns.cli_data)
     api_alert = DisplayHelpers.api_alert_config(assigns.api_data)
 
-    summary_stats = DisplayHelpers.cluster_summary_stats(
-      assigns.dns_data,
-      assigns.cli_data,
-      assigns.api_data,
-      assigns.dns_data.regions,
-      assigns.cli_data.regions
-    )
+    summary_stats =
+      DisplayHelpers.cluster_summary_stats(
+        assigns.dns_data,
+        assigns.cli_data,
+        assigns.api_data,
+        assigns.dns_data.regions,
+        assigns.cli_data.regions
+      )
 
     cli_member_data = DisplayHelpers.build_cli_member_data(assigns.cli_data)
     cli_error = DisplayHelpers.extract_cli_error(assigns.cli_data)
-    cache_status = DisplayHelpers.all_cache_status(assigns.dns_data, assigns.cli_data, assigns.api_data)
 
-    assigns = assign(assigns, %{
-      dns_alert: dns_alert,
-      cli_alert: cli_alert,
-      api_alert: api_alert,
-      summary_stats: summary_stats,
-      cli_member_data: cli_member_data,
-      cli_error: cli_error,
-      cache_status: cache_status
-    })
+    cache_status =
+      DisplayHelpers.all_cache_status(assigns.dns_data, assigns.cli_data, assigns.api_data)
+
+    assigns =
+      assign(assigns, %{
+        dns_alert: dns_alert,
+        cli_alert: cli_alert,
+        api_alert: api_alert,
+        summary_stats: summary_stats,
+        cli_member_data: cli_member_data,
+        cli_error: cli_error,
+        cache_status: cache_status
+      })
 
     ~H"""
     <div class="space-y-6">
       <!-- Navigation Tabs -->
       <NavTabs.nav_tabs active={:cluster} />
-
-      <!-- Header with refresh all button -->
+      
+    <!-- Header with refresh all button -->
       <ClusterHeader.cluster_header />
-
-      <!-- Error alerts using pre-computed configurations -->
+      
+    <!-- Error alerts using pre-computed configurations -->
       <.error_alert :if={@dns_alert} config={@dns_alert} />
       <.error_alert :if={@cli_alert} config={@cli_alert} />
       <.error_alert :if={@api_alert} config={@api_alert} />
-
-      <!-- Enhanced World Map with Regions -->
-      <FlyMapEx.render
-        marker_groups={@marker_groups}
-        theme={:monitoring}
-      />
-
-      <!-- Enhanced Cluster Summary using pre-computed stats -->
-      <ClusterSummaryCard.cluster_summary_card
-        summary_stats={@summary_stats}
-      />
-
-      <!-- DNS-Discovered Nodes Table -->
+      
+    <!-- Enhanced World Map with Regions -->
+      <FlyMapEx.render marker_groups={@marker_groups} theme={:monitoring} />
+      
+    <!-- Enhanced Cluster Summary using pre-computed stats -->
+      <ClusterSummaryCard.cluster_summary_card summary_stats={@summary_stats} />
+      
+    <!-- DNS-Discovered Nodes Table -->
       <DNSNodesTable.display dns_data={@dns_data} />
-
-      <!-- CLI Members Display with clean data structure -->
+      
+    <!-- CLI Members Display with clean data structure -->
       <CLIMembersTable.display
         cli_data={@cli_data}
         cli_member_data={@cli_member_data}
         cli_error={@cli_error}
       />
-
-      <!-- Corrosion API (__corro_members) table entries -->
-      <MembersTable.cluster_members_table :if={@cluster_info} cluster_info={@cluster_info} api_data={@api_data} />
-
-      <!-- About Data Sources (collapsible) -->
+      
+    <!-- Corrosion API (__corro_members) table entries -->
+      <MembersTable.cluster_members_table
+        :if={@cluster_info}
+        cluster_info={@cluster_info}
+        api_data={@api_data}
+      />
+      
+    <!-- About Data Sources (collapsible) -->
       <DataSourcesInfo.data_sources_info />
-
-      <!-- Cache status indicators using pre-computed status -->
+      
+    <!-- Cache status indicators using pre-computed status -->
       <CacheStatusCard.cache_status_card cache_status={@cache_status} />
-
-      <!-- Last Updated -->
+      
+    <!-- Last Updated -->
       <div class="text-xs text-base-content/70 text-center">
         Page updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}
       </div>
@@ -290,6 +301,7 @@ defmodule CorroPortWeb.ClusterLive do
   # Helper components extracted from inline template logic
 
   defp error_alert(%{config: nil} = assigns), do: ~H""
+
   defp error_alert(assigns) do
     ~H"""
     <div class={@config.class}>
@@ -301,5 +313,4 @@ defmodule CorroPortWeb.ClusterLive do
     </div>
     """
   end
-
 end

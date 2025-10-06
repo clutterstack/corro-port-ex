@@ -146,6 +146,8 @@ rm logs/corrosion-node*.log
 rm logs/node*.log
 ```
 
+**Note that if there's anything written to a sqlite db under the corro_port directory (e.g. analytics), a change to it triggers esbuild and tailwind watchers. In a cluster, this can result in lock contention on the build dir after a message gets sent.**
+
 ## Configuration Management
 
 CorroPort uses a **canonical/runtime config split** for safe runtime editing with easy fallback:

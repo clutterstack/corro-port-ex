@@ -55,16 +55,22 @@ defmodule CorroPort.ConfigSubscriber do
     Logger.info("ConfigSubscriber: Starting for node #{local_node_id}")
 
     # Load current config to avoid restarting on initial subscription data
-    last_config = case ConfigManager.get_node_config(local_node_id) do
-      {:ok, config} ->
-        Logger.debug("ConfigSubscriber: Loaded existing config: #{inspect(config.bootstrap_hosts)}")
-        config
-      {:error, _} ->
-        Logger.debug("ConfigSubscriber: No existing config found")
-        nil
-    end
+    last_config =
+      case ConfigManager.get_node_config(local_node_id) do
+        {:ok, config} ->
+          Logger.debug(
+            "ConfigSubscriber: Loaded existing config: #{inspect(config.bootstrap_hosts)}"
+          )
 
-    {:ok, %__MODULE__{status: :initialising, local_node_id: local_node_id, last_config: last_config},
+          config
+
+        {:error, _} ->
+          Logger.debug("ConfigSubscriber: No existing config found")
+          nil
+      end
+
+    {:ok,
+     %__MODULE__{status: :initialising, local_node_id: local_node_id, last_config: last_config},
      {:continue, :start_subscription}}
   end
 
@@ -147,7 +153,9 @@ defmodule CorroPort.ConfigSubscriber do
 
         # Only process if this is truly a new config (avoid restart loops)
         if config_changed?(state.last_config, config) do
-          Logger.info("ConfigSubscriber: Applying new bootstrap config: #{inspect(config.bootstrap_hosts)}")
+          Logger.info(
+            "ConfigSubscriber: Applying new bootstrap config: #{inspect(config.bootstrap_hosts)}"
+          )
 
           case apply_config_change(config) do
             :ok ->
@@ -213,9 +221,7 @@ defmodule CorroPort.ConfigSubscriber do
          }}
 
       {:error, reason} ->
-        Logger.error(
-          "ConfigSubscriber: Failed to parse bootstrap_hosts JSON: #{inspect(reason)}"
-        )
+        Logger.error("ConfigSubscriber: Failed to parse bootstrap_hosts JSON: #{inspect(reason)}")
 
         {:error, :invalid_json}
     end

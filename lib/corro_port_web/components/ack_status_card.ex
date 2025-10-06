@@ -23,7 +23,7 @@ defmodule CorroPortWeb.AckStatusCard do
               Sent: {format_message_timestamp(@ack_status.latest_message)}
             </div>
           </div>
-
+          
     <!-- Acknowledgment Progress -->
           <div class="space-y-2">
             <div class="flex items-center justify-between text-sm">
@@ -33,7 +33,7 @@ defmodule CorroPortWeb.AckStatusCard do
               </span>
             </div>
           </div>
-
+          
     <!-- Node Acknowledgment Status -->
           <div class="space-y-1">
             <div class="text-xs font-semibold">Node Status:</div>
@@ -55,21 +55,27 @@ defmodule CorroPortWeb.AckStatusCard do
                     else: "text-base-content/50"
                   )
                 ]}>
-                  {format_node_status(get_node_ack(node_id, @ack_status.acknowledgments), @ack_status.latest_message)}
+                  {format_node_status(
+                    get_node_ack(node_id, @ack_status.acknowledgments),
+                    @ack_status.latest_message
+                  )}
                 </span>
               </div>
             </div>
           </div>
         </div>
-
+        
     <!-- Loading state -->
         <div :if={!@ack_status} class="flex items-center justify-center py-4">
           <div class="loading loading-spinner loading-sm"></div>
           <span class="ml-2 text-sm">Loading acknowledgment status...</span>
         </div>
-
+        
     <!-- AckSender Status -->
-        <div :if={@ack_sender_status && @ack_sender_status.status == :running} class="mt-4 pt-3 border-t border-base-300">
+        <div
+          :if={@ack_sender_status && @ack_sender_status.status == :running}
+          class="mt-4 pt-3 border-t border-base-300"
+        >
           <div class="text-xs text-base-content/70">
             <span class="text-success">●</span> AckSender running
           </div>

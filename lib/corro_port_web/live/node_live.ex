@@ -42,14 +42,17 @@ defmodule CorroPortWeb.NodeLive do
         overmind_available: overmind_available,
         is_production: NodeConfig.production?(),
         # Cluster-wide configuration
-        cluster_config_mode: :single,  # :single or :all
+        # :single or :all
+        cluster_config_mode: :single,
         cluster_configs: [],
         cluster_config_input: bootstrap_hosts,
         selected_node_id: nil,
         active_nodes: [],
         # Cluster readiness tracking
-        cluster_readiness_status: nil,  # nil | %{ready: bool, ready_count: N, total: N, ...}
-        updated_node_ids: []  # Track which nodes were updated for readiness check
+        # nil | %{ready: bool, ready_count: N, total: N, ...}
+        cluster_readiness_status: nil,
+        # Track which nodes were updated for readiness check
+        updated_node_ids: []
       })
 
     {:ok, fetch_node_data(socket)}
@@ -149,7 +152,9 @@ defmodule CorroPortWeb.NodeLive do
       case result do
         # All nodes update via PubSub - returns connected Elixir nodes
         {:ok, elixir_nodes} when is_list(elixir_nodes) ->
-          Logger.info("Config update broadcast to #{length(elixir_nodes)} Elixir nodes: #{inspect(elixir_nodes)}")
+          Logger.info(
+            "Config update broadcast to #{length(elixir_nodes)} Elixir nodes: #{inspect(elixir_nodes)}"
+          )
 
           # Start status polling to track update progress
           Process.send_after(self(), {:check_update_status, elixir_nodes, 0}, 1000)
@@ -165,7 +170,10 @@ defmodule CorroPortWeb.NodeLive do
           socket
           |> assign(:updated_node_ids, elixir_nodes)
           |> assign(:cluster_readiness_status, initial_status)
-          |> put_flash(:info, "Config update broadcast to #{length(elixir_nodes)} nodes. Waiting for completion...")
+          |> put_flash(
+            :info,
+            "Config update broadcast to #{length(elixir_nodes)} nodes. Waiting for completion..."
+          )
           |> fetch_cluster_configs()
 
         # Single node update (no node_ids list)
@@ -261,15 +269,26 @@ defmodule CorroPortWeb.NodeLive do
   end
 
   def handle_info({:check_update_status, expected_elixir_nodes, attempt}, socket) do
-    max_attempts = 60  # 60 seconds total (1s intervals)
+    # 60 seconds total (1s intervals)
+    max_attempts = 60
     status_map = ClusterConfigCoordinator.get_update_status()
 
-    Logger.debug("Update status check (attempt #{attempt + 1}/#{max_attempts}): #{inspect(status_map)}")
+    Logger.debug(
+      "Update status check (attempt #{attempt + 1}/#{max_attempts}): #{inspect(status_map)}"
+    )
 
     # Count successes and failures
-    success_nodes = Enum.filter(status_map, fn {_node, info} -> info.status == :success end) |> Enum.map(fn {node, _} -> node end)
-    failed_nodes = Enum.filter(status_map, fn {_node, info} -> info.status == :error end) |> Enum.map(fn {node, _} -> node end)
-    pending_nodes = Enum.filter(status_map, fn {_node, info} -> info.status == :pending end) |> Enum.map(fn {node, _} -> node end)
+    success_nodes =
+      Enum.filter(status_map, fn {_node, info} -> info.status == :success end)
+      |> Enum.map(fn {node, _} -> node end)
+
+    failed_nodes =
+      Enum.filter(status_map, fn {_node, info} -> info.status == :error end)
+      |> Enum.map(fn {node, _} -> node end)
+
+    pending_nodes =
+      Enum.filter(status_map, fn {_node, info} -> info.status == :pending end)
+      |> Enum.map(fn {node, _} -> node end)
 
     total = length(expected_elixir_nodes)
     ready_count = length(success_nodes)
@@ -288,6 +307,7 @@ defmodule CorroPortWeb.NodeLive do
       # All nodes succeeded
       ready_count == total && Enum.empty?(failed_nodes) ->
         Logger.info("Cluster config update complete: All #{total} nodes succeeded")
+
         socket =
           socket
           |> assign(:cluster_readiness_status, nil)
@@ -299,28 +319,42 @@ defmodule CorroPortWeb.NodeLive do
       # Some nodes failed
       not Enum.empty?(failed_nodes) && Enum.empty?(pending_nodes) ->
         Logger.error("Cluster config update failed on some nodes: #{inspect(failed_nodes)}")
+
         socket =
           socket
-          |> put_flash(:error, "Config update failed on #{length(failed_nodes)} nodes: #{inspect(failed_nodes)}")
+          |> put_flash(
+            :error,
+            "Config update failed on #{length(failed_nodes)} nodes: #{inspect(failed_nodes)}"
+          )
 
         {:noreply, socket}
 
       # Timeout waiting for pending nodes
       attempt >= max_attempts ->
-        Logger.warning("Cluster config update timeout. Success: #{ready_count}/#{total}, Pending: #{inspect(pending_nodes)}, Failed: #{inspect(failed_nodes)}")
+        Logger.warning(
+          "Cluster config update timeout. Success: #{ready_count}/#{total}, Pending: #{inspect(pending_nodes)}, Failed: #{inspect(failed_nodes)}"
+        )
+
         socket =
           socket
-          |> put_flash(:error, "Update timeout. #{ready_count}/#{total} succeeded. Pending: #{Enum.join(Enum.map(pending_nodes, &Atom.to_string/1), ", ")}")
+          |> put_flash(
+            :error,
+            "Update timeout. #{ready_count}/#{total} succeeded. Pending: #{Enum.join(Enum.map(pending_nodes, &Atom.to_string/1), ", ")}"
+          )
 
         {:noreply, socket}
 
       # Keep polling
       true ->
-        Process.send_after(self(), {:check_update_status, expected_elixir_nodes, attempt + 1}, 1000)
+        Process.send_after(
+          self(),
+          {:check_update_status, expected_elixir_nodes, attempt + 1},
+          1000
+        )
+
         {:noreply, socket}
     end
   end
-
 
   # Private functions
 
@@ -363,10 +397,11 @@ defmodule CorroPortWeb.NodeLive do
     conn = ConnectionManager.get_connection()
 
     # Fetch database info
-    db_info = case CorroClient.get_database_info(conn) do
-      {:ok, info} -> info
-      {:error, _} -> %{}
-    end
+    db_info =
+      case CorroClient.get_database_info(conn) do
+        {:ok, info} -> info
+        {:error, _} -> %{}
+      end
 
     process_info = get_process_info()
     file_info = get_file_info()
@@ -405,21 +440,24 @@ defmodule CorroPortWeb.NodeLive do
 
   defp get_active_nodes_with_labels do
     # Get CLI members (has UUIDs)
-    cli_members = case CorroPort.CLIClusterData.get_members() do
-      %{members: members} when is_list(members) -> members
-      _ -> []
-    end
+    cli_members =
+      case CorroPort.CLIClusterData.get_members() do
+        %{members: members} when is_list(members) -> members
+        _ -> []
+      end
 
     # Get node configs (has UUID -> node_id mapping)
-    node_configs = case ConfigManager.get_all_node_configs() do
-      {:ok, configs} -> configs
-      {:error, _} -> []
-    end
+    node_configs =
+      case ConfigManager.get_all_node_configs() do
+        {:ok, configs} -> configs
+        {:error, _} -> []
+      end
 
     # Build UUID -> node_id map
-    uuid_to_node_id = Map.new(node_configs, fn config ->
-      {config.corrosion_actor_id, config.node_id}
-    end)
+    uuid_to_node_id =
+      Map.new(node_configs, fn config ->
+        {config.corrosion_actor_id, config.node_id}
+      end)
 
     # Map CLI members to {node_id, label} tuples
     Enum.map(cli_members, fn member ->
@@ -431,6 +469,7 @@ defmodule CorroPortWeb.NodeLive do
         nil ->
           # Fallback: use UUID as node_id (won't match ConfigSubscriber, but at least visible)
           %{node_id: uuid, label: addr}
+
         node_id ->
           # Best: use actual node_id that ConfigSubscriber expects
           %{node_id: node_id, label: "#{node_id} (#{addr})"}
@@ -671,22 +710,22 @@ defmodule CorroPortWeb.NodeLive do
       </.header>
 
       <.connection_indicator api_cx_test={@api_cx_test} />
-
+      
     <!-- Loading State -->
       <div :if={@loading} class="flex items-center justify-center py-8">
         <div class="loading loading-spinner loading-lg"></div>
         <span class="ml-4">Loading node information...</span>
       </div>
-
+      
     <!-- Error State -->
       <div :if={@error} class="alert alert-error">
         <.icon name="hero-exclamation-circle" class="w-5 h-5" />
         <span>{@error}</span>
       </div>
-
+      
     <!-- Node Information Cards -->
       <div :if={!@loading} class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
+        
     <!-- The Elixir Application -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -717,7 +756,7 @@ defmodule CorroPortWeb.NodeLive do
             </div>
           </div>
         </div>
-
+        
     <!-- Config from Application Environment -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -729,43 +768,43 @@ defmodule CorroPortWeb.NodeLive do
             </div>
           </div>
         </div>
-
+        
     <!-- Process Information -->
-      <div class="card bg-base-100">
-        <div class="card-body">
-          <h3 class="card-title text-lg">Erlang Processes</h3>
-          <div :if={@process_info} class="space-y-3">
-            <div class="grid grid-cols-2 gap-4 text-sm">
-              <div><strong>Total Processes:</strong></div>
-              <div>{@process_info.total_processes}</div>
+        <div class="card bg-base-100">
+          <div class="card-body">
+            <h3 class="card-title text-lg">Erlang Processes</h3>
+            <div :if={@process_info} class="space-y-3">
+              <div class="grid grid-cols-2 gap-4 text-sm">
+                <div><strong>Total Processes:</strong></div>
+                <div>{@process_info.total_processes}</div>
 
-              <div><strong>Memory Usage by :erlang.memory():</strong></div>
-              <div>{format_memory(@process_info.memory_usage[:total])}</div>
-            </div>
-
+                <div><strong>Memory Usage by :erlang.memory():</strong></div>
+                <div>{format_memory(@process_info.memory_usage[:total])}</div>
+              </div>
+              
     <!-- Supervisor Children -->
-            <div :if={@process_info.supervisors != []} class="mt-4">
-              <h4 class="font-semibold text-sm mb-2">Supervisor Children:</h4>
-              <div class="space-y-1">
-                <div
-                  :for={child <- @process_info.supervisors}
-                  class="flex items-center justify-between text-xs"
-                >
-                  <span class="font-mono">{child.id}</span>
-                  <span class={
-                    if child.status == :alive,
-                      do: "badge badge-success badge-xs",
-                      else: "badge badge-error badge-xs"
-                  }>
-                    {child.status}
-                  </span>
+              <div :if={@process_info.supervisors != []} class="mt-4">
+                <h4 class="font-semibold text-sm mb-2">Supervisor Children:</h4>
+                <div class="space-y-1">
+                  <div
+                    :for={child <- @process_info.supervisors}
+                    class="flex items-center justify-between text-xs"
+                  >
+                    <span class="font-mono">{child.id}</span>
+                    <span class={
+                      if child.status == :alive,
+                        do: "badge badge-success badge-xs",
+                        else: "badge badge-error badge-xs"
+                    }>
+                      {child.status}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-
+        
     <!-- Corrosion Config File -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -782,14 +821,14 @@ defmodule CorroPortWeb.NodeLive do
         </div>
       </div>
 
-    <BootstrapConfigComponent.bootstrap_config
+      <BootstrapConfigComponent.bootstrap_config
         bootstrap_hosts={@bootstrap_hosts}
         bootstrap_input={@bootstrap_input}
         bootstrap_status={@bootstrap_status}
         overmind_available={@overmind_available}
         is_production={@is_production}
       />
-
+      
     <!-- Cluster-wide Configuration Management -->
       <div class="card bg-base-100">
         <div class="card-body">
@@ -809,12 +848,16 @@ defmodule CorroPortWeb.NodeLive do
             <.icon name="hero-information-circle" class="w-5 h-5" />
             <div class="text-sm">
               <p>Changes are broadcast via Elixir PubSub to all nodes in the cluster.</p>
-              <p>Each node's ClusterConfigCoordinator applies changes locally and restarts Corrosion.</p>
-              <p class="text-warning mt-1">This approach is safe even if Corrosion gossip is broken by bad bootstrap config.</p>
+              <p>
+                Each node's ClusterConfigCoordinator applies changes locally and restarts Corrosion.
+              </p>
+              <p class="text-warning mt-1">
+                This approach is safe even if Corrosion gossip is broken by bad bootstrap config.
+              </p>
             </div>
           </div>
-
-          <!-- Mode Selection -->
+          
+    <!-- Mode Selection -->
           <div class="flex gap-2 mb-4">
             <button
               class={[
@@ -837,19 +880,15 @@ defmodule CorroPortWeb.NodeLive do
               Update Single Node
             </button>
           </div>
-
-          <!-- Configuration Form -->
+          
+    <!-- Configuration Form -->
           <form phx-submit="update_cluster_config">
             <!-- Single Node Mode: Node Selector -->
             <div :if={@cluster_config_mode == :single} class="form-control mb-4">
               <label class="label">
                 <span class="label-text">Select Target Node</span>
               </label>
-              <select
-                class="select select-bordered w-full"
-                phx-change="select_node"
-                name="node_id"
-              >
+              <select class="select select-bordered w-full" phx-change="select_node" name="node_id">
                 <option value="" selected={@selected_node_id == nil}>
                   Choose a node...
                 </option>
@@ -862,12 +901,14 @@ defmodule CorroPortWeb.NodeLive do
                 </option>
               </select>
             </div>
-
-            <!-- Bootstrap Hosts Input -->
+            
+    <!-- Bootstrap Hosts Input -->
             <div class="form-control mb-4">
               <label class="label">
                 <span class="label-text">
-                  {if @cluster_config_mode == :all, do: "Bootstrap Hosts for All Nodes", else: "Bootstrap Hosts"}
+                  {if @cluster_config_mode == :all,
+                    do: "Bootstrap Hosts for All Nodes",
+                    else: "Bootstrap Hosts"}
                 </span>
                 <span class="label-text-alt">Format: host1:port1, host2:port2</span>
               </label>
@@ -880,8 +921,8 @@ defmodule CorroPortWeb.NodeLive do
                 phx-change="update_cluster_config_input"
               />
             </div>
-
-            <!-- Update Button -->
+            
+    <!-- Update Button -->
             <button
               type="submit"
               class="btn btn-primary"
@@ -893,22 +934,29 @@ defmodule CorroPortWeb.NodeLive do
                 else: "Update Selected Node"}
             </button>
           </form>
-
-          <!-- Cluster Readiness Status -->
-          <div :if={@cluster_readiness_status} class="alert mt-4" class={[
-            "alert",
-            if(@cluster_readiness_status.ready, do: "alert-success", else: "alert-info")
-          ]}>
-            <.icon name={
-              if @cluster_readiness_status.ready do
-                "hero-check-circle"
-              else
-                "hero-arrow-path"
-              end
-            } class={[
-              "w-5 h-5",
-              if(!@cluster_readiness_status.ready, do: "animate-spin")
-            ]} />
+          
+    <!-- Cluster Readiness Status -->
+          <div
+            :if={@cluster_readiness_status}
+            class="alert mt-4"
+            class={[
+              "alert",
+              if(@cluster_readiness_status.ready, do: "alert-success", else: "alert-info")
+            ]}
+          >
+            <.icon
+              name={
+                if @cluster_readiness_status.ready do
+                  "hero-check-circle"
+                else
+                  "hero-arrow-path"
+                end
+              }
+              class={[
+                "w-5 h-5",
+                if(!@cluster_readiness_status.ready, do: "animate-spin")
+              ]}
+            />
             <div>
               <div class="font-semibold">
                 {if @cluster_readiness_status.ready do
@@ -927,13 +975,16 @@ defmodule CorroPortWeb.NodeLive do
                   " (#{Enum.join(@cluster_readiness_status.ready_nodes, ", ")})"
                 end}
               </div>
-              <div :if={length(@cluster_readiness_status.missing_nodes) > 0} class="text-xs mt-1 opacity-80">
+              <div
+                :if={length(@cluster_readiness_status.missing_nodes) > 0}
+                class="text-xs mt-1 opacity-80"
+              >
                 Missing: {Enum.join(@cluster_readiness_status.missing_nodes, ", ")}
               </div>
             </div>
           </div>
-
-          <!-- Current Cluster Configs Table -->
+          
+    <!-- Current Cluster Configs Table -->
           <div :if={length(@cluster_configs) > 0} class="mt-6">
             <h4 class="font-semibold mb-2">Current Node Configurations</h4>
             <div class="overflow-x-auto">
@@ -960,12 +1011,13 @@ defmodule CorroPortWeb.NodeLive do
 
           <div :if={length(@cluster_configs) == 0} class="alert alert-warning mt-4">
             <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-            <span>No cluster configs found in node_configs table. Use the form above to create initial configs.</span>
+            <span>
+              No cluster configs found in node_configs table. Use the form above to create initial configs.
+            </span>
           </div>
         </div>
       </div>
-
-
+      
     <!-- Database Information -->
       <div :if={@db_info} class="card bg-base-100">
         <div class="card-body">
@@ -995,7 +1047,7 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-    <!-- File Information -->
+      <!-- File Information -->
       <div :if={@file_info && !@loading} class="card bg-base-100">
         <div class="card-body">
           <h3 class="card-title text-lg">File System</h3>
@@ -1035,7 +1087,7 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-
+      
     <!-- Last Updated -->
       <div :if={@last_updated} class="text-xs text-base-content/70 text-center">
         Last updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}
@@ -1046,6 +1098,7 @@ defmodule CorroPortWeb.NodeLive do
 
   def connection_indicator(assigns) do
     assigns = assign(assigns, :corro_status, connectivity_status(assigns.api_cx_test))
+
     ~H"""
     <div class="flex flex-wrap items-center gap-2 rounded-lg bg-base-200 px-3 py-2 text-sm">
       <.icon name={@corro_status.icon} class="h-4 w-4" />

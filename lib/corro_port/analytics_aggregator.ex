@@ -1,30 +1,21 @@
 defmodule CorroPort.AnalyticsAggregator do
   @moduledoc """
-  Aggregates analytics data from multiple nodes in the cluster during experiments.
+  Coordinates analytics collection for experiment dashboards.
 
-  This GenServer periodically polls all known cluster nodes to collect their
-  analytics data and provides consolidated views for visualization and analysis.
+  The GenServer schedules periodic refreshes, caches summaries/timing/metrics
+  with a short TTL, and broadcasts PubSub updates so LiveViews can refresh
+  without polling. At the moment all collections are local-first – we call into
+  the `CorroPort.Analytics` context directly and reuse the cached results for a
+  few seconds. The module still carries helper functions for multi-node polling
+  (via `CorroPort.CLIClusterData` discovery and HTTP requests), but those paths
+  are intentionally dormant until the remote Corrosion agents can expose the
+  required APIs without 500s.
 
   Key responsibilities:
-  - Discover active cluster nodes via ClusterMembership
-  - Poll each node's analytics data via HTTP API
-  - Aggregate timing statistics across all nodes
-  - Provide consolidated experiment summaries
-  - Cache aggregated data for performance
-  - Broadcast updates via PubSub for real-time dashboards
-
-  Data Collection Strategy:
-  - Each node maintains its own analytics database (Phase 1)
-  - Aggregator polls nodes every 10 seconds during experiments
-  - Aggregated data is cached locally with TTL
-  - Real-time updates are pushed via Phoenix PubSub
-
-  Experiment Data Model:
-  - Experiments are keyed by a shared experiment_id propagated to SystemMetrics and AckTracker
-  - Topology snapshots capture bootstrap peers and transaction parameters at experiment start
-  - Message events track per-message send/ack timing with originating/target node context
-  - System metrics record per-node CPU, memory, and VM health for correlation with messaging data
-  - Aggregated analytics surface flow patterns, latency distributions, failure rates, and guidance
+  - start/stop experiment aggregation cycles on demand
+  - keep a short-lived cache per experiment for summary, timing, and metric data
+  - broadcast `analytics:*` PubSub messages after fresh collections
+  - surface discovered node metadata for future multi-node analytics work
   """
 
   use GenServer
@@ -32,9 +23,12 @@ defmodule CorroPort.AnalyticsAggregator do
 
   alias CorroPort.{ClusterMembership, LocalNode, Analytics}
 
-  @default_collection_interval_ms 10_000  # Poll every 10 seconds
-  @cache_ttl_ms 30_000  # Cache for 30 seconds
-  @http_timeout_ms 5_000  # HTTP request timeout
+  # Poll every 10 seconds
+  @default_collection_interval_ms 10_000
+  # Cache for 30 seconds
+  @cache_ttl_ms 30_000
+  # HTTP request timeout
+  @http_timeout_ms 5_000
 
   # Client API
 
@@ -133,14 +127,17 @@ defmodule CorroPort.AnalyticsAggregator do
     CorroPort.AckTracker.set_experiment_id(experiment_id)
 
     # Start periodic collection
-    timer_ref = Process.send_after(self(), :collect_data, 1000)  # Start quickly
+    # Start quickly
+    timer_ref = Process.send_after(self(), :collect_data, 1000)
 
-    new_state = %{state |
-      experiment_id: experiment_id,
-      aggregating: true,
-      timer_ref: timer_ref,
-      cache: %{},  # Clear cache for new experiment
-      active_nodes: discover_cluster_nodes()
+    new_state = %{
+      state
+      | experiment_id: experiment_id,
+        aggregating: true,
+        timer_ref: timer_ref,
+        # Clear cache for new experiment
+        cache: %{},
+        active_nodes: discover_cluster_nodes()
     }
 
     # Trigger immediate collection
@@ -161,12 +158,7 @@ defmodule CorroPort.AnalyticsAggregator do
     CorroPort.SystemMetrics.set_experiment_id(nil)
     CorroPort.AckTracker.set_experiment_id(nil)
 
-    new_state = %{state |
-      aggregating: false,
-      timer_ref: nil,
-      experiment_id: nil,
-      cache: %{}
-    }
+    new_state = %{state | aggregating: false, timer_ref: nil, experiment_id: nil, cache: %{}}
 
     {:reply, :ok, new_state}
   end
@@ -179,7 +171,9 @@ defmodule CorroPort.AnalyticsAggregator do
         total_cluster_nodes = length(state.active_nodes) + 1
         updated_data = Map.put(data, :node_count, total_cluster_nodes)
         {:reply, {:ok, updated_data}, new_state}
-      {:error, reason} -> {:reply, {:error, reason}, state}
+
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
     end
   end
 
@@ -212,6 +206,7 @@ defmodule CorroPort.AnalyticsAggregator do
     if state.aggregating and state.experiment_id == experiment_id do
       collect_cluster_data(state)
     end
+
     {:noreply, state}
   end
 
@@ -231,6 +226,7 @@ defmodule CorroPort.AnalyticsAggregator do
     if state.timer_ref do
       Process.cancel_timer(state.timer_ref)
     end
+
     Logger.info("AnalyticsAggregator shutting down")
     :ok
   end
@@ -242,7 +238,7 @@ defmodule CorroPort.AnalyticsAggregator do
     now = System.monotonic_time(:millisecond)
 
     case Map.get(state.cache, cache_key) do
-      {data, timestamp} when (now - timestamp) < @cache_ttl_ms ->
+      {data, timestamp} when now - timestamp < @cache_ttl_ms ->
         # Return cached data
         {:ok, data, state}
 
@@ -277,17 +273,19 @@ defmodule CorroPort.AnalyticsAggregator do
 
       # Process results and update cache
       now = System.monotonic_time(:millisecond)
-      new_cache = Enum.reduce(results, state.cache, fn {task, result}, cache ->
-        case result do
-          {:ok, {:ok, data}} ->
-            data_type = get_task_data_type(task)
-            cache_key = {data_type, state.experiment_id}
-            Map.put(cache, cache_key, {data, now})
 
-          _ ->
-            cache
-        end
-      end)
+      new_cache =
+        Enum.reduce(results, state.cache, fn {task, result}, cache ->
+          case result do
+            {:ok, {:ok, data}} ->
+              data_type = get_task_data_type(task)
+              cache_key = {data_type, state.experiment_id}
+              Map.put(cache, cache_key, {data, now})
+
+            _ ->
+              cache
+          end
+        end)
 
       # Broadcast updates if we have new data
       if map_size(new_cache) > map_size(state.cache) do
@@ -366,41 +364,47 @@ defmodule CorroPort.AnalyticsAggregator do
     local_node_id = LocalNode.get_node_id()
 
     # Collect from local node first (fast)
-    local_result = if Enum.any?(nodes, &(&1.node_id == local_node_id)) do
-      try do
-        {:ok, collector_fn.(%{node_id: local_node_id, is_local: true})}
-      catch
-        _type, error ->
-          Logger.warning("Failed to collect local data: #{inspect(error)}")
-          {:error, "Local collection failed"}
+    local_result =
+      if Enum.any?(nodes, &(&1.node_id == local_node_id)) do
+        try do
+          {:ok, collector_fn.(%{node_id: local_node_id, is_local: true})}
+        catch
+          _type, error ->
+            Logger.warning("Failed to collect local data: #{inspect(error)}")
+            {:error, "Local collection failed"}
+        end
+      else
+        {:ok, []}
       end
-    else
-      {:ok, []}
-    end
 
     # Collect from remote nodes in parallel
     remote_nodes = Enum.reject(nodes, &(&1.node_id == local_node_id))
 
-    remote_tasks = Enum.map(remote_nodes, fn node_info ->
-      Task.async(fn ->
-        try do
-          collector_fn.(node_info)
-        catch
-          _type, error ->
-            Logger.warning("Failed to collect from node #{node_info.node_id}: #{inspect(error)}")
-            []
-        end
+    remote_tasks =
+      Enum.map(remote_nodes, fn node_info ->
+        Task.async(fn ->
+          try do
+            collector_fn.(node_info)
+          catch
+            _type, error ->
+              Logger.warning(
+                "Failed to collect from node #{node_info.node_id}: #{inspect(error)}"
+              )
+
+              []
+          end
+        end)
       end)
-    end)
 
     # Wait for remote results
-    remote_results = Task.yield_many(remote_tasks, 8_000)
-    |> Enum.map(fn {_task, result} ->
-      case result do
-        {:ok, data} -> data
-        _ -> []
-      end
-    end)
+    remote_results =
+      Task.yield_many(remote_tasks, 8_000)
+      |> Enum.map(fn {_task, result} ->
+        case result do
+          {:ok, data} -> data
+          _ -> []
+        end
+      end)
 
     case local_result do
       {:ok, local_data} ->
@@ -418,29 +422,38 @@ defmodule CorroPort.AnalyticsAggregator do
       cli_data = CorroPort.CLIClusterData.get_cli_data()
 
       # Extract members from the CLI data structure
-      members = case cli_data.members do
-        {:ok, member_list} -> member_list
-        {:error, reason} ->
-          Logger.warning("AnalyticsAggregator: Failed to get members from CLIClusterData: #{inspect(reason)}")
-          []
-      end
+      members =
+        case cli_data.members do
+          {:ok, member_list} ->
+            member_list
+
+          {:error, reason} ->
+            Logger.warning(
+              "AnalyticsAggregator: Failed to get members from CLIClusterData: #{inspect(reason)}"
+            )
+
+            []
+        end
 
       Logger.info("AnalyticsAggregator: Discovered #{length(members)} cluster nodes")
 
       # Convert to node info format
-      nodes = Enum.map(members, fn member ->
-        node_id = CorroPort.AckTracker.member_to_node_id(member)
-        region = CorroPort.NodeNaming.extract_region_from_node_id(node_id)
+      nodes =
+        Enum.map(members, fn member ->
+          node_id = CorroPort.AckTracker.member_to_node_id(member)
+          region = CorroPort.NodeNaming.extract_region_from_node_id(node_id)
 
-        %{
-          node_id: node_id,
-          region: region,
-          api_port: nil,  # Not available in member structure, will be calculated
-          phoenix_port: calculate_phoenix_port(member),
-          is_local: node_id == LocalNode.get_node_id()
-        }
-      end)
-      |> Enum.reject(fn node -> is_nil(node.node_id) end)  # Filter out nodes with nil node_id
+          %{
+            node_id: node_id,
+            region: region,
+            # Not available in member structure, will be calculated
+            api_port: nil,
+            phoenix_port: calculate_phoenix_port(member),
+            is_local: node_id == LocalNode.get_node_id()
+          }
+        end)
+        # Filter out nodes with nil node_id
+        |> Enum.reject(fn node -> is_nil(node.node_id) end)
 
       Logger.debug("AnalyticsAggregator: Node details: #{inspect(nodes)}")
       nodes
@@ -451,12 +464,14 @@ defmodule CorroPort.AnalyticsAggregator do
         local_node_id = LocalNode.get_node_id()
         local_phoenix_port = calculate_phoenix_port(%{node_id: local_node_id, api_port: nil})
 
-        [%{
-          node_id: local_node_id,
-          region: LocalNode.get_region(),
-          phoenix_port: local_phoenix_port,
-          is_local: true
-        }]
+        [
+          %{
+            node_id: local_node_id,
+            region: LocalNode.get_region(),
+            phoenix_port: local_phoenix_port,
+            is_local: true
+          }
+        ]
     end
   end
 
@@ -473,11 +488,14 @@ defmodule CorroPort.AnalyticsAggregator do
               {num, _} -> 4000 + num
               _ -> 4001
             end
-          _ -> 4001
+
+          _ ->
+            4001
         end
 
       true ->
-        4001  # Default fallback
+        # Default fallback
+        4001
     end
   end
 
@@ -488,7 +506,8 @@ defmodule CorroPort.AnalyticsAggregator do
 
   defp get_node_experiment_summary(node_info, experiment_id) do
     # Remote node - HTTP API call
-    url = "http://localhost:#{node_info.phoenix_port}/api/analytics/experiments/#{experiment_id}/summary"
+    url =
+      "http://localhost:#{node_info.phoenix_port}/api/analytics/experiments/#{experiment_id}/summary"
 
     case Req.get(url, receive_timeout: @http_timeout_ms, retry: false) do
       {:ok, %{status: 200, body: data}} ->
@@ -521,13 +540,15 @@ defmodule CorroPort.AnalyticsAggregator do
   end
 
   defp get_node_timing_stats(node_info, experiment_id) do
-    url = "http://localhost:#{node_info.phoenix_port}/api/analytics/experiments/#{experiment_id}/timing"
+    url =
+      "http://localhost:#{node_info.phoenix_port}/api/analytics/experiments/#{experiment_id}/timing"
 
     case Req.get(url, receive_timeout: @http_timeout_ms, retry: false) do
       {:ok, %{status: 200, body: data}} ->
         Enum.map(data, &atomize_keys/1)
 
-      _ -> []
+      _ ->
+        []
     end
   end
 
@@ -536,13 +557,15 @@ defmodule CorroPort.AnalyticsAggregator do
   end
 
   defp get_node_system_metrics(node_info, experiment_id) do
-    url = "http://localhost:#{node_info.phoenix_port}/api/analytics/experiments/#{experiment_id}/metrics"
+    url =
+      "http://localhost:#{node_info.phoenix_port}/api/analytics/experiments/#{experiment_id}/metrics"
 
     case Req.get(url, receive_timeout: @http_timeout_ms, retry: false) do
       {:ok, %{status: 200, body: data}} ->
         Enum.map(data, &atomize_keys/1)
 
-      _ -> []
+      _ ->
+        []
     end
   end
 
@@ -565,12 +588,14 @@ defmodule CorroPort.AnalyticsAggregator do
 
       [first | rest] ->
         Enum.reduce(rest, first, fn summary, acc ->
-          %{acc |
-            topology_snapshots_count: acc.topology_snapshots_count + summary.topology_snapshots_count,
-            message_count: acc.message_count + summary.message_count,
-            send_count: acc.send_count + summary.send_count,
-            ack_count: acc.ack_count + summary.ack_count,
-            system_metrics_count: acc.system_metrics_count + summary.system_metrics_count
+          %{
+            acc
+            | topology_snapshots_count:
+                acc.topology_snapshots_count + summary.topology_snapshots_count,
+              message_count: acc.message_count + summary.message_count,
+              send_count: acc.send_count + summary.send_count,
+              ack_count: acc.ack_count + summary.ack_count,
+              system_metrics_count: acc.system_metrics_count + summary.system_metrics_count
           }
         end)
         |> Map.put(:node_count, length(summaries))
@@ -598,18 +623,21 @@ defmodule CorroPort.AnalyticsAggregator do
       message_id: message_id,
       send_time: Enum.min(send_times, fn -> nil end),
       ack_count: Enum.sum(ack_counts),
-      min_latency_ms: case latencies do
-        [] -> nil
-        list -> Enum.min(list)
-      end,
-      max_latency_ms: case latencies do
-        [] -> nil
-        list -> Enum.max(list)
-      end,
-      avg_latency_ms: case latencies do
-        [] -> nil
-        list -> Float.round(Enum.sum(list) / length(list), 2)
-      end,
+      min_latency_ms:
+        case latencies do
+          [] -> nil
+          list -> Enum.min(list)
+        end,
+      max_latency_ms:
+        case latencies do
+          [] -> nil
+          list -> Enum.max(list)
+        end,
+      avg_latency_ms:
+        case latencies do
+          [] -> nil
+          list -> Float.round(Enum.sum(list) / length(list), 2)
+        end,
       node_count: length(stats)
     }
   end
@@ -618,24 +646,27 @@ defmodule CorroPort.AnalyticsAggregator do
     Phoenix.PubSub.broadcast(
       CorroPort.PubSub,
       "analytics:#{experiment_id}",
-      {:cluster_update, %{
-        experiment_id: experiment_id,
-        node_count: length(active_nodes),
-        timestamp: DateTime.utc_now()
-      }}
+      {:cluster_update,
+       %{
+         experiment_id: experiment_id,
+         node_count: length(active_nodes),
+         timestamp: DateTime.utc_now()
+       }}
     )
   end
 
   defp atomize_keys(map) when is_map(map) do
     Map.new(map, fn {k, v} -> {String.to_atom(k), v} end)
   end
+
   defp atomize_keys(other), do: other
 
   defp get_task_data_type(task) do
     # Helper to identify which data type a task was collecting
     # This is a simplified approach - in practice you might want to
     # tag tasks with their purpose
-    :summary  # Default fallback
+    # Default fallback
+    :summary
   end
 
   defp generate_cluster_analysis(experiment_id, state) do
@@ -644,7 +675,6 @@ defmodule CorroPort.AnalyticsAggregator do
       with {:ok, summary} <- collect_specific_data(:summary, experiment_id, state),
            {:ok, timing_stats} <- collect_specific_data(:timing, experiment_id, state),
            {:ok, system_metrics} <- collect_specific_data(:metrics, experiment_id, state) do
-
         analysis = %{
           experiment_id: experiment_id,
           cluster_summary: summary,
@@ -666,9 +696,10 @@ defmodule CorroPort.AnalyticsAggregator do
   end
 
   defp analyze_timing_distribution(timing_stats) do
-    latencies = timing_stats
-    |> Enum.filter(& &1.min_latency_ms)
-    |> Enum.map(& &1.min_latency_ms)
+    latencies =
+      timing_stats
+      |> Enum.filter(& &1.min_latency_ms)
+      |> Enum.map(& &1.min_latency_ms)
 
     case latencies do
       [] ->
@@ -709,13 +740,17 @@ defmodule CorroPort.AnalyticsAggregator do
       latest_metric = Enum.max_by(metrics, & &1.inserted_at, DateTime)
 
       # Find messages originating from this node (handle both string and map access)
-      node_messages = Enum.filter(timing_stats, fn stat ->
-        originating_node = case stat do
-          %{originating_node: node} -> node
-          _ -> nil
-        end
-        originating_node == node_id
-      end)
+      node_messages =
+        Enum.filter(timing_stats, fn stat ->
+          originating_node =
+            case stat do
+              %{originating_node: node} -> node
+              _ -> nil
+            end
+
+          originating_node == node_id
+        end)
+
       node_latencies = for msg <- node_messages, msg.min_latency_ms, do: msg.min_latency_ms
 
       %{
@@ -724,10 +759,11 @@ defmodule CorroPort.AnalyticsAggregator do
         cpu_percent: latest_metric.cpu_percent,
         erlang_processes: latest_metric.erlang_processes,
         messages_sent: length(node_messages),
-        avg_message_latency: case node_latencies do
-          [] -> nil
-          list -> Float.round(Enum.sum(list) / length(list), 2)
-        end,
+        avg_message_latency:
+          case node_latencies do
+            [] -> nil
+            list -> Float.round(Enum.sum(list) / length(list), 2)
+          end,
         performance_score: calculate_performance_score(latest_metric, node_latencies)
       }
     end)
@@ -736,38 +772,46 @@ defmodule CorroPort.AnalyticsAggregator do
 
   defp analyze_message_flow(timing_stats) do
     # Analyze message flow patterns between nodes
-    flows = timing_stats
-    |> Enum.group_by(fn stat ->
-      originating = case stat do
-        %{originating_node: node} -> node
-        _ -> "unknown"
-      end
-      target = case stat do
-        %{target_node: node} -> node
-        _ -> "unknown"
-      end
-      {originating, target}
-    end)
-    |> Enum.map(fn {{from, to}, messages} ->
-      latencies = for msg <- messages, msg.min_latency_ms, do: msg.min_latency_ms
-      %{
-        from_node: from,
-        to_node: to,
-        message_count: length(messages),
-        success_rate: if(length(messages) > 0, do: length(latencies) / length(messages), else: 0),
-        avg_latency: case latencies do
-          [] -> nil
-          list -> Float.round(Enum.sum(list) / length(list), 2)
-        end
-      }
-    end)
-    |> Enum.sort_by(& &1.message_count, :desc)
+    flows =
+      timing_stats
+      |> Enum.group_by(fn stat ->
+        originating =
+          case stat do
+            %{originating_node: node} -> node
+            _ -> "unknown"
+          end
+
+        target =
+          case stat do
+            %{target_node: node} -> node
+            _ -> "unknown"
+          end
+
+        {originating, target}
+      end)
+      |> Enum.map(fn {{from, to}, messages} ->
+        latencies = for msg <- messages, msg.min_latency_ms, do: msg.min_latency_ms
+
+        %{
+          from_node: from,
+          to_node: to,
+          message_count: length(messages),
+          success_rate:
+            if(length(messages) > 0, do: length(latencies) / length(messages), else: 0),
+          avg_latency:
+            case latencies do
+              [] -> nil
+              list -> Float.round(Enum.sum(list) / length(list), 2)
+            end
+        }
+      end)
+      |> Enum.sort_by(& &1.message_count, :desc)
 
     %{
       flows: flows,
       total_flows: length(flows),
       most_active_flow: Enum.max_by(flows, & &1.message_count, fn -> nil end),
-      slowest_flow: Enum.max_by(flows, & &1.avg_latency || 0, fn -> nil end)
+      slowest_flow: Enum.max_by(flows, &(&1.avg_latency || 0), fn -> nil end)
     }
   end
 
@@ -778,7 +822,11 @@ defmodule CorroPort.AnalyticsAggregator do
     %{
       total_messages: total_messages,
       failed_messages: length(failed_messages),
-      success_rate: if(total_messages > 0, do: (total_messages - length(failed_messages)) / total_messages, else: 0),
+      success_rate:
+        if(total_messages > 0,
+          do: (total_messages - length(failed_messages)) / total_messages,
+          else: 0
+        ),
       failure_patterns: analyze_failure_patterns(failed_messages)
     }
   end
@@ -801,55 +849,72 @@ defmodule CorroPort.AnalyticsAggregator do
     recommendations = []
 
     # High latency recommendation
-    avg_latencies = timing_stats
-    |> Enum.filter(& &1.min_latency_ms)
-    |> Enum.map(& &1.min_latency_ms)
+    avg_latencies =
+      timing_stats
+      |> Enum.filter(& &1.min_latency_ms)
+      |> Enum.map(& &1.min_latency_ms)
 
-    recommendations = if length(avg_latencies) > 0 do
-      avg = Enum.sum(avg_latencies) / length(avg_latencies)
-      if avg > 1000 do
-        [%{
-          type: :performance,
-          priority: :high,
-          message: "Average latency #{Float.round(avg, 1)}ms is high. Consider network optimization."
-        } | recommendations]
+    recommendations =
+      if length(avg_latencies) > 0 do
+        avg = Enum.sum(avg_latencies) / length(avg_latencies)
+
+        if avg > 1000 do
+          [
+            %{
+              type: :performance,
+              priority: :high,
+              message:
+                "Average latency #{Float.round(avg, 1)}ms is high. Consider network optimization."
+            }
+            | recommendations
+          ]
+        else
+          recommendations
+        end
       else
         recommendations
       end
-    else
-      recommendations
-    end
 
     # Memory recommendation
-    high_memory_nodes = system_metrics
-    |> Enum.filter(&(&1.memory_mb > 1000))
-    |> Enum.map(& &1.node_id)
-    |> Enum.uniq()
+    high_memory_nodes =
+      system_metrics
+      |> Enum.filter(&(&1.memory_mb > 1000))
+      |> Enum.map(& &1.node_id)
+      |> Enum.uniq()
 
-    recommendations = if length(high_memory_nodes) > 0 do
-      [%{
-        type: :resource,
-        priority: :medium,
-        message: "High memory usage detected on nodes: #{Enum.join(high_memory_nodes, ", ")}"
-      } | recommendations]
-    else
-      recommendations
-    end
+    recommendations =
+      if length(high_memory_nodes) > 0 do
+        [
+          %{
+            type: :resource,
+            priority: :medium,
+            message: "High memory usage detected on nodes: #{Enum.join(high_memory_nodes, ", ")}"
+          }
+          | recommendations
+        ]
+      else
+        recommendations
+      end
 
     # Success rate recommendation
     total = length(timing_stats)
     successful = length(Enum.filter(timing_stats, & &1.min_latency_ms))
     success_rate = if total > 0, do: successful / total, else: 0
 
-    recommendations = if success_rate < 0.95 do
-      [%{
-        type: :reliability,
-        priority: :high,
-        message: "Message success rate #{Float.round(success_rate * 100, 1)}% is below 95%. Investigate network reliability."
-      } | recommendations]
-    else
-      recommendations
-    end
+    recommendations =
+      if success_rate < 0.95 do
+        [
+          %{
+            type: :reliability,
+            priority: :high,
+            message:
+              "Message success rate #{Float.round(success_rate * 100, 1)}% is below 95%. Investigate network reliability."
+          }
+          | recommendations
+        ]
+      else
+        recommendations
+      end
 
     recommendations
   end
@@ -867,37 +932,46 @@ defmodule CorroPort.AnalyticsAggregator do
     max_lat = Enum.max(latencies)
     bucket_size = max(1, (max_lat - min_lat) / 10)
 
-    buckets = 0..9
-    |> Enum.map(fn i ->
-      bucket_min = min_lat + i * bucket_size
-      bucket_max = min_lat + (i + 1) * bucket_size
+    buckets =
+      0..9
+      |> Enum.map(fn i ->
+        bucket_min = min_lat + i * bucket_size
+        bucket_max = min_lat + (i + 1) * bucket_size
 
-      count = Enum.count(latencies, fn lat ->
-        lat >= bucket_min and lat < bucket_max
+        count =
+          Enum.count(latencies, fn lat ->
+            lat >= bucket_min and lat < bucket_max
+          end)
+
+        %{
+          range: "#{Float.round(bucket_min, 1)}-#{Float.round(bucket_max, 1)}ms",
+          count: count
+        }
       end)
-
-      %{
-        range: "#{Float.round(bucket_min, 1)}-#{Float.round(bucket_max, 1)}ms",
-        count: count
-      }
-    end)
 
     buckets
   end
 
   defp calculate_performance_score(metric, latencies) do
     # Simple performance scoring based on resource usage and latency
-    memory_score = max(0, 100 - (metric.memory_mb / 10))  # Lower memory is better
-    process_score = max(0, 100 - (metric.erlang_processes / 100))  # Fewer processes generally better
+    # Lower memory is better
+    memory_score = max(0, 100 - metric.memory_mb / 10)
+    # Fewer processes generally better
+    process_score = max(0, 100 - metric.erlang_processes / 100)
 
-    latency_score = case latencies do
-      [] -> 50  # Neutral score for no latency data
-      list ->
-        avg_latency = Enum.sum(list) / length(list)
-        max(0, 100 - avg_latency / 10)  # Lower latency is better
-    end
+    latency_score =
+      case latencies do
+        # Neutral score for no latency data
+        [] ->
+          50
+
+        list ->
+          avg_latency = Enum.sum(list) / length(list)
+          # Lower latency is better
+          max(0, 100 - avg_latency / 10)
+      end
 
     # Weighted average
-    Float.round((memory_score * 0.3 + process_score * 0.2 + latency_score * 0.5), 1)
+    Float.round(memory_score * 0.3 + process_score * 0.2 + latency_score * 0.5, 1)
   end
 end

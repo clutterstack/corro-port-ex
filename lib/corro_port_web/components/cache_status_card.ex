@@ -12,8 +12,7 @@ defmodule CorroPortWeb.CacheStatusCard do
     <div class="card bg-base-200">
       <div class="card-body p-4">
         <h4 class="text-sm font-semibold mb-3 flex items-center gap-2">
-          <.icon name="hero-clock" class="w-4 h-4" />
-          Data Source Status
+          <.icon name="hero-clock" class="w-4 h-4" /> Data Source Status
         </h4>
         <div class="grid md:grid-cols-3 gap-4 text-xs">
           <div class="flex items-start gap-2">

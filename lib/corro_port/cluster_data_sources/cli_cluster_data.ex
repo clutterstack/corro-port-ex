@@ -66,7 +66,13 @@ defmodule CorroPort.CLIClusterData do
     catch
       :exit, _ ->
         Logger.warning("CLIClusterData: Call timeout, returning empty cache status")
-        %{last_updated: nil, error: {:service_unavailable, "CLIClusterData not responding"}, status: :unavailable, member_count: 0}
+
+        %{
+          last_updated: nil,
+          error: {:service_unavailable, "CLIClusterData not responding"},
+          status: :unavailable,
+          member_count: 0
+        }
     end
   end
 
@@ -307,13 +313,14 @@ defmodule CorroPort.CLIClusterData do
 
       error ->
         # Convert store errors to ClusterMembership error format
-        mapped_error = case error do
-          {:cli_error, :timeout} -> :cli_timeout
-          {:cli_error, reason} -> {:cli_failed, reason}
-          {:parse_error, reason} -> {:parse_failed, reason}
-          {:service_unavailable, _} -> :service_unavailable
-          other -> other
-        end
+        mapped_error =
+          case error do
+            {:cli_error, :timeout} -> :cli_timeout
+            {:cli_error, reason} -> {:cli_failed, reason}
+            {:parse_error, reason} -> {:parse_failed, reason}
+            {:service_unavailable, _} -> :service_unavailable
+            other -> other
+          end
 
         {:error, mapped_error}
     end

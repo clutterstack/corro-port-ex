@@ -79,12 +79,12 @@ defmodule CorroPort.CorroSubscriber do
     query = "SELECT * FROM node_messages ORDER BY timestamp DESC"
 
     case CorroClient.Subscriber.start_subscription(conn,
-      query: query,
-      on_event: &handle_subscription_event/1,
-      on_connect: &handle_subscription_connect/1,
-      on_error: &handle_subscription_error/1,
-      on_disconnect: &handle_subscription_disconnect/1
-    ) do
+           query: query,
+           on_event: &handle_subscription_event/1,
+           on_connect: &handle_subscription_connect/1,
+           on_error: &handle_subscription_error/1,
+           on_disconnect: &handle_subscription_disconnect/1
+         ) do
       {:ok, subscriber_pid} ->
         Logger.info("CorroSubscriber: Subscription started successfully")
         new_state = %{state | subscriber_pid: subscriber_pid, status: :connected}
@@ -113,11 +113,12 @@ defmodule CorroPort.CorroSubscriber do
 
   @impl true
   def handle_call(:status, _from, state) do
-    subscriber_status = if state.subscriber_pid do
-      CorroClient.Subscriber.get_status(state.subscriber_pid)
-    else
-      %{status: :not_started, connected: false}
-    end
+    subscriber_status =
+      if state.subscriber_pid do
+        CorroClient.Subscriber.get_status(state.subscriber_pid)
+      else
+        %{status: :not_started, connected: false}
+      end
 
     status = %{
       genserver_status: state.status,
@@ -191,7 +192,10 @@ defmodule CorroPort.CorroSubscriber do
   def handle_info({:subscription_disconnected, reason}, state) do
     # Ignore disconnection when paused for restart - we're coordinating with ConfigManager
     if state.status == :paused_for_restart do
-      Logger.debug("CorroSubscriber: Ignoring disconnection during paused_for_restart: #{inspect(reason)}")
+      Logger.debug(
+        "CorroSubscriber: Ignoring disconnection during paused_for_restart: #{inspect(reason)}"
+      )
+
       {:noreply, state}
     else
       Logger.warning("CorroSubscriber: Subscription closed: #{inspect(reason)}")

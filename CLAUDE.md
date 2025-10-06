@@ -40,6 +40,12 @@ tail -f logs/node3-corrosion.log       # Node 3 corrosion logs
 ./scripts/cluster-stop.sh
 ```
 
+**Build Directory Safety:**
+The `overmind-start.sh` script avoids build directory lock contention by:
+- Pre-compiling the application once before starting any nodes (`mix compile` at line 195)
+- All nodes share the same `_build` directory but only read from it (no concurrent compilation)
+- Nodes start sequentially after compilation completes, running `mix phx.server` (not recompiling)
+
 **Alternative: Separate corrosion and Phoenix startup**
 ```bash
 # 1. Start corrosion agents (database layer)
@@ -148,6 +154,14 @@ CorroPort.AckSender.get_message_stats("message_pk_here")
 
 CorroPort is an Elixir Phoenix application that provides a web interface for monitoring and interacting with Corrosion database clusters. Corrosion is a SQLite-based distributed database.
 
+### Module Documentation Notes
+
+- `CorroPort.MessagesAPI` moduledoc now clarifies that the module sits on top of the `node_messages` table to handle persistence, ack tracking, and analytics wiring. Treat it as the single entry point for sending/reading replicated messages.
+- `CorroPort.CLIClusterData` moduledoc documents the GenServer that shells out to `corro_cli`, caches the CLI member list, and pushes `{:cli_members_updated, ...}` events to LiveViews.
+- `CorroPort.AnalyticsAggregator` moduledoc documents the current local-first aggregation strategy (short TTL cache, PubSub broadcasts). Remote polling helpers remain, but they are intentionally dormant until remote Corrosion APIs are stable.
+- `CorroPort.NodeNaming` moduledoc explicitly spells out the region-extraction behaviour and return values (`"unknown"` vs `"invalid"`).
+- `CorroPortWeb.Layouts` moduledoc example demonstrates the required `current_scope` assign when calling `<Layouts.app …>` from LiveViews.
+
 ### Two-Layer Architecture
 
 The system runs as **two independent layers** that must both be running:
@@ -170,26 +184,34 @@ The system runs as **two independent layers** that must both be running:
 
 ### Core Components
 
-**Domain Modules (Clean Architecture)**
-- `CorroPort.NodeDiscovery` - DNS-based expected node discovery
-- `CorroPort.ClusterMembership` - CLI-based active member tracking  
-- `CorroPort.MessagePropagation` - Message sending and acknowledgment tracking
-- `CorroPort.ClusterSystemInfo` - System information via Corrosion API
+**Cluster Data Sources**
+- `CorroPort.DNSLookup` - Fetches expected nodes from Fly.io DNS (or dev fallback) and normalises the results for LiveViews
+- `CorroPort.CLIClusterData` - GenServer that shells out to `corro_cli`, caches member data, and emits PubSub updates consumed by `ClusterLive`
+- `CorroPort.LocalNode` - Surface area for local node ID, region, ports, and environment metadata used across the UI and analytics
 
-**Legacy Modules (Being Refactored)**
-- `CorroPort.CorroSubscriber` - Message subscription and acknowledgment sending
-- `CorroPort.AckTracker` - Acknowledgment state management
-- `CorroPort.AckSender` - HTTP acknowledgment sender with gossip deduplication
-- `CorroPort.CLIMemberStore` - CLI member data caching
+**Messaging & Acknowledgments**
+- `CorroPort.MessagesAPI` - High-level facade for inserting messages into `node_messages` and wiring ack/analytics hooks
+- `CorroPort.AckTracker` - ETS-backed tracker for the latest message, acknowledgment status, and experiment linkage
+- `CorroPort.AckSender` - Subscription listener that deduplicates gossip receptions and posts HTTP acknowledgments (see Gossip Analytics below)
+- `CorroPort.AckDiagnostics` - IEx helper module that inspects ack pipelines end-to-end when debugging issues
 
-**API Layer**
-- `CorroPort.CorroClient` - Low-level HTTP client for Corrosion API
-- `CorroPort.ClusterAPI` - High-level cluster information queries
+**Connectivity & Configuration**
+- `CorroPort.ConnectionManager` - Centralised creation of Corrosion HTTP connections (standard and subscription)
+- `CorroPort.NodeConfig` - Single source of truth for node-specific port assignments, environment flags, and file paths
+- `CorroPort.ConfigManager` - Runtime bootstrap editing plus corrosion restart coordination (publishes `"corrosion_lifecycle"` events)
+- `CorroPort.ClusterConfigCoordinator` - Broadcasts bootstrap updates to every Phoenix node for coordinated updates
+- `CorroPort.ConfigSubscriber` - Applies cluster bootstrap updates received over PubSub
+- `CorroPort.DevClusterConnector` - Connects dev BEAM nodes to each other automatically when running locally
 
-**Web Layer**
-- `CorroPortWeb.ClusterLive` - Main cluster monitoring LiveView
-- `CorroPortWeb.MessagesLive` - Message history and debugging
-- Various component modules for UI elements
+**Analytics Pipeline**
+- `CorroPort.Analytics` / `CorroPort.AnalyticsStorage` - Ecto context + persistence for experiment events, metrics, and topology snapshots
+- `CorroPort.AnalyticsAggregator` - Orchestrates experiment aggregation, caches results with a short TTL, and broadcasts `analytics:*` messages
+- `CorroPort.SystemMetrics` - Collects per-node runtime metrics and exposes experiment-scoped counters
+
+**Subscriptions & Helpers**
+- `CorroPort.CorroSubscriber` - Supervises the Corrosion subscription, coordinating restarts with `ConfigManager`
+- `CorroPort.RegionExtractor` / `CorroPort.NodeNaming` - Canonical helpers for converting identifiers into Fly regions for UI display
+- `CorroPort.ClusterMemberPresenter` - Presentation transforms applied to CLI member maps before rendering
 
 ### Data Flow
 
@@ -358,10 +380,11 @@ The application is designed for multi-node cluster testing:
 ### Key Files for Understanding
 
 **Application Code:**
-- `lib/corro_port/application.ex` - Application supervision tree
-- `lib/corro_port_web/live/cluster_live.ex` - Main monitoring interface
-- `lib/corro_port/corro_client.ex` - Database client implementation
-- `lib/corro_port/cluster_api.ex` - High-level cluster queries
+- `lib/corro_port/application.ex` - Supervision tree wiring CLI cluster data, ack pipeline, analytics, and subscriptions
+- `lib/corro_port/connection_manager.ex` - Central place to obtain Corrosion connections (standard + subscription)
+- `lib/corro_port/config_manager.ex` & `lib/corro_port/cluster_config_coordinator.ex` - Runtime bootstrap editing and corrosion restart orchestration
+- `lib/corro_port/cluster_data_sources/cli_cluster_data.ex` - CLI membership polling, caching, and PubSub broadcasts
+- `lib/corro_port_web/live/*_live.ex` - LiveView surfaces (`propagation`, `cluster`, `messages`, `node`, `analytics`, `query_console`)
 
 **Development Scripts:**
 - `scripts/overmind-start.sh` - All-in-one cluster startup (recommended, overmind in daemon mode, no tmux)
@@ -379,39 +402,52 @@ The application is designed for multi-node cluster testing:
 
 ## LiveView Module Responsibilities
 
-**IMPORTANT**: Do not confuse these two main LiveView modules:
+- **PropagationLive** (`/` – nav tab "Propagation")
+  - Geographic map driven by FlyMapEx and acknowledgment status.
+  - Exposes "Send Message" and "Reset Tracking" actions wired to `CorroPort.MessagesAPI` / `AckTracker`.
+  - Listens to `ack_events` PubSub broadcasts for real-time marker updates.
 
-### IndexLive (`/` route)
-- **Purpose**: Message propagation testing and geographic visualization
-- **Key Features**: 
-  - "Send Message" button for testing database change propagation
-  - "Reset Tracking" functionality
-  - Real-time acknowledgment tracking with colored map regions
-  - MessagePropagation subscription and interaction
-- **URL**: `http://localhost:4001/` (root)
-- **Nav Tab**: "Geographic Distribution" (propagation)
+- **ClusterLive** (`/cluster` – nav tab "Cluster")
+  - Aggregates DNS, CLI, and Corrosion API data into a single dashboard.
+  - Uses `CorroPort.CLIClusterData` subscriptions plus `DisplayHelpers` to render summary cards and tables.
+  - Provides targeted refresh actions for each data source.
 
-### ClusterLive (`/cluster` route)  
-- **Purpose**: Comprehensive cluster health monitoring and node connectivity
-- **Key Features**:
-  - Cluster summary statistics (Expected/Active nodes)
-  - System health monitoring (API health, message counts)
-  - CLI member tables and debugging information
-- **URL**: `http://localhost:4001/cluster`
-- **Nav Tab**: "Cluster Status"
+- **MessagesLive** (`/messages` – nav tab "Messages")
+  - Real-time feed of `node_messages` combined with acknowledgment status cards.
+  - Subscribes to both `message_updates` and `ack_events` topics.
+  - Surface area for ad-hoc message sends and resetting the tracker from the log view.
+
+- **NodeLive** (`/node` – nav tab "Node")
+  - Bootstrap configuration editor, corrosion restart coordination, and connectivity diagnostics.
+  - Integrates `ConfigManager`, `ClusterConfigCoordinator`, and `ConnectionManager` helpers.
+  - Handles both single-node and cluster-wide bootstrap updates via PubSub.
+
+- **AnalyticsLive** (`/analytics` – nav tab "Analytics")
+  - Controls experiment aggregation via `CorroPort.AnalyticsAggregator`.
+  - Renders timing/system metrics and listens for `analytics:*` broadcasts per experiment.
+  - Supports manual refresh cadence adjustments in the UI.
+
+- **QueryConsoleLive** (`/query-console` – nav tab "Query Console")
+  - Preset-backed SQL/API scratchpad that reuses `ConnectionManager` for Corrosion sessions.
+  - Useful for inspecting `__corro_members`, `node_messages`, and analytics tables without leaving the UI.
 
 ### Quick Reference
-- **For message propagation features** → IndexLive
-- **For cluster monitoring features** → ClusterLive
-- **When in doubt**, check the router.ex routes and page_title assigns
+- Propagation map & acknowledgement tracking → `PropagationLive`
+- Cluster inventory and DNS/CLI/API comparisons → `ClusterLive`
+- Message history plus ack health → `MessagesLive`
+- Bootstrap + corrosion lifecycle management → `NodeLive`
+- Experiment dashboards and analytics control → `AnalyticsLive`
+- Ad-hoc Corrosion SQL/API queries → `QueryConsoleLive`
 
-This distinction is critical since both modules handle similar data sources but serve different user workflows.
+Router source of truth: `lib/corro_port_web/router.ex`.
 
 ## Development Guidelines
 
 
 - Use Tidewave tools if possible before resorting to unix tools
-- Use CorroClient.transaction to make changes to the Corrosion database and CorroClient.query to read from it.
+- Use `CorroPort.ConnectionManager` helpers (`get_connection/0`, `get_subscription_connection/0`) instead of building raw Corrosion URLs in new code.
+- Source cluster data through the existing abstractions (`CorroPort.CLIClusterData`, `CorroPort.DNSLookup`, `CorroPort.LocalNode`) so the LiveViews keep receiving consistent shapes.
+- Use `CorroClient.transaction/2` to make changes to the Corrosion database and `CorroClient.query/2` to read from it.
 
 
 ## Prod deployment

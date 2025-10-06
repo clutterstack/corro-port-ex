@@ -1,10 +1,10 @@
 defmodule CorroPort.SystemMetrics do
   @moduledoc """
   Monitors system performance metrics including CPU, memory, and Erlang VM statistics.
-  
+
   Collects metrics at configurable intervals and stores them via AnalyticsStorage
   for correlation with message propagation performance during experiments.
-  
+
   Metrics collected:
   - CPU usage percentage (via :observer_backend.sys_info/0)
   - Memory usage in MB (via :erlang.memory/0)
@@ -16,8 +16,10 @@ defmodule CorroPort.SystemMetrics do
   use GenServer
   require Logger
 
-  @default_interval_ms 5_000  # Collect metrics every 5 seconds
-  @cpu_sample_interval_ms 1_000  # CPU sampling interval
+  # Collect metrics every 5 seconds
+  @default_interval_ms 5_000
+  # CPU sampling interval
+  @cpu_sample_interval_ms 1_000
 
   # Client API
 
@@ -71,9 +73,9 @@ defmodule CorroPort.SystemMetrics do
 
   def init(opts) do
     Logger.info("SystemMetrics starting...")
-    
+
     interval_ms = Keyword.get(opts, :interval_ms, @default_interval_ms)
-    
+
     state = %{
       experiment_id: nil,
       collecting: false,
@@ -81,7 +83,7 @@ defmodule CorroPort.SystemMetrics do
       timer_ref: nil,
       node_id: CorroPort.LocalNode.get_node_id()
     }
-    
+
     {:ok, state}
   end
 
@@ -96,41 +98,33 @@ defmodule CorroPort.SystemMetrics do
 
   def handle_call({:start_collection, experiment_id}, _from, state) do
     Logger.info("SystemMetrics: Starting collection for experiment #{experiment_id}")
-    
+
     # Cancel existing timer if any
     if state.timer_ref do
       Process.cancel_timer(state.timer_ref)
     end
-    
+
     # Start periodic collection
     timer_ref = Process.send_after(self(), :collect_metrics, state.interval_ms)
-    
-    new_state = %{state | 
-      experiment_id: experiment_id,
-      collecting: true,
-      timer_ref: timer_ref
-    }
-    
+
+    new_state = %{state | experiment_id: experiment_id, collecting: true, timer_ref: timer_ref}
+
     # Collect initial metrics
     collect_metrics(new_state)
-    
+
     {:reply, :ok, new_state}
   end
 
   def handle_call(:stop_collection, _from, state) do
     Logger.info("SystemMetrics: Stopping collection")
-    
+
     # Cancel timer
     if state.timer_ref do
       Process.cancel_timer(state.timer_ref)
     end
-    
-    new_state = %{state | 
-      collecting: false,
-      timer_ref: nil,
-      experiment_id: nil
-    }
-    
+
+    new_state = %{state | collecting: false, timer_ref: nil, experiment_id: nil}
+
     {:reply, :ok, new_state}
   end
 
@@ -143,13 +137,14 @@ defmodule CorroPort.SystemMetrics do
     if state.collecting and state.experiment_id do
       collect_metrics(state)
     end
+
     {:noreply, state}
   end
 
   def handle_info(:collect_metrics, state) do
     if state.collecting and state.experiment_id do
       collect_metrics(state)
-      
+
       # Schedule next collection
       timer_ref = Process.send_after(self(), :collect_metrics, state.interval_ms)
       {:noreply, %{state | timer_ref: timer_ref}}
@@ -162,6 +157,7 @@ defmodule CorroPort.SystemMetrics do
     if state.timer_ref do
       Process.cancel_timer(state.timer_ref)
     end
+
     Logger.info("SystemMetrics shutting down")
     :ok
   end
@@ -171,7 +167,7 @@ defmodule CorroPort.SystemMetrics do
   defp collect_metrics(state) do
     if state.experiment_id do
       metrics = collect_current_metrics()
-      
+
       # Store via AnalyticsStorage
       CorroPort.AnalyticsStorage.record_system_metrics(
         state.experiment_id,
@@ -182,8 +178,10 @@ defmodule CorroPort.SystemMetrics do
         metrics.corrosion_connections,
         metrics.message_queue_length
       )
-      
-      Logger.debug("Collected metrics for experiment #{state.experiment_id}: CPU=#{metrics.cpu_percent}%, Memory=#{metrics.memory_mb}MB, Processes=#{metrics.erlang_processes}")
+
+      Logger.debug(
+        "Collected metrics for experiment #{state.experiment_id}: CPU=#{metrics.cpu_percent}%, Memory=#{metrics.memory_mb}MB, Processes=#{metrics.erlang_processes}"
+      )
     end
   end
 
@@ -194,7 +192,7 @@ defmodule CorroPort.SystemMetrics do
     process_count = collect_process_metrics()
     corrosion_connections = collect_corrosion_connection_metrics()
     message_queue_length = collect_message_queue_metrics()
-    
+
     %{
       cpu_percent: cpu_percent,
       memory_mb: memory_info.total_mb,
@@ -207,21 +205,21 @@ defmodule CorroPort.SystemMetrics do
 
   defp collect_memory_metrics do
     memory = :erlang.memory()
-    
+
     total_bytes = Keyword.get(memory, :total, 0)
     processes_bytes = Keyword.get(memory, :processes, 0)
     system_bytes = Keyword.get(memory, :system, 0)
     atom_bytes = Keyword.get(memory, :atom, 0)
     binary_bytes = Keyword.get(memory, :binary, 0)
     ets_bytes = Keyword.get(memory, :ets, 0)
-    
+
     %{
       total_mb: div(total_bytes, 1024 * 1024),
       breakdown: %{
         processes_mb: div(processes_bytes, 1024 * 1024),
         system_mb: div(system_bytes, 1024 * 1024),
         atom_mb: div(atom_bytes, 1024 * 1024),
-        binary_mb: div(binary_bytes, 1024 * 1024),  
+        binary_mb: div(binary_bytes, 1024 * 1024),
         ets_mb: div(ets_bytes, 1024 * 1024)
       }
     }
@@ -234,17 +232,23 @@ defmodule CorroPort.SystemMetrics do
         sys_info when is_list(sys_info) ->
           # Look for CPU information in the system info
           cpu_info = Enum.find(sys_info, fn {key, _} -> key == :cpu end)
+
           case cpu_info do
             {:cpu, cpu_data} when is_list(cpu_data) ->
               # Try to extract CPU usage percentage
               usage_info = Enum.find(cpu_data, fn {key, _} -> key == :usage end)
+
               case usage_info do
                 {:usage, usage} when is_number(usage) -> Float.round(usage, 2)
                 _ -> estimate_cpu_usage()
               end
-            _ -> estimate_cpu_usage()
+
+            _ ->
+              estimate_cpu_usage()
           end
-        _ -> estimate_cpu_usage()
+
+        _ ->
+          estimate_cpu_usage()
       end
     catch
       _type, _error ->
@@ -282,22 +286,25 @@ defmodule CorroPort.SystemMetrics do
       CorroPort.AnalyticsStorage,
       __MODULE__
     ]
-    
-    total_queue_length = Enum.reduce(key_processes, 0, fn process_name, acc ->
-      try do
-        case Process.whereis(process_name) do
-          nil -> acc
-          pid ->
-            case Process.info(pid, :message_queue_len) do
-              {:message_queue_len, len} -> acc + len
-              _ -> acc
-            end
+
+    total_queue_length =
+      Enum.reduce(key_processes, 0, fn process_name, acc ->
+        try do
+          case Process.whereis(process_name) do
+            nil ->
+              acc
+
+            pid ->
+              case Process.info(pid, :message_queue_len) do
+                {:message_queue_len, len} -> acc + len
+                _ -> acc
+              end
+          end
+        catch
+          _type, _error -> acc
         end
-      catch
-        _type, _error -> acc
-      end
-    end)
-    
+      end)
+
     total_queue_length
   end
 end

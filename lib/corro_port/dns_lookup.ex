@@ -144,7 +144,12 @@ defmodule CorroPort.DNSLookup do
     end
   end
 
-  defp get_development_fallback do
+  @doc """
+  Returns the development fallback node list for local cluster testing.
+
+  Returns `{:ok, ["dev-node1", "dev-node2", "dev-node3"]}`
+  """
+  def get_development_fallback do
     Logger.debug("DNSLookup: Using development fallback")
     all_dev_nodes = ["dev-node1", "dev-node2", "dev-node3"]
     {:ok, all_dev_nodes}

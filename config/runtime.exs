@@ -43,20 +43,22 @@ if config_env() == :prod do
   # API endpoint configuration
   fly_private_ip = System.get_env("FLY_PRIVATE_IP")
 
-  api_ip = if fly_private_ip do
-    case :inet.parse_address(String.to_charlist(fly_private_ip)) do
-      {:ok, ipv6_tuple} ->
-        ipv6_tuple
+  api_ip =
+    if fly_private_ip do
+      case :inet.parse_address(String.to_charlist(fly_private_ip)) do
+        {:ok, ipv6_tuple} ->
+          ipv6_tuple
 
-      {:error, _} ->
-        Logger.warning(
-          "Failed to parse FLY_PRIVATE_IP: #{fly_private_ip}, falling back to all interfaces"
-        )
-        {0, 0, 0, 0, 0, 0, 0, 0}
+        {:error, _} ->
+          Logger.warning(
+            "Failed to parse FLY_PRIVATE_IP: #{fly_private_ip}, falling back to all interfaces"
+          )
+
+          {0, 0, 0, 0, 0, 0, 0, 0}
+      end
+    else
+      {0, 0, 0, 0, 0, 0, 0, 0}
     end
-  else
-    {0, 0, 0, 0, 0, 0, 0, 0}
-  end
 
   config :corro_port, CorroPortWeb.APIEndpoint,
     http: [ip: api_ip, port: ack_api_port],
@@ -64,8 +66,7 @@ if config_env() == :prod do
     server: true
 
   # Configure Analytics Repo for production
-  config :corro_port, CorroPort.Analytics.Repo,
-    database: "/opt/data/analytics/analytics.db"
+  config :corro_port, CorroPort.Analytics.Repo, database: "/opt/data/analytics/analytics.db"
 
   # Common node config values
   common_node_config = [
@@ -81,29 +82,30 @@ if config_env() == :prod do
   fly_app_name = System.get_env("FLY_APP_NAME")
   fly_machine_id = System.get_env("FLY_MACHINE_ID")
 
-  node_specific_config = if fly_app_name && fly_private_ip && fly_machine_id do
-    fly_region = System.get_env("FLY_REGION", "unknown")
-    region_node_id = "#{fly_region}-#{fly_machine_id}"
+  node_specific_config =
+    if fly_app_name && fly_private_ip && fly_machine_id do
+      fly_region = System.get_env("FLY_REGION", "unknown")
+      region_node_id = "#{fly_region}-#{fly_machine_id}"
 
-    [
-      node_id: region_node_id,
-      corrosion_bootstrap_list: "[\"#{fly_app_name}.internal:8787\"]",
-      fly_app_name: fly_app_name,
-      private_ip: fly_private_ip,
-      fly_machine_id: fly_machine_id,
-      fly_region: fly_region
-    ]
-  else
-    # Fallback configuration
-    fallback_region = System.get_env("FLY_REGION", "fallback")
-    fallback_node_id = System.get_env("NODE_ID", "fallback")
+      [
+        node_id: region_node_id,
+        corrosion_bootstrap_list: "[\"#{fly_app_name}.internal:8787\"]",
+        fly_app_name: fly_app_name,
+        private_ip: fly_private_ip,
+        fly_machine_id: fly_machine_id,
+        fly_region: fly_region
+      ]
+    else
+      # Fallback configuration
+      fallback_region = System.get_env("FLY_REGION", "fallback")
+      fallback_node_id = System.get_env("NODE_ID", "fallback")
 
-    [
-      node_id: "#{fallback_region}-#{fallback_node_id}",
-      corrosion_bootstrap_list: "[]",
-      fly_region: fallback_region
-    ]
-  end
+      [
+        node_id: "#{fallback_region}-#{fallback_node_id}",
+        corrosion_bootstrap_list: "[]",
+        fly_region: fallback_region
+      ]
+    end
 
   full_node_config = Keyword.merge(common_node_config, node_specific_config)
 

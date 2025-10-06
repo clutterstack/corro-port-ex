@@ -10,12 +10,13 @@ defmodule CorroPort.NodeNaming do
   @type node_id :: String.t() | nil
 
   @doc """
-  Extract the region portion from a node identifier that fits the form <region>-<id>:
+  Extract the region prefix (characters before the first "-") from a node identifier.
 
   * `"ams-machine123"` -> `"ams"`
   * `"dev-node1"` -> `"dev"`
 
-  If  falls back to `"unknown"`
+  Returns `"unknown"` when the identifier does not include a plausible region
+  segment and `"invalid"` for non-string inputs.
   """
   @spec extract_region_from_node_id(node_id) :: String.t()
   def extract_region_from_node_id(node_id)
@@ -25,8 +26,8 @@ defmodule CorroPort.NodeNaming do
       [region, _machine_id] when byte_size(region) >= 2 and byte_size(region) <= 4 ->
         region
 
-    _ ->
-      "unknown"
+      _ ->
+        "unknown"
     end
   end
 

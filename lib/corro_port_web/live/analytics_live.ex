@@ -160,14 +160,14 @@ defmodule CorroPortWeb.AnalyticsLive do
       <div class="mb-6">
         <NavTabs.nav_tabs active={:analytics} />
       </div>
-
-      <!-- Header -->
+      
+    <!-- Header -->
       <div class="mb-8">
         <h1 class="text-3xl font-bold text-gray-900 mb-2">Analytics Dashboard</h1>
         <p class="text-gray-600">Real-time cluster experiment monitoring</p>
       </div>
-
-      <!-- Experiment Controls -->
+      
+    <!-- Experiment Controls -->
       <div class="bg-white rounded-lg shadow p-6 mb-6">
         <h3 class="text-lg font-semibold mb-4">Experiment Control</h3>
 
@@ -211,9 +211,12 @@ defmodule CorroPortWeb.AnalyticsLive do
             <span class="text-sm text-gray-600">Status:</span>
             <span class={[
               "px-2 py-1 rounded text-xs font-medium",
-              if(@aggregation_status == :running, do: "bg-green-100 text-green-800", else: "bg-gray-100 text-gray-800")
+              if(@aggregation_status == :running,
+                do: "bg-green-100 text-green-800",
+                else: "bg-gray-100 text-gray-800"
+              )
             ]}>
-              <%= String.capitalize(to_string(@aggregation_status)) %>
+              {String.capitalize(to_string(@aggregation_status))}
             </span>
           </div>
 
@@ -233,38 +236,42 @@ defmodule CorroPortWeb.AnalyticsLive do
 
           <%= if @last_update do %>
             <div class="text-sm text-gray-600">
-              Last update: <%= format_time(@last_update) %>
+              Last update: {format_time(@last_update)}
             </div>
           <% end %>
         </div>
       </div>
-
-      <!-- Experiment Summary -->
+      
+    <!-- Experiment Summary -->
       <%= if @current_experiment do %>
         <div class="bg-white rounded-lg shadow p-6 mb-6">
           <h3 class="text-lg font-semibold mb-4">
-            Experiment: <%= @current_experiment %>
+            Experiment: {@current_experiment}
           </h3>
 
           <%= if @cluster_summary do %>
             <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
               <div class="text-center">
-                <div class="text-2xl font-bold text-blue-600"><%= @cluster_summary.node_count || 0 %></div>
+                <div class="text-2xl font-bold text-blue-600">{@cluster_summary.node_count || 0}</div>
                 <div class="text-sm text-gray-600">Nodes</div>
               </div>
               <div class="text-center">
-                <div class="text-2xl font-bold text-green-600"><%= @cluster_summary.send_count || 0 %></div>
+                <div class="text-2xl font-bold text-green-600">
+                  {@cluster_summary.send_count || 0}
+                </div>
                 <div class="text-sm text-gray-600">Messages Sent</div>
               </div>
               <div class="text-center">
-                <div class="text-2xl font-bold text-purple-600"><%= @cluster_summary.ack_count || 0 %></div>
+                <div class="text-2xl font-bold text-purple-600">
+                  {@cluster_summary.ack_count || 0}
+                </div>
                 <div class="text-sm text-gray-600">Acknowledged</div>
               </div>
               <div class="text-center">
                 <div class="text-2xl font-bold text-orange-600">
                   <%= if @cluster_summary.send_count && @cluster_summary.send_count > 0 && @cluster_summary.node_count > 1 do %>
                     <% expected_acks = @cluster_summary.send_count * @cluster_summary.node_count %>
-                    <%= Float.round(@cluster_summary.ack_count / expected_acks * 100, 1) %>%
+                    {Float.round(@cluster_summary.ack_count / expected_acks * 100, 1)}%
                   <% else %>
                     0%
                   <% end %>
@@ -272,11 +279,15 @@ defmodule CorroPortWeb.AnalyticsLive do
                 <div class="text-sm text-gray-600">Ack Rate</div>
               </div>
               <div class="text-center">
-                <div class="text-2xl font-bold text-indigo-600"><%= @cluster_summary.system_metrics_count || 0 %></div>
+                <div class="text-2xl font-bold text-indigo-600">
+                  {@cluster_summary.system_metrics_count || 0}
+                </div>
                 <div class="text-sm text-gray-600">Metrics</div>
               </div>
               <div class="text-center">
-                <div class="text-2xl font-bold text-gray-600"><%= @cluster_summary.topology_snapshots_count || 0 %></div>
+                <div class="text-2xl font-bold text-gray-600">
+                  {@cluster_summary.topology_snapshots_count || 0}
+                </div>
                 <div class="text-sm text-gray-600">Snapshots</div>
               </div>
             </div>
@@ -286,8 +297,8 @@ defmodule CorroPortWeb.AnalyticsLive do
             </div>
           <% end %>
         </div>
-
-        <!-- Active Nodes -->
+        
+    <!-- Active Nodes -->
         <div class="bg-white rounded-lg shadow p-6 mb-6">
           <h3 class="text-lg font-semibold mb-4">Active Nodes</h3>
 
@@ -295,13 +306,13 @@ defmodule CorroPortWeb.AnalyticsLive do
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <%= for node <- @active_nodes do %>
                 <div class="border rounded p-3">
-                  <div class="font-medium"><%= node.node_id %></div>
+                  <div class="font-medium">{node.node_id}</div>
                   <div class="text-sm text-gray-600">
-                    Region: <%= node.region || "Unknown" %>
+                    Region: {node.region || "Unknown"}
                   </div>
                   <%= if node.phoenix_port do %>
                     <div class="text-sm text-gray-600">
-                      Port: <%= node.phoenix_port %>
+                      Port: {node.phoenix_port}
                     </div>
                   <% end %>
                   <%= if node.is_local do %>
@@ -318,8 +329,8 @@ defmodule CorroPortWeb.AnalyticsLive do
             </div>
           <% end %>
         </div>
-
-        <!-- Timing Statistics -->
+        
+    <!-- Timing Statistics -->
         <div class="bg-white rounded-lg shadow p-6 mb-6">
           <h3 class="text-lg font-semibold mb-4">Message Timing Statistics</h3>
 
@@ -340,31 +351,31 @@ defmodule CorroPortWeb.AnalyticsLive do
                 <tbody>
                   <%= for stat <- @timing_stats do %>
                     <tr class="border-b">
-                      <td class="px-4 py-2 text-sm font-mono"><%= stat.message_id %></td>
-                      <td class="px-4 py-2 text-sm"><%= format_datetime(stat.send_time) %></td>
-                      <td class="px-4 py-2 text-sm"><%= stat.ack_count %></td>
+                      <td class="px-4 py-2 text-sm font-mono">{stat.message_id}</td>
+                      <td class="px-4 py-2 text-sm">{format_datetime(stat.send_time)}</td>
+                      <td class="px-4 py-2 text-sm">{stat.ack_count}</td>
                       <td class="px-4 py-2 text-sm">
                         <%= if stat.min_latency_ms do %>
-                          <%= stat.min_latency_ms %>ms
+                          {stat.min_latency_ms}ms
                         <% else %>
                           <span class="text-gray-400">-</span>
                         <% end %>
                       </td>
                       <td class="px-4 py-2 text-sm">
                         <%= if stat.max_latency_ms do %>
-                          <%= stat.max_latency_ms %>ms
+                          {stat.max_latency_ms}ms
                         <% else %>
                           <span class="text-gray-400">-</span>
                         <% end %>
                       </td>
                       <td class="px-4 py-2 text-sm">
                         <%= if stat.avg_latency_ms do %>
-                          <%= stat.avg_latency_ms %>ms
+                          {stat.avg_latency_ms}ms
                         <% else %>
                           <span class="text-gray-400">-</span>
                         <% end %>
                       </td>
-                      <td class="px-4 py-2 text-sm"><%= length(stat.acknowledgments) %></td>
+                      <td class="px-4 py-2 text-sm">{length(stat.acknowledgments)}</td>
                     </tr>
                   <% end %>
                 </tbody>
@@ -376,8 +387,8 @@ defmodule CorroPortWeb.AnalyticsLive do
             </div>
           <% end %>
         </div>
-
-        <!-- System Metrics Chart -->
+        
+    <!-- System Metrics Chart -->
         <div class="bg-white rounded-lg shadow p-6">
           <h3 class="text-lg font-semibold mb-4">System Metrics</h3>
 
@@ -389,21 +400,21 @@ defmodule CorroPortWeb.AnalyticsLive do
                 <div class="space-y-2">
                   <%= for metric <- Enum.take(@system_metrics, 10) do %>
                     <div class="flex items-center justify-between text-sm">
-                      <span class="text-gray-600"><%= metric.node_id %></span>
-                      <span class="font-medium"><%= metric.memory_mb %> MB</span>
+                      <span class="text-gray-600">{metric.node_id}</span>
+                      <span class="font-medium">{metric.memory_mb} MB</span>
                     </div>
                   <% end %>
                 </div>
               </div>
-
-              <!-- Process Count -->
+              
+    <!-- Process Count -->
               <div>
                 <h4 class="font-medium mb-2">Erlang Processes</h4>
                 <div class="space-y-2">
                   <%= for metric <- Enum.take(@system_metrics, 10) do %>
                     <div class="flex items-center justify-between text-sm">
-                      <span class="text-gray-600"><%= metric.node_id %></span>
-                      <span class="font-medium"><%= metric.erlang_processes %></span>
+                      <span class="text-gray-600">{metric.node_id}</span>
+                      <span class="font-medium">{metric.erlang_processes}</span>
                     </div>
                   <% end %>
                 </div>
@@ -432,20 +443,23 @@ defmodule CorroPortWeb.AnalyticsLive do
       experiment_id = socket.assigns.current_experiment
 
       # Get data from aggregator
-      cluster_summary = case AnalyticsAggregator.get_cluster_experiment_summary(experiment_id) do
-        {:ok, summary} -> summary
-        _ -> nil
-      end
+      cluster_summary =
+        case AnalyticsAggregator.get_cluster_experiment_summary(experiment_id) do
+          {:ok, summary} -> summary
+          _ -> nil
+        end
 
-      timing_stats = case AnalyticsAggregator.get_cluster_timing_stats(experiment_id) do
-        {:ok, stats} -> stats
-        _ -> []
-      end
+      timing_stats =
+        case AnalyticsAggregator.get_cluster_timing_stats(experiment_id) do
+          {:ok, stats} -> stats
+          _ -> []
+        end
 
-      system_metrics = case AnalyticsAggregator.get_cluster_system_metrics(experiment_id) do
-        {:ok, metrics} -> Enum.sort_by(metrics, & &1.inserted_at, {:desc, DateTime})
-        _ -> []
-      end
+      system_metrics =
+        case AnalyticsAggregator.get_cluster_system_metrics(experiment_id) do
+          {:ok, metrics} -> Enum.sort_by(metrics, & &1.inserted_at, {:desc, DateTime})
+          _ -> []
+        end
 
       active_nodes = AnalyticsAggregator.get_active_nodes()
 

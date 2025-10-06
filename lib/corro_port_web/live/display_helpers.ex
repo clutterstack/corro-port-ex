@@ -145,13 +145,16 @@ defmodule CorroPortWeb.DisplayHelpers do
   """
   def dns_alert_config(dns_data) do
     case get_error_reason(dns_data) do
-      nil -> nil
-      reason -> %{
-        class: "alert alert-warning",
-        icon: "hero-exclamation-triangle",
-        title: "DNS Discovery Failed",
-        message: "Error: #{format_error_reason(reason)} - Expected regions may be incomplete"
-      }
+      nil ->
+        nil
+
+      reason ->
+        %{
+          class: "alert alert-warning",
+          icon: "hero-exclamation-triangle",
+          title: "DNS Discovery Failed",
+          message: "Error: #{format_error_reason(reason)} - Expected regions may be incomplete"
+        }
     end
   end
 
@@ -160,13 +163,16 @@ defmodule CorroPortWeb.DisplayHelpers do
   """
   def cli_alert_config(cli_data) do
     case get_error_reason(cli_data) do
-      nil -> nil
-      reason -> %{
-        class: "alert alert-error",
-        icon: "hero-exclamation-triangle",
-        title: "CLI Data Failed",
-        message: "Error: #{format_error_reason(reason)} - Active member list may be stale"
-      }
+      nil ->
+        nil
+
+      reason ->
+        %{
+          class: "alert alert-error",
+          icon: "hero-exclamation-triangle",
+          title: "CLI Data Failed",
+          message: "Error: #{format_error_reason(reason)} - Active member list may be stale"
+        }
     end
   end
 
@@ -175,13 +181,16 @@ defmodule CorroPortWeb.DisplayHelpers do
   """
   def api_alert_config(api_data) do
     case api_data.cache_status.error do
-      nil -> nil
-      error -> %{
-        class: "alert alert-warning",
-        icon: "hero-exclamation-triangle",
-        title: "API Data Issue",
-        message: "Error: #{format_error_reason(error)} - Cluster info may be incomplete"
-      }
+      nil ->
+        nil
+
+      error ->
+        %{
+          class: "alert alert-warning",
+          icon: "hero-exclamation-triangle",
+          title: "API Data Issue",
+          message: "Error: #{format_error_reason(error)} - Cluster info may be incomplete"
+        }
     end
   end
 
@@ -237,7 +246,7 @@ defmodule CorroPortWeb.DisplayHelpers do
         source_label: data_source_label(:cli),
         tooltip: data_source_tooltip(:cli),
         last_updated: cli_data.cache_status.last_updated
-      },
+      }
     }
   end
 
@@ -305,7 +314,6 @@ defmodule CorroPortWeb.DisplayHelpers do
 
   def format_timestamp(_), do: "Unknown"
 
-
   # Private helper functions
 
   defp get_data_result(data) do
@@ -316,6 +324,7 @@ defmodule CorroPortWeb.DisplayHelpers do
   # Private helper for system button class
   defp system_refresh_button_class(data) do
     base_class = "btn btn-xs"
+
     if data.cache_status.error do
       "#{base_class} btn-error"
     else
@@ -323,8 +332,7 @@ defmodule CorroPortWeb.DisplayHelpers do
     end
   end
 
-
-@doc """
+  @doc """
   Builds CLI status information for display.
   """
   def build_cli_status_info(cli_member_data) do
@@ -405,22 +413,23 @@ defmodule CorroPortWeb.DisplayHelpers do
   Builds CLI error configuration for display.
   """
   def build_cli_error_config(cli_error) do
-    {title, message} = case cli_error do
-      {:cli_error, :timeout} ->
-        {"CLI Data Issue", "CLI command timed out after 15 seconds"}
+    {title, message} =
+      case cli_error do
+        {:cli_error, :timeout} ->
+          {"CLI Data Issue", "CLI command timed out after 15 seconds"}
 
-      {:cli_error, reason} ->
-        {"CLI Data Issue", "CLI command failed: #{inspect(reason)}"}
+        {:cli_error, reason} ->
+          {"CLI Data Issue", "CLI command failed: #{inspect(reason)}"}
 
-      {:parse_error, _reason} ->
-        {"CLI Data Issue", "CLI command succeeded but output couldn't be parsed"}
+        {:parse_error, _reason} ->
+          {"CLI Data Issue", "CLI command succeeded but output couldn't be parsed"}
 
-      {:service_unavailable, msg} ->
-        {"CLI Data Issue", msg}
+        {:service_unavailable, msg} ->
+          {"CLI Data Issue", msg}
 
-      _ ->
-        {"CLI Data Issue", "Unknown CLI error: #{inspect(cli_error)}"}
-    end
+        _ ->
+          {"CLI Data Issue", "Unknown CLI error: #{inspect(cli_error)}"}
+      end
 
     %{title: title, message: message}
   end
@@ -443,22 +452,22 @@ defmodule CorroPortWeb.DisplayHelpers do
   end
 
   @doc """
-Formats CLI last updated timestamp for display.
-"""
-def format_cli_last_updated(nil), do: nil
+  Formats CLI last updated timestamp for display.
+  """
+  def format_cli_last_updated(nil), do: nil
 
-def format_cli_last_updated(timestamp) when is_binary(timestamp) do
-  case DateTime.from_iso8601(timestamp) do
-    {:ok, dt, _} -> Calendar.strftime(dt, "%H:%M:%S")
-    _ -> timestamp
+  def format_cli_last_updated(timestamp) when is_binary(timestamp) do
+    case DateTime.from_iso8601(timestamp) do
+      {:ok, dt, _} -> Calendar.strftime(dt, "%H:%M:%S")
+      _ -> timestamp
+    end
   end
-end
 
-def format_cli_last_updated(%DateTime{} = dt) do
-  Calendar.strftime(dt, "%H:%M:%S")
-end
+  def format_cli_last_updated(%DateTime{} = dt) do
+    Calendar.strftime(dt, "%H:%M:%S")
+  end
 
-def format_cli_last_updated(_), do: nil
+  def format_cli_last_updated(_), do: nil
 
   # DNS Node Data Helpers
 
@@ -470,6 +479,7 @@ def format_cli_last_updated(_), do: nil
       {:ok, nodes} ->
         parsed_nodes = Enum.map(nodes, &parse_dns_node_id/1)
         status = if dns_data.cache_status.error, do: :error, else: :ok
+
         %{
           nodes: parsed_nodes,
           node_count: length(parsed_nodes),
@@ -512,7 +522,8 @@ def format_cli_last_updated(_), do: nil
     end
   end
 
-  def parse_dns_node_id(_), do: %{"region" => "unknown", "machine_id" => "unknown", "full_id" => "unknown"}
+  def parse_dns_node_id(_),
+    do: %{"region" => "unknown", "machine_id" => "unknown", "full_id" => "unknown"}
 
   @doc """
   Builds DNS status information for display.
@@ -616,19 +627,20 @@ def format_cli_last_updated(_), do: nil
   Builds DNS error configuration for display.
   """
   def build_dns_error_config(dns_error) do
-    {title, message} = case dns_error do
-      {:dns_query_failed, :no_txt_records} ->
-        {"DNS Data Issue", "No DNS TXT records found for cluster discovery"}
+    {title, message} =
+      case dns_error do
+        {:dns_query_failed, :no_txt_records} ->
+          {"DNS Data Issue", "No DNS TXT records found for cluster discovery"}
 
-      {:dns_query_failed, reason} ->
-        {"DNS Data Issue", "DNS query failed: #{inspect(reason)}"}
+        {:dns_query_failed, reason} ->
+          {"DNS Data Issue", "DNS query failed: #{inspect(reason)}"}
 
-      {:parse_error, _reason} ->
-        {"DNS Data Issue", "DNS query succeeded but output couldn't be parsed"}
+        {:parse_error, _reason} ->
+          {"DNS Data Issue", "DNS query succeeded but output couldn't be parsed"}
 
-      _ ->
-        {"DNS Data Issue", "Unknown DNS error: #{inspect(dns_error)}"}
-    end
+        _ ->
+          {"DNS Data Issue", "Unknown DNS error: #{inspect(dns_error)}"}
+      end
 
     %{title: title, message: message}
   end

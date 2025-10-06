@@ -91,7 +91,9 @@ defmodule CorroPortWeb.MessagesLive do
       {:ok, message_data} ->
         Logger.debug("MessagesLive: ✅ Message sent successfully: #{inspect(message_data)}")
 
-        socket = put_flash(socket, :info, "Message sent successfully! Now tracking acknowledgments...")
+        socket =
+          put_flash(socket, :info, "Message sent successfully! Now tracking acknowledgments...")
+
         {:noreply, socket}
 
       {:error, error} ->
@@ -165,10 +167,11 @@ defmodule CorroPortWeb.MessagesLive do
     ack_sender_status = AckSender.get_status()
 
     # Get expected nodes from DNS for the status card
-    expected_nodes = case CorroPort.DNSLookup.get_dns_data() do
-      %{nodes: {:ok, nodes}} -> nodes
-      _ -> []
-    end
+    expected_nodes =
+      case CorroPort.DNSLookup.get_dns_data() do
+        %{nodes: {:ok, nodes}} -> nodes
+        _ -> []
+      end
 
     assign(socket, %{
       ack_status: ack_status,
@@ -255,7 +258,7 @@ defmodule CorroPortWeb.MessagesLive do
     <div class="space-y-6">
       <!-- Navigation Tabs -->
       <NavTabs.nav_tabs active={:messages} />
-
+      
     <!-- Page Header -->
       <.header>
         Message Operations
@@ -275,14 +278,14 @@ defmodule CorroPortWeb.MessagesLive do
           </.button>
         </:actions>
       </.header>
-
+      
     <!-- Acknowledgment Status -->
       <AckStatusCard.ack_status_card
         ack_status={@ack_status}
         ack_sender_status={@ack_sender_status}
         expected_nodes={@expected_nodes}
       />
-
+      
     <!-- Connectivity Test Results -->
       <div :if={@connectivity_test_results} class="card bg-base-200">
         <div class="card-body">
@@ -300,7 +303,7 @@ defmodule CorroPortWeb.MessagesLive do
           </div>
         </div>
       </div>
-
+      
     <!-- All Messages Table -->
       <AllMessagesTable.all_messages_table
         all_messages={@all_messages}
@@ -308,7 +311,7 @@ defmodule CorroPortWeb.MessagesLive do
         messages_error={@messages_error}
         local_node_id={@local_node_id}
       />
-
+      
     <!-- Last Updated -->
       <div :if={@last_updated} class="text-xs text-base-content/70 text-center">
         Last updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}

@@ -22,7 +22,8 @@ defmodule CorroPort.AckSender do
   @ack_timeout 5_000
   @reception_cache_table :message_reception_cache
   @cache_ttl_hours 24
-  @cleanup_interval_ms 3_600_000  # 1 hour
+  # 1 hour
+  @cleanup_interval_ms 3_600_000
 
   def child_spec(opts) do
     %{
@@ -190,7 +191,9 @@ defmodule CorroPort.AckSender do
               )
 
             {:error, reason} ->
-              Logger.warning("AckSender: Could not parse endpoint #{originating_endpoint}: #{reason}")
+              Logger.warning(
+                "AckSender: Could not parse endpoint #{originating_endpoint}: #{reason}"
+              )
           end
 
         {:duplicate, reception_count} ->

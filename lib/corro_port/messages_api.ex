@@ -1,7 +1,12 @@
 defmodule CorroPort.MessagesAPI do
   @moduledoc """
-  API for managing user data in the node_messages table.
-  Now includes originating_endpoint and region fields for geographic tracking.
+  High-level interface for working with Corrosion's `node_messages` table.
+
+  The helpers here encapsulate the mechanics of persisting outbound messages,
+  tagging them with endpoint/region metadata, and wiring the acknowledgement
+  tracking and analytics hooks that the rest of the UI depends on. The module
+  focuses exclusively on node message replication – it is not a general-purpose
+  user data API.
   """
   require Logger
   alias CorroPort.{ConnectionManager, AckTracker, AnalyticsStorage, LocalNode}
@@ -23,7 +28,10 @@ defmodule CorroPort.MessagesAPI do
   """
   def send_and_track_message(content) do
     local_node_id = LocalNode.get_node_id()
-    message_content = "#{content} (from #{local_node_id} at #{DateTime.utc_now() |> DateTime.to_iso8601()})"
+
+    message_content =
+      "#{content} (from #{local_node_id} at #{DateTime.utc_now() |> DateTime.to_iso8601()})"
+
     send_timestamp = DateTime.utc_now()
 
     case insert_message(local_node_id, message_content) do
@@ -91,6 +99,7 @@ defmodule CorroPort.MessagesAPI do
     )
 
     conn = ConnectionManager.get_connection()
+
     case CorroClient.transaction(conn, [sql]) do
       {:ok, _response} ->
         {:ok,
@@ -114,6 +123,7 @@ defmodule CorroPort.MessagesAPI do
   def get_node_messages do
     query = "SELECT * FROM node_messages ORDER BY timestamp DESC"
     conn = ConnectionManager.get_connection()
+
     case CorroClient.query(conn, query) do
       {:ok, results} -> {:ok, results}
       error -> error
@@ -134,7 +144,9 @@ defmodule CorroPort.MessagesAPI do
     )
     ORDER BY timestamp DESC
     """
+
     conn = ConnectionManager.get_connection()
+
     case CorroClient.query(conn, query) do
       {:ok, results} -> {:ok, results}
       error -> error
@@ -158,12 +170,14 @@ defmodule CorroPort.MessagesAPI do
     """
 
     conn = ConnectionManager.get_connection()
+
     case CorroClient.query(conn, query) do
       {:ok, result} ->
         regions =
           result
           |> Enum.map(&Map.get(&1, "region"))
           |> Enum.reject(&is_nil/1)
+
         {:ok, regions}
 
       error ->
@@ -178,6 +192,7 @@ defmodule CorroPort.MessagesAPI do
   def get_messages_by_region(region) do
     query = "SELECT * FROM node_messages WHERE region = '#{region}' ORDER BY timestamp DESC"
     conn = ConnectionManager.get_connection()
+
     case CorroClient.query(conn, query) do
       {:ok, results} -> {:ok, results}
       error -> error
@@ -236,6 +251,7 @@ defmodule CorroPort.MessagesAPI do
     """
 
     conn = ConnectionManager.get_connection()
+
     case CorroClient.transaction(conn, [cleanup_sql]) do
       {:ok, _} ->
         Logger.info("Cleaned up malformed messages")
@@ -260,7 +276,8 @@ defmodule CorroPort.MessagesAPI do
           message_id,
           experiment_id,
           originating_node,
-          nil,  # target_node is nil for send events
+          # target_node is nil for send events
+          nil,
           :sent,
           timestamp,
           region

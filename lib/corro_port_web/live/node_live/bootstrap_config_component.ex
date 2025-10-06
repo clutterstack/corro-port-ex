@@ -28,7 +28,8 @@ defmodule CorroPortWeb.NodeLive.BootstrapConfigComponent do
         <div :if={!@overmind_available} class="alert alert-info">
           <.icon name="hero-information-circle" class="w-5 h-5" />
           <span>
-            This feature requires Overmind to manage the Corrosion process. Start the cluster with <code class="font-mono bg-base-300 px-1">./scripts/overmind-start.sh</code>
+            This feature requires Overmind to manage the Corrosion process. Start the cluster with
+            <code class="font-mono bg-base-300 px-1">./scripts/overmind-start.sh</code>
           </span>
         </div>
 
@@ -69,8 +70,14 @@ defmodule CorroPortWeb.NodeLive.BootstrapConfigComponent do
                 name="hero-arrow-path"
                 class="w-4 h-4 mr-2 animate-spin"
               />
-              <.icon :if={@bootstrap_status != :restarting} name="hero-cog-6-tooth" class="w-4 h-4 mr-2" />
-              {if @bootstrap_status == :restarting, do: "Restarting Corrosion...", else: "Update & Restart Corrosion"}
+              <.icon
+                :if={@bootstrap_status != :restarting}
+                name="hero-cog-6-tooth"
+                class="w-4 h-4 mr-2"
+              />
+              {if @bootstrap_status == :restarting,
+                do: "Restarting Corrosion...",
+                else: "Update & Restart Corrosion"}
             </button>
 
             <button
@@ -78,8 +85,7 @@ defmodule CorroPortWeb.NodeLive.BootstrapConfigComponent do
               class="btn btn-warning"
               phx-click="rollback_bootstrap"
             >
-              <.icon name="hero-arrow-uturn-left" class="w-4 h-4 mr-2" />
-              Rollback to Backup
+              <.icon name="hero-arrow-uturn-left" class="w-4 h-4 mr-2" /> Rollback to Backup
             </button>
           </div>
 
@@ -106,7 +112,8 @@ defmodule CorroPortWeb.NodeLive.BootstrapConfigComponent do
             <span :if={!@is_production}>
               <br />
               <strong>Development:</strong>
-              Config file: <code class="font-mono bg-base-300 px-1">{NodeConfig.get_config_path()}</code>
+              Config file:
+              <code class="font-mono bg-base-300 px-1">{NodeConfig.get_config_path()}</code>
             </span>
           </div>
         </div>

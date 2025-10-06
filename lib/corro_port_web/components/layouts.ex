@@ -12,14 +12,13 @@ defmodule CorroPortWeb.Layouts do
   embed_templates "layouts/*"
 
   @doc """
-  Renders the app layout
+  Renders the top-level application layout component that wraps LiveViews.
 
   ## Examples
 
-      <Layouts.app flash={@flash}>
+      <Layouts.app flash={@flash} current_scope={@current_scope}>
         <h1>Content</h1>
-      </Layout.app>
-      
+      </Layouts.app>
   """
   attr :flash, :map, required: true, doc: "the map of flash messages"
 

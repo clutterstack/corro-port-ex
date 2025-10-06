@@ -33,8 +33,8 @@ defmodule CorroPortWeb.Components.ClusterLive.ClusterSummaryCard do
               </span>
             </div>
           </div>
-
-          <!-- CLI Active Members -->
+          
+    <!-- CLI Active Members -->
           <div class="stat bg-base-100 rounded-lg">
             <div class="stat-title text-xs">
               <span title={@summary_stats.cli.tooltip} class="cursor-help">

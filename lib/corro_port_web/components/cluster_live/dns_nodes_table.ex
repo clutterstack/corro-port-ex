@@ -5,25 +5,28 @@ defmodule CorroPortWeb.Components.ClusterLive.DNSNodesTable do
 
   def display(assigns) do
     # Pre-compute display content using helper functions
-    dns_node_data = if assigns.dns_data do
-      DisplayHelpers.build_dns_node_data(assigns.dns_data)
-    else
-      nil
-    end
+    dns_node_data =
+      if assigns.dns_data do
+        DisplayHelpers.build_dns_node_data(assigns.dns_data)
+      else
+        nil
+      end
 
-    status_info = if dns_node_data do
-      DisplayHelpers.build_dns_status_info(dns_node_data)
-    else
-      nil
-    end
+    status_info =
+      if dns_node_data do
+        DisplayHelpers.build_dns_status_info(dns_node_data)
+      else
+        nil
+      end
 
     dns_error = DisplayHelpers.extract_dns_error(assigns.dns_data)
 
-    assigns = assign(assigns, %{
-      status_info: status_info,
-      dns_node_data: dns_node_data,
-      dns_error: dns_error
-    })
+    assigns =
+      assign(assigns, %{
+        status_info: status_info,
+        dns_node_data: dns_node_data,
+        dns_error: dns_error
+      })
 
     ~H"""
     <!-- DNS Nodes Section -->
@@ -49,25 +52,24 @@ defmodule CorroPortWeb.Components.ClusterLive.DNSNodesTable do
             </span>
           </div>
         </div>
-
-        <!-- Error Display -->
-        <.dns_error_alert :if={DisplayHelpers.should_show_dns_error?(@dns_error)} dns_error={@dns_error} />
-
-        <!-- DNS Results -->
+        
+    <!-- Error Display -->
+        <.dns_error_alert
+          :if={DisplayHelpers.should_show_dns_error?(@dns_error)}
+          dns_error={@dns_error}
+        />
+        
+    <!-- DNS Results -->
         <.dns_results_section
           :if={DisplayHelpers.has_successful_dns_nodes?(@dns_node_data)}
           dns_node_data={@dns_node_data}
         />
-
-        <!-- Empty State -->
-        <.dns_empty_state
-          :if={DisplayHelpers.show_dns_empty_state?(@dns_node_data, @dns_error)}
-        />
-
-        <!-- Loading State -->
-        <.dns_loading_state
-          :if={DisplayHelpers.show_dns_loading_state?(@dns_node_data)}
-        />
+        
+    <!-- Empty State -->
+        <.dns_empty_state :if={DisplayHelpers.show_dns_empty_state?(@dns_node_data, @dns_error)} />
+        
+    <!-- Loading State -->
+        <.dns_loading_state :if={DisplayHelpers.show_dns_loading_state?(@dns_node_data)} />
       </div>
     </div>
     """
@@ -93,7 +95,6 @@ defmodule CorroPortWeb.Components.ClusterLive.DNSNodesTable do
   defp dns_results_section(assigns) do
     ~H"""
     <div class="space-y-4">
-
       <div class="overflow-x-auto">
         <table class="table table-zebra">
           <thead>
@@ -128,7 +129,9 @@ defmodule CorroPortWeb.Components.ClusterLive.DNSNodesTable do
     ~H"""
     <div class="alert alert-info">
       <.icon name="hero-information-circle" class="w-5 h-5" />
-      <span>No expected nodes found from DNS - this appears to be a single node setup or DNS is not configured</span>
+      <span>
+        No expected nodes found from DNS - this appears to be a single node setup or DNS is not configured
+      </span>
     </div>
     """
   end
@@ -143,5 +146,4 @@ defmodule CorroPortWeb.Components.ClusterLive.DNSNodesTable do
     </div>
     """
   end
-
 end

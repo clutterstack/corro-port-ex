@@ -32,24 +32,21 @@ config :corro_port, CorroPortWeb.APIEndpoint,
 
 # For FlyMapEx
 config :fly_map_ex,
-  custom_regions:
-    %{
-      # Whitehorse
-      "dev-node1" => %{name: "dev-node1", coordinates: {60.7212, -135.0568}},
-      # Yellowknife
-      "dev-node2" => %{name: "dev-node2", coordinates: {62.454, -114.3718}},
-      # Iqaluit
-      "dev-node3" => %{name: "dev-node3", coordinates: {63.7467, -68.5207}}
-    },
-  default_presets:
-    %{
+  custom_regions: %{
+    # Whitehorse
+    "dev-node1" => %{name: "dev-node1", coordinates: {60.7212, -135.0568}},
+    # Yellowknife
+    "dev-node2" => %{name: "dev-node2", coordinates: {62.454, -114.3718}},
+    # Iqaluit
+    "dev-node3" => %{name: "dev-node3", coordinates: {63.7467, -68.5207}}
+  },
+  default_presets: %{
     local: %{colour: "#e046ffff", size: 4},
     dns: %{colour: "#969494ff", size: 6},
     api: %{colour: "#8f45ffff", size: 6},
     cli: %{colour: "#4ec2f8ff", size: 4},
-    acked: %{colour: "#54f25aff", size: 4},
-    }
-
+    acked: %{colour: "#54f25aff", size: 4}
+  }
 
 # Configure esbuild (the version is required)
 config :esbuild,

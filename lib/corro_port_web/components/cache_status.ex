@@ -10,15 +10,9 @@ defmodule CorroPortWeb.CacheStatus do
   def cache_status(assigns) do
     ~H"""
     <div class="flex gap-4 text-xs text-base-content/70">
-      <.cache_status_item
-        label="DNS Cache"
-        status={Map.get(@dns_data, :cache_status)}
-      />
+      <.cache_status_item label="DNS Cache" status={Map.get(@dns_data, :cache_status)} />
 
-      <.cache_status_item
-        label="CLI Cache"
-        status={Map.get(@cli_data, :cache_status)}
-      />
+      <.cache_status_item label="CLI Cache" status={Map.get(@cli_data, :cache_status)} />
     </div>
     """
   end

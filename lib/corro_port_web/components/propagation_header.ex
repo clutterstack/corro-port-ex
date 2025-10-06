@@ -13,7 +13,9 @@ defmodule CorroPortWeb.PropagationHeader do
       DB change propagation
       <:subtitle>
         <div class="flex items-center gap-4">
-          <span>Click "Send Message." Markers change colour as nodes confirm they've received the update.</span>
+          <span>
+            Click "Send Message." Markers change colour as nodes confirm they've received the update.
+          </span>
         </div>
       </:subtitle>
       <:actions>
@@ -34,6 +36,7 @@ defmodule CorroPortWeb.PropagationHeader do
   # Helper functions
   defp refresh_button_class(data) do
     base_classes = "btn btn-sm"
+
     if has_error?(data) do
       "#{base_classes} btn-error"
     else

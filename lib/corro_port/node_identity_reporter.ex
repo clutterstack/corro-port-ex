@@ -15,7 +15,8 @@ defmodule CorroPort.NodeIdentityReporter do
 
   alias CorroPort.{NodeConfig, ConnectionManager}
 
-  @retry_interval 10_000  # Retry every 10 seconds if initial report fails
+  # Retry every 10 seconds if initial report fails
+  @retry_interval 10_000
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -46,11 +47,17 @@ defmodule CorroPort.NodeIdentityReporter do
   def handle_info(:report_identity, state) do
     case report_node_identity() do
       {:ok, actor_id} ->
-        Logger.info("NodeIdentityReporter: Successfully reported identity - actor_id: #{actor_id}")
+        Logger.info(
+          "NodeIdentityReporter: Successfully reported identity - actor_id: #{actor_id}"
+        )
+
         {:noreply, %{state | actor_id: actor_id, reported: true}}
 
       {:error, reason} ->
-        Logger.warning("NodeIdentityReporter: Failed to report identity: #{inspect(reason)}, retrying...")
+        Logger.warning(
+          "NodeIdentityReporter: Failed to report identity: #{inspect(reason)}, retrying..."
+        )
+
         Process.send_after(self(), :report_identity, @retry_interval)
         {:noreply, state}
     end
@@ -88,17 +95,21 @@ defmodule CorroPort.NodeIdentityReporter do
 
   defp binary_to_uuid(binary_list) when is_list(binary_list) do
     binary_list
-    |> Enum.map(&Integer.to_string(&1, 16) |> String.downcase() |> String.pad_leading(2, "0"))
+    |> Enum.map(&(Integer.to_string(&1, 16) |> String.downcase() |> String.pad_leading(2, "0")))
     |> Enum.join()
     |> format_as_uuid()
   end
 
   defp format_as_uuid(hex) when byte_size(hex) == 32 do
-    String.slice(hex, 0..7) <> "-" <>
-    String.slice(hex, 8..11) <> "-" <>
-    String.slice(hex, 12..15) <> "-" <>
-    String.slice(hex, 16..19) <> "-" <>
-    String.slice(hex, 20..31)
+    String.slice(hex, 0..7) <>
+      "-" <>
+      String.slice(hex, 8..11) <>
+      "-" <>
+      String.slice(hex, 12..15) <>
+      "-" <>
+      String.slice(hex, 16..19) <>
+      "-" <>
+      String.slice(hex, 20..31)
   end
 
   defp ensure_column_exists do

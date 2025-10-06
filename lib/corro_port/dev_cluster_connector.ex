@@ -26,41 +26,51 @@ defmodule CorroPort.DevClusterConnector do
 
   @impl true
   def handle_info(:connect_peers, state) do
-    # Try to connect to dev_node1, dev_node2, dev_node3
-    # (skip our own node)
+    # Get expected nodes from DNSLookup (dev fallback)
     local_node = Node.self()
 
-    peer_nodes = for i <- 1..10 do
-      :"dev_node#{i}@#{hostname()}"
-    end
-    |> Enum.reject(&(&1 == local_node))
+    {:ok, expected_node_ids} = CorroPort.DNSLookup.get_development_fallback()
 
-    Logger.info("DevClusterConnector: Attempting to connect to peer nodes from #{local_node}...")
+    peer_nodes =
+      expected_node_ids
+      |> Enum.map(fn node_id ->
+        # Convert "dev-node1" to :"dev_node1@localhost"
+        node_name = String.replace(node_id, "-", "_")
+        :"#{node_name}@#{hostname()}"
+      end)
+      |> Enum.reject(&(&1 == local_node))
 
-    connected = Enum.filter(peer_nodes, fn node ->
-      case Node.connect(node) do
-        true ->
-          Logger.info("DevClusterConnector: ✅ Connected to #{node}")
-          true
-        false ->
-          # Node might not exist yet, that's ok
-          false
-        :ignored ->
-          # Already connected
-          Logger.debug("DevClusterConnector: Already connected to #{node}")
-          true
-      end
-    end)
+    Logger.info(
+      "DevClusterConnector: Attempting one-time connection to peer nodes from #{local_node}..."
+    )
+
+    connected =
+      Enum.filter(peer_nodes, fn node ->
+        case Node.connect(node) do
+          true ->
+            Logger.info("DevClusterConnector: ✅ Connected to #{node}")
+            true
+
+          false ->
+            # Node might not exist yet, that's ok
+            false
+
+          :ignored ->
+            # Already connected
+            Logger.debug("DevClusterConnector: Already connected to #{node}")
+            true
+        end
+      end)
 
     if length(connected) > 0 do
-      Logger.info("DevClusterConnector: Connected to #{length(connected)} peer nodes: #{inspect(connected)}")
+      Logger.info(
+        "DevClusterConnector: Connected to #{length(connected)} peer nodes: #{inspect(connected)}"
+      )
+
       Logger.info("DevClusterConnector: Full cluster: #{inspect([Node.self() | Node.list()])}")
     else
       Logger.info("DevClusterConnector: No peer nodes found (this may be the only node running)")
     end
-
-    # Keep trying to reconnect periodically
-    Process.send_after(self(), :connect_peers, 10_000)
 
     {:noreply, state}
   end

@@ -53,17 +53,20 @@ config :corro_port, :node_config,
   fly_region: "dev"
 
 # Configure Analytics Repo with node-specific database
-config :corro_port, CorroPort.Analytics.Repo,
-  database: "analytics/analytics_node#{node_id}.db"
+config :corro_port, CorroPort.Analytics.Repo, database: "analytics/analytics_node#{node_id}.db"
 
 # Watch static and templates for browser reloading.
+# Last regex is to exclude corrosion and analytics directories from live reload file watching
+# to prevent recompilation when SQLite databases are modified (that wasn't what's triggering it though)
+
 config :corro_port, CorroPortWeb.Endpoint,
   live_reload: [
     web_console_logger: true,
     patterns: [
       ~r"priv/static/(?!uploads/).*(js|css|png|jpeg|jpg|gif|svg)$",
       ~r"priv/gettext/.*(po)$",
-      ~r"lib/corro_port_web/(?:controllers|live|components|router)/?.*\.(ex|heex)$"
+      ~r"lib/corro_port_web/(?:controllers|live|components|router)/?.*\.(ex|heex)$",
+      ~r"lib/(?!corrosion|analytics)/.*\.(ex)$"
     ]
   ]
 
