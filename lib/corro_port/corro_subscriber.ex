@@ -74,10 +74,10 @@ defmodule CorroPort.CorroSubscriber do
   @impl true
   def handle_continue(:start_subscription, state) do
     Logger.info("CorroSubscriber: Starting subscription")
-    
+
     conn = ConnectionManager.get_subscription_connection()
     query = "SELECT * FROM node_messages ORDER BY timestamp DESC"
-    
+
     case CorroClient.Subscriber.start_subscription(conn,
       query: query,
       on_event: &handle_subscription_event/1,
@@ -118,7 +118,7 @@ defmodule CorroPort.CorroSubscriber do
     else
       %{status: :not_started, connected: false}
     end
-    
+
     status = %{
       genserver_status: state.status,
       subscriber_status: subscriber_status.status,
@@ -126,18 +126,18 @@ defmodule CorroPort.CorroSubscriber do
       watch_id: state.watch_id,
       initial_state_received: state.initial_state_received
     }
-    
+
     {:reply, status, state}
   end
 
   @impl true
   def handle_call(:restart, _from, state) do
     Logger.info("CorroSubscriber: Manual restart requested")
-    
+
     if state.subscriber_pid do
       CorroClient.Subscriber.restart(state.subscriber_pid)
     end
-    
+
     {:reply, :ok, state}
   end
 
@@ -268,6 +268,6 @@ defmodule CorroPort.CorroSubscriber do
   end
 
   defp broadcast_event(event) do
-    Phoenix.PubSub.broadcast(CorroPort.PubSub, "message_updates", event)
+    Phoenix.PubSub.local_broadcast(CorroPort.PubSub, "message_updates", event)
   end
 end
