@@ -189,6 +189,52 @@ The system runs as **two independent layers** that must both be running:
 
 **Key Point**: Corrosion agents must be running **before** starting Phoenix nodes. Phoenix will fail to start if it cannot connect to its Corrosion agent.
 
+### Library vs Application Layer Pattern
+
+CorroPort follows clean architecture principles by separating generic library code from application-specific code:
+
+#### CorroClient (Library - deps/corro_client)
+
+**Purpose**: Reusable Elixir client for Corrosion databases
+
+- `CorroClient.Client` - Low-level HTTP client for Corrosion API
+- `CorroClient.Subscriber` - Generic subscription manager with reconnection logic
+- **No application dependencies**: No Phoenix, no PubSub, no domain logic
+- **Callback-based API**: Flexible integration via `on_event`, `on_connect`, `on_error`, `on_disconnect`
+- **Built-in resilience**: Exponential backoff reconnection (2s, 5s, 10s, 15s, 30s)
+
+#### CorroPort Application Layer
+
+**Purpose**: Application-specific wrappers and integration
+
+- `CorroPort.CorroSubscriber` - Wraps CorroClient.Subscriber for node_messages table
+  - Translates callbacks into Phoenix PubSub broadcasts
+  - Named process registration for easy access
+  - Application-specific event transformations
+- `CorroPort.ConfigSubscriber` - Wraps CorroClient.Subscriber for node_configs table
+  - Parses JSON bootstrap configuration
+  - Automatically applies config via ConfigManager
+  - Prevents restart loops with state tracking
+
+#### The Callback-to-Message Pattern
+
+Both subscribers use a two-step pattern to bridge library callbacks into GenServer state:
+
+1. CorroClient.Subscriber callbacks run in the subscriber's process
+2. Callbacks send messages to the wrapper GenServer via `send(__MODULE__, ...)`
+3. GenServer handles messages in `handle_info/2` with proper state management
+
+This ensures all state mutations happen in the GenServer's process, maintaining proper concurrency guarantees and enabling supervision.
+
+**Why not use a `deliver_to: pid()` option?**
+
+This would be a nice enhancement to CorroClient.Subscriber, but:
+- The callback pattern works well and is explicit
+- We don't control the CorroClient library
+- The current approach is a standard GenServer pattern
+
+See moduledocs for `CorroPort.CorroSubscriber` and `CorroPort.ConfigSubscriber` for detailed architectural explanations.
+
 ### Core Components
 
 **Cluster Data Sources**

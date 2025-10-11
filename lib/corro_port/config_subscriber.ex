@@ -6,7 +6,22 @@ defmodule CorroPort.ConfigSubscriber do
   bootstrap configuration. When a change is detected, it automatically updates
   the local Corrosion config file and restarts the Corrosion agent.
 
-  ## Architecture
+  ## Architecture: Application-Specific Subscriber
+
+  Like `CorroPort.CorroSubscriber`, this module wraps `CorroClient.Subscriber`
+  to provide application-specific functionality:
+
+  **Library Layer (CorroClient.Subscriber):**
+  - Generic subscription with reconnection logic
+  - Callback-based event delivery
+
+  **Application Layer (ConfigSubscriber):**
+  - Subscribes to node_configs table filtered by node_id
+  - Parses bootstrap configuration changes from JSON
+  - Automatically applies configuration via ConfigManager
+  - Prevents restart loops by tracking last_config state
+
+  ## Data Flow
 
   Each node subscribes to changes filtered by its own node_id. When another node
   (or this node) writes a new bootstrap config to the node_configs table:
@@ -22,6 +37,9 @@ defmodule CorroPort.ConfigSubscriber do
   When Corrosion is restarted, this subscriber's connection will be lost.
   The underlying CorroClient.Subscriber will automatically reconnect once
   Corrosion becomes available again.
+
+  No coordination is needed - the restart happens independently, and the
+  subscriber reconnects automatically via exponential backoff.
 
   ## Data Flow Example
 

@@ -5,11 +5,40 @@ defmodule CorroPort.CorroSubscriber do
   This GenServer wraps CorroClient.Subscriber and provides supervision
   and state management for database subscriptions.
 
+  ## Architecture: Library vs Application Layers
+
+  This module demonstrates clean separation of concerns between library and application code:
+
+  **CorroClient.Subscriber (Library Layer):**
+  - Generic subscription client for Corrosion databases
+  - Handles HTTP streaming, reconnection logic with exponential backoff, error handling
+  - Callback-based API: `on_event`, `on_connect`, `on_error`, `on_disconnect`
+  - No application-specific logic or dependencies
+  - Reusable across any Elixir application
+
+  **CorroPort.CorroSubscriber (Application Layer):**
+  - Wraps CorroClient.Subscriber in a supervised GenServer
+  - Translates generic callbacks into Phoenix PubSub broadcasts for LiveViews
+  - Performs application-specific event transformation (e.g., `{:new_row}` → `{:new_message}`)
+  - Named process registration for easy access throughout the application
+  - Integrates with CorroPort's supervision tree and PubSub infrastructure
+
+  ### The Callback-to-Message Pattern
+
+  This module uses a two-step pattern to bridge the library's callbacks into its GenServer state:
+
+  1. Callbacks from CorroClient.Subscriber run in the subscriber's process
+  2. These callbacks send messages to this GenServer via `send(__MODULE__, ...)`
+  3. The GenServer handles these messages in `handle_info/2` with proper state management
+
+  This pattern ensures all state mutations happen in the GenServer's process, maintaining
+  proper concurrency guarantees and enabling supervision.
+
   ## Connection Resilience
 
   The underlying `CorroClient.Subscriber` handles automatic reconnection with
-  exponential backoff when connections are lost. This module simply tracks
-  connection state and broadcasts events to LiveViews.
+  exponential backoff (2s, 5s, 10s, 15s, 30s) when connections are lost. This
+  module simply tracks connection state and broadcasts events to LiveViews.
 
   ### States
 
@@ -25,6 +54,9 @@ defmodule CorroPort.CorroSubscriber do
   You may see "connection refused" or "unable to open database" errors in logs
   during the restart window - this is expected behaviour while the reconnection
   logic waits for Corrosion to become available.
+
+  No coordination is needed between ConfigManager (which restarts Corrosion) and
+  this subscriber - each component handles its own responsibility independently.
   """
 
   use GenServer
