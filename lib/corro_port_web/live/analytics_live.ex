@@ -20,26 +20,54 @@ defmodule CorroPortWeb.AnalyticsLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    if connected?(socket) do
-      # Note: We'll subscribe to specific experiment when one is selected
-      # Phoenix.PubSub doesn't support wildcard subscriptions directly
+    # Check if there's already a running experiment
+    current_experiment_id = AnalyticsAggregator.get_current_experiment_id()
 
-      # Start periodic refresh
-      schedule_refresh()
-    end
+    socket =
+      if connected?(socket) do
+        # Subscribe to running experiment if there is one
+        if current_experiment_id do
+          Phoenix.PubSub.subscribe(CorroPort.PubSub, "analytics:#{current_experiment_id}")
+        end
+
+        # Start periodic refresh
+        schedule_refresh()
+
+        socket
+        |> assign(:current_experiment, current_experiment_id)
+        |> assign(:aggregation_status, if(current_experiment_id, do: :running, else: :stopped))
+      else
+        socket
+        |> assign(:current_experiment, nil)
+        |> assign(:aggregation_status, :stopped)
+      end
 
     socket =
       socket
       |> assign(:page_title, "Analytics Dashboard")
-      |> assign(:current_experiment, nil)
       |> assign(:cluster_summary, nil)
       |> assign(:timing_stats, [])
       |> assign(:system_metrics, [])
       |> assign(:active_nodes, [])
-      |> assign(:aggregation_status, :stopped)
       |> assign(:last_update, nil)
       |> assign(:refresh_interval, 5000)
       |> assign(:local_node_id, LocalNode.get_node_id())
+      |> assign(:message_count, 10)
+      |> assign(:message_interval_ms, 1000)
+      |> assign(:message_progress, nil)
+      |> assign(:experiment_history, [])
+      |> assign(:viewing_mode, :current) # :current or :historical
+
+    # Load data if there's a running experiment
+    socket =
+      if current_experiment_id do
+        load_experiment_data(socket)
+      else
+        socket
+      end
+
+    # Load experiment history
+    socket = load_experiment_history(socket)
 
     {:ok, socket}
   end
@@ -66,19 +94,36 @@ defmodule CorroPortWeb.AnalyticsLive do
   end
 
   @impl true
-  def handle_event("start_aggregation", %{"experiment_id" => experiment_id}, socket) do
-    case AnalyticsAggregator.start_experiment_aggregation(experiment_id) do
+  def handle_event("start_aggregation", params, socket) do
+    experiment_id = Map.get(params, "experiment_id")
+    message_count = String.to_integer(Map.get(params, "message_count", "0"))
+    message_interval_ms = String.to_integer(Map.get(params, "message_interval_ms", "1000"))
+
+    opts = [
+      message_count: message_count,
+      message_interval_ms: message_interval_ms
+    ]
+
+    case AnalyticsAggregator.start_experiment_aggregation(experiment_id, opts) do
       :ok ->
         # Subscribe to this specific experiment's updates
         if connected?(socket) do
           Phoenix.PubSub.subscribe(CorroPort.PubSub, "analytics:#{experiment_id}")
         end
 
+        message_progress =
+          if message_count > 0 do
+            %{sent: 0, total: message_count}
+          else
+            nil
+          end
+
         socket =
           socket
           |> assign(:current_experiment, experiment_id)
           |> assign(:aggregation_status, :running)
-          |> put_flash(:info, "Started aggregation for experiment #{experiment_id}")
+          |> assign(:message_progress, message_progress)
+          |> put_flash(:info, "Started experiment #{experiment_id}" <> if(message_count > 0, do: " with #{message_count} messages", else: ""))
           |> push_patch(to: ~p"/analytics?experiment_id=#{experiment_id}")
 
         {:noreply, socket}
@@ -97,6 +142,7 @@ defmodule CorroPortWeb.AnalyticsLive do
           socket
           |> assign(:aggregation_status, :stopped)
           |> assign(:current_experiment, nil)
+          |> assign(:message_progress, nil)
           |> put_flash(:info, "Stopped experiment aggregation")
 
         {:noreply, socket}
@@ -105,6 +151,54 @@ defmodule CorroPortWeb.AnalyticsLive do
         socket = put_flash(socket, :error, "Failed to stop aggregation: #{inspect(reason)}")
         {:noreply, socket}
     end
+  end
+
+  @impl true
+  def handle_event("update_message_count", %{"value" => value}, socket) do
+    case Integer.parse(value) do
+      {count, _} when count >= 0 ->
+        {:noreply, assign(socket, :message_count, count)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("update_message_interval", %{"value" => value}, socket) do
+    case Integer.parse(value) do
+      {interval, _} when interval >= 100 ->
+        {:noreply, assign(socket, :message_interval_ms, interval)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("view_experiment", %{"experiment_id" => experiment_id}, socket) do
+    socket =
+      socket
+      |> assign(:current_experiment, experiment_id)
+      |> assign(:viewing_mode, :historical)
+      |> assign(:aggregation_status, :stopped)
+      |> load_experiment_data()
+      |> push_patch(to: ~p"/analytics?experiment_id=#{experiment_id}")
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("clear_view", _params, socket) do
+    socket =
+      socket
+      |> assign(:current_experiment, nil)
+      |> assign(:viewing_mode, :current)
+      |> assign(:cluster_summary, nil)
+      |> assign(:timing_stats, [])
+      |> assign(:system_metrics, [])
+
+    {:noreply, push_patch(socket, to: ~p"/analytics")}
   end
 
   @impl true
@@ -146,6 +240,12 @@ defmodule CorroPortWeb.AnalyticsLive do
   end
 
   @impl true
+  def handle_info({:message_progress, %{sent_count: sent, total_count: total}}, socket) do
+    socket = assign(socket, :message_progress, %{sent: sent, total: total})
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_info(_msg, socket) do
     {:noreply, socket}
   end
@@ -166,47 +266,167 @@ defmodule CorroPortWeb.AnalyticsLive do
         <h1 class="text-3xl font-bold text-gray-900 mb-2">Analytics Dashboard</h1>
         <p class="text-gray-600">Real-time cluster experiment monitoring</p>
       </div>
-      
+
+      <!-- Experiment History -->
+      <%= if @experiment_history != [] do %>
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold">Experiment History</h3>
+            <%= if @current_experiment && @viewing_mode == :historical do %>
+              <button
+                phx-click="clear_view"
+                class="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Clear Selection
+              </button>
+            <% end %>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full table-auto">
+              <thead>
+                <tr class="bg-gray-50">
+                  <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Experiment ID</th>
+                  <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Started</th>
+                  <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Duration</th>
+                  <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Messages</th>
+                  <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Acks</th>
+                  <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <%= for exp <- Enum.take(@experiment_history, 10) do %>
+                  <tr class={[
+                    "border-b hover:bg-gray-50",
+                    if(@current_experiment == exp.id, do: "bg-blue-50", else: "")
+                  ]}>
+                    <td class="px-4 py-2 text-sm font-mono">{exp.id}</td>
+                    <td class="px-4 py-2 text-sm">
+                      <%= if exp.time_range do %>
+                        {format_datetime(exp.time_range.start)}
+                      <% else %>
+                        <span class="text-gray-400">-</span>
+                      <% end %>
+                    </td>
+                    <td class="px-4 py-2 text-sm">
+                      <%= if exp.duration_seconds do %>
+                        {exp.duration_seconds}s
+                      <% else %>
+                        <span class="text-gray-400">-</span>
+                      <% end %>
+                    </td>
+                    <td class="px-4 py-2 text-sm">{exp.send_count}</td>
+                    <td class="px-4 py-2 text-sm">{exp.ack_count}</td>
+                    <td class="px-4 py-2 text-sm">
+                      <button
+                        phx-click="view_experiment"
+                        phx-value-experiment_id={exp.id}
+                        class="text-blue-600 hover:text-blue-800 text-sm"
+                      >
+                        View Details
+                      </button>
+                    </td>
+                  </tr>
+                <% end %>
+              </tbody>
+            </table>
+          </div>
+
+          <%= if length(@experiment_history) > 10 do %>
+            <div class="mt-4 text-sm text-gray-600 text-center">
+              Showing 10 most recent experiments of {length(@experiment_history)} total
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+
     <!-- Experiment Controls -->
       <div class="bg-white rounded-lg shadow p-6 mb-6">
         <h3 class="text-lg font-semibold mb-4">Experiment Control</h3>
 
-        <div class="flex items-center gap-4">
-          <form phx-submit="start_aggregation" class="flex items-center gap-2">
+        <form phx-submit="start_aggregation" class="space-y-4">
+          <!-- Experiment ID -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              Experiment ID
+            </label>
             <input
               type="text"
               name="experiment_id"
               placeholder="Enter experiment ID"
               value={@current_experiment}
-              class="border rounded px-3 py-2 w-64"
+              class="border rounded px-3 py-2 w-full"
               required
+              disabled={@aggregation_status == :running}
             />
+          </div>
+
+          <!-- Message Sending Configuration -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">
+                Number of Messages (0 = manual sending)
+              </label>
+              <input
+                type="number"
+                name="message_count"
+                value={@message_count}
+                min="0"
+                max="1000"
+                class="border rounded px-3 py-2 w-full"
+                disabled={@aggregation_status == :running}
+                phx-change="update_message_count"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">
+                Message Interval (ms)
+              </label>
+              <input
+                type="number"
+                name="message_interval_ms"
+                value={@message_interval_ms}
+                min="100"
+                max="60000"
+                step="100"
+                class="border rounded px-3 py-2 w-full"
+                disabled={@aggregation_status == :running}
+                phx-change="update_message_interval"
+              />
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex items-center gap-4">
             <button
               type="submit"
-              class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+              class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={@aggregation_status == :running}
             >
-              Start Aggregation
+              Start Experiment
             </button>
-          </form>
 
-          <button
-            phx-click="stop_aggregation"
-            class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-            disabled={@aggregation_status == :stopped}
-          >
-            Stop
-          </button>
+            <button
+              type="button"
+              phx-click="stop_aggregation"
+              class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={@aggregation_status == :stopped}
+            >
+              Stop
+            </button>
 
-          <button
-            phx-click="refresh_now"
-            class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
-          >
-            Refresh Now
-          </button>
-        </div>
+            <button
+              type="button"
+              phx-click="refresh_now"
+              class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+            >
+              Refresh Now
+            </button>
+          </div>
+        </form>
 
-        <div class="mt-4 flex items-center gap-4">
+        <!-- Status Bar -->
+        <div class="mt-4 flex flex-wrap items-center gap-4 pt-4 border-t">
           <div class="flex items-center gap-2">
             <span class="text-sm text-gray-600">Status:</span>
             <span class={[
@@ -219,6 +439,26 @@ defmodule CorroPortWeb.AnalyticsLive do
               {String.capitalize(to_string(@aggregation_status))}
             </span>
           </div>
+
+          <%= if @message_progress do %>
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-gray-600">Messages:</span>
+              <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                {@message_progress.sent}/{@message_progress.total}
+              </span>
+              <%= if @message_progress.sent < @message_progress.total do %>
+                <div class="w-32 bg-gray-200 rounded-full h-2">
+                  <div
+                    class="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style={"width: #{Float.round(@message_progress.sent / @message_progress.total * 100, 1)}%"}
+                  >
+                  </div>
+                </div>
+              <% else %>
+                <span class="text-xs text-green-600 font-medium">Complete</span>
+              <% end %>
+            </div>
+          <% end %>
 
           <div class="flex items-center gap-2">
             <span class="text-sm text-gray-600">Refresh:</span>
@@ -472,6 +712,38 @@ defmodule CorroPortWeb.AnalyticsLive do
     else
       socket
     end
+  end
+
+  defp load_experiment_history(socket) do
+    # Get list of all experiments and enrich with summary data
+    experiment_ids = Analytics.list_experiments()
+
+    history =
+      experiment_ids
+      |> Enum.map(fn exp_id ->
+        summary = Analytics.get_experiment_summary(exp_id)
+
+        %{
+          id: exp_id,
+          send_count: summary.send_count,
+          ack_count: summary.ack_count,
+          time_range: summary.time_range,
+          duration_seconds: calculate_duration(summary.time_range)
+        }
+      end)
+      |> Enum.sort_by(fn exp ->
+        case exp.time_range do
+          %{start: start} -> start
+          _ -> ~U[1970-01-01 00:00:00Z]
+        end
+      end, {:desc, DateTime})
+
+    assign(socket, :experiment_history, history)
+  end
+
+  defp calculate_duration(nil), do: nil
+  defp calculate_duration(%{start: start_time, end: end_time}) do
+    DateTime.diff(end_time, start_time, :second)
   end
 
   defp schedule_refresh(interval \\ nil) do

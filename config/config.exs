@@ -10,6 +10,8 @@ import Config
 config :corro_port,
   generators: [timestamp_type: :utc_datetime]
 
+config :corro_port, ecto_repos: [CorroPort.Analytics.Repo]
+
 # Configures the endpoints
 config :corro_port, CorroPortWeb.Endpoint,
   url: [host: "localhost"],

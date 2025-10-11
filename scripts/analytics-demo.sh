@@ -89,20 +89,46 @@ check_corrosion_agents() {
     for i in $(seq 1 $NODES); do
         local port=$((8080 + i))
         
-        # Use CorroClient.test_corro_conn/1 to check agent connectivity
-        cat > /tmp/test_corro_conn.exs << EOF
-result = CorroPort.CorroClient.test_corro_conn($port)
+        # Use CorroClient directly to ping the agent without booting Phoenix endpoints
+        cat > /tmp/test_corro_conn.exs << 'EOF'
+Application.ensure_all_started(:logger)
+Application.ensure_all_started(:req)
+Application.ensure_all_started(:finch)
+Application.ensure_all_started(:corro_client)
+
+port = String.to_integer(System.get_env("CORRO_AGENT_PORT"))
+base_url = "http://127.0.0.1:#{port}"
+
+conn =
+  CorroClient.connect(base_url,
+    receive_timeout: 2_000,
+    headers: [{"content-type", "application/json"}]
+  )
+
+result =
+  try do
+    CorroClient.ping(conn)
+  catch
+    kind, reason ->
+      {:error, {kind, reason}}
+  end
+
 case result do
-  :ok -> 
-    IO.puts("✅ Corrosion agent $i (port $port) is running")
+  :ok ->
+    IO.puts("✅ Corrosion agent running")
     System.halt(0)
-  error -> 
-    IO.puts("❌ Corrosion agent $i (port $port) failed: #{inspect(error)}")
+
+  {:error, reason} ->
+    IO.puts("❌ Corrosion agent failed: #{inspect(reason)}")
+    System.halt(1)
+
+  other ->
+    IO.puts("❌ Corrosion agent unexpected response: #{inspect(other)}")
     System.halt(1)
 end
 EOF
-        
-        if NODE_ID=1 mix run /tmp/test_corro_conn.exs > /dev/null 2>&1; then
+
+        if CORRO_AGENT_PORT=$port mix run --no-start /tmp/test_corro_conn.exs > /dev/null 2>&1; then
             print_success "Corrosion agent $i (port $port) is running"
             ((agents_running++))
         else

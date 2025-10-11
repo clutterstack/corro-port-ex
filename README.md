@@ -100,6 +100,28 @@ NODE_ID=2 mix phx.server   # Terminal 2
 NODE_ID=3 mix phx.server   # Terminal 3
 ```
 
+### Analytics Database Migrations
+
+The analytics repository uses SQLite files, so run migrations whenever new schemas land.
+
+```bash
+# Run per dev node so each analytics_node*.db has the latest tables
+NODE_ID=1 mix ecto.migrate
+NODE_ID=2 mix ecto.migrate
+NODE_ID=3 mix ecto.migrate
+
+# Target a specific database directly when needed
+mix ecto.migrate -r CorroPort.Analytics.Repo
+```
+
+On Fly.io, deploys include a `bin/migrate` helper. Run it after rolling out new code:
+
+```bash
+fly ssh console -C "/app/bin/migrate"
+```
+
+The script calls `CorroPort.Release.migrate/0`, which prepares the analytics storage path and executes all pending migrations.
+
 ### Port Configuration
 
 Each node uses consistent port offsets:

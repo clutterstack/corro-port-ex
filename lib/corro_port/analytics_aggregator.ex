@@ -38,9 +38,20 @@ defmodule CorroPort.AnalyticsAggregator do
 
   @doc """
   Start aggregating data for an experiment across all cluster nodes.
+
+  Options:
+  - `:message_count` - Number of messages to send automatically (default: 0, disabled)
+  - `:message_interval_ms` - Interval between messages in milliseconds (default: 1000)
   """
-  def start_experiment_aggregation(experiment_id) do
-    GenServer.call(__MODULE__, {:start_aggregation, experiment_id})
+  def start_experiment_aggregation(experiment_id, opts \\ []) do
+    GenServer.call(__MODULE__, {:start_aggregation, experiment_id, opts})
+  end
+
+  @doc """
+  Get the current running experiment ID, if any.
+  """
+  def get_current_experiment_id do
+    GenServer.call(__MODULE__, :get_current_experiment_id)
   end
 
   @doc """
@@ -108,23 +119,55 @@ defmodule CorroPort.AnalyticsAggregator do
       timer_ref: nil,
       cache: %{},
       last_collection: nil,
-      active_nodes: []
+      active_nodes: [],
+      # Message sending configuration
+      message_config: %{
+        enabled: false,
+        total_count: 0,
+        sent_count: 0,
+        interval_ms: 1000
+      },
+      message_timer_ref: nil
     }
 
     {:ok, state}
   end
 
-  def handle_call({:start_aggregation, experiment_id}, _from, state) do
+  def handle_call({:start_aggregation, experiment_id, opts}, _from, state) do
     Logger.info("AnalyticsAggregator: Starting aggregation for experiment #{experiment_id}")
 
-    # Cancel existing timer if any
+    # Cancel existing timers if any
     if state.timer_ref do
       Process.cancel_timer(state.timer_ref)
+    end
+
+    if state.message_timer_ref do
+      Process.cancel_timer(state.message_timer_ref)
     end
 
     # Set experiment ID in SystemMetrics and AckTracker so message operations get recorded
     CorroPort.SystemMetrics.set_experiment_id(experiment_id)
     CorroPort.AckTracker.set_experiment_id(experiment_id)
+
+    # Configure message sending
+    message_count = Keyword.get(opts, :message_count, 0)
+    message_interval_ms = Keyword.get(opts, :message_interval_ms, 1000)
+
+    message_config = %{
+      enabled: message_count > 0,
+      total_count: message_count,
+      sent_count: 0,
+      interval_ms: message_interval_ms
+    }
+
+    # Start message sending if configured
+    message_timer_ref =
+      if message_config.enabled do
+        Logger.info("AnalyticsAggregator: Will send #{message_count} messages at #{message_interval_ms}ms intervals")
+        Process.send_after(self(), :send_message, 500)
+      else
+        nil
+      end
 
     # Start periodic collection
     # Start quickly
@@ -135,6 +178,8 @@ defmodule CorroPort.AnalyticsAggregator do
       | experiment_id: experiment_id,
         aggregating: true,
         timer_ref: timer_ref,
+        message_config: message_config,
+        message_timer_ref: message_timer_ref,
         # Clear cache for new experiment
         cache: %{},
         active_nodes: discover_cluster_nodes()
@@ -149,18 +194,34 @@ defmodule CorroPort.AnalyticsAggregator do
   def handle_call(:stop_aggregation, _from, state) do
     Logger.info("AnalyticsAggregator: Stopping aggregation")
 
-    # Cancel timer
+    # Cancel timers
     if state.timer_ref do
       Process.cancel_timer(state.timer_ref)
+    end
+
+    if state.message_timer_ref do
+      Process.cancel_timer(state.message_timer_ref)
     end
 
     # Clear experiment ID from SystemMetrics and AckTracker
     CorroPort.SystemMetrics.set_experiment_id(nil)
     CorroPort.AckTracker.set_experiment_id(nil)
 
-    new_state = %{state | aggregating: false, timer_ref: nil, experiment_id: nil, cache: %{}}
+    new_state = %{
+      state
+      | aggregating: false,
+        timer_ref: nil,
+        message_timer_ref: nil,
+        experiment_id: nil,
+        cache: %{},
+        message_config: %{enabled: false, total_count: 0, sent_count: 0, interval_ms: 1000}
+    }
 
     {:reply, :ok, new_state}
+  end
+
+  def handle_call(:get_current_experiment_id, _from, state) do
+    {:reply, state.experiment_id, state}
   end
 
   def handle_call({:get_cluster_summary, experiment_id}, _from, state) do
@@ -222,9 +283,55 @@ defmodule CorroPort.AnalyticsAggregator do
     end
   end
 
+  def handle_info(:send_message, state) do
+    if state.aggregating and state.message_config.enabled do
+      sent_count = state.message_config.sent_count
+      total_count = state.message_config.total_count
+
+      if sent_count < total_count do
+        # Send the message
+        message_content = "Experiment #{state.experiment_id} message #{sent_count + 1}/#{total_count}"
+
+        case CorroPort.MessagesAPI.send_and_track_message(message_content) do
+          {:ok, _message_data} ->
+            Logger.info("AnalyticsAggregator: Sent message #{sent_count + 1}/#{total_count}")
+
+          {:error, reason} ->
+            Logger.warning("AnalyticsAggregator: Failed to send message: #{inspect(reason)}")
+        end
+
+        # Update sent count
+        new_sent_count = sent_count + 1
+        new_message_config = %{state.message_config | sent_count: new_sent_count}
+
+        # Broadcast progress update
+        broadcast_message_progress(state.experiment_id, new_sent_count, total_count)
+
+        # Schedule next message if more to send
+        message_timer_ref =
+          if new_sent_count < total_count do
+            Process.send_after(self(), :send_message, state.message_config.interval_ms)
+          else
+            Logger.info("AnalyticsAggregator: Completed sending all #{total_count} messages")
+            nil
+          end
+
+        {:noreply, %{state | message_config: new_message_config, message_timer_ref: message_timer_ref}}
+      else
+        {:noreply, %{state | message_timer_ref: nil}}
+      end
+    else
+      {:noreply, %{state | message_timer_ref: nil}}
+    end
+  end
+
   def terminate(_reason, state) do
-    if state.timer_ref do
+    if Map.get(state, :timer_ref) do
       Process.cancel_timer(state.timer_ref)
+    end
+
+    if Map.get(state, :message_timer_ref) do
+      Process.cancel_timer(state.message_timer_ref)
     end
 
     Logger.info("AnalyticsAggregator shutting down")
@@ -650,6 +757,20 @@ defmodule CorroPort.AnalyticsAggregator do
        %{
          experiment_id: experiment_id,
          node_count: length(active_nodes),
+         timestamp: DateTime.utc_now()
+       }}
+    )
+  end
+
+  defp broadcast_message_progress(experiment_id, sent_count, total_count) do
+    Phoenix.PubSub.broadcast(
+      CorroPort.PubSub,
+      "analytics:#{experiment_id}",
+      {:message_progress,
+       %{
+         experiment_id: experiment_id,
+         sent_count: sent_count,
+         total_count: total_count,
          timestamp: DateTime.utc_now()
        }}
     )
