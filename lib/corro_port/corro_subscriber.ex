@@ -5,52 +5,31 @@ defmodule CorroPort.CorroSubscriber do
   This GenServer wraps CorroClient.Subscriber and provides supervision
   and state management for database subscriptions.
 
-  ## Coordinated Restart Handling
+  ## Connection Resilience
 
-  This module coordinates with `CorroPort.ConfigManager` during Corrosion restarts
-  to prevent race conditions and database corruption. It subscribes to the
-  `"corrosion_lifecycle"` PubSub topic to receive restart notifications.
+  The underlying `CorroClient.Subscriber` handles automatic reconnection with
+  exponential backoff when connections are lost. This module simply tracks
+  connection state and broadcasts events to LiveViews.
 
-  ### Restart States
+  ### States
 
   - `:initializing` - Initial state on startup
   - `:connected` - Active subscription running normally
-  - `:paused_for_restart` - Gracefully paused during Corrosion restart
-  - `:disconnected` - Subscription lost (will attempt reconnect via CorroClient.Subscriber)
-  - `:error` - Subscription error occurred
+  - `:disconnected` - Subscription lost (CorroClient.Subscriber will auto-reconnect)
+  - `:error` - Subscription error occurred (CorroClient.Subscriber will retry)
 
-  ### Coordinated Restart Flow
+  ## Corrosion Restarts
 
-  1. **Receives `{:corrosion_restarting}`** from ConfigManager
-     - Stops active subscription via `CorroClient.Subscriber.stop/1`
-     - Sets state to `:paused_for_restart`
-     - Broadcasts `{:subscription_paused_for_restart}` event
-
-  2. **Ignores disconnect/error callbacks**
-     - While in `:paused_for_restart` state, ignores `{:subscription_disconnected}` and `{:subscription_error}`
-     - Prevents stopped subscriber's callbacks from corrupting the coordinated state
-
-  3. **Receives `{:corrosion_ready}`** from ConfigManager
-     - Only processes if currently in `:paused_for_restart` state
-     - Triggers subscription restart via `handle_continue(:start_subscription)`
-     - Returns to `:connected` state once subscription is live
-
-  ### Why This Is Necessary
-
-  Without coordination, Corrosion restarts while subscriptions are active would cause:
-  - Subscription database creation failures (unable to open database file errors)
-  - Connection refused errors from premature reconnection attempts
-  - Race conditions between subscriber reconnect logic and Corrosion initialisation
-
-  The coordinated pause/resume ensures clean shutdown before restart and only resumes
-  once Corrosion's subscription endpoint is fully operational.
+  When Corrosion is restarted (e.g., for configuration changes), the subscription
+  will disconnect and automatically reconnect once Corrosion is available again.
+  You may see "connection refused" or "unable to open database" errors in logs
+  during the restart window - this is expected behaviour while the reconnection
+  logic waits for Corrosion to become available.
   """
 
   use GenServer
   require Logger
   alias CorroPort.ConnectionManager
-
-  @corrosion_lifecycle_topic "corrosion_lifecycle"
 
   defstruct [
     :subscriber_pid,
@@ -66,8 +45,6 @@ defmodule CorroPort.CorroSubscriber do
 
   @impl true
   def init(_opts) do
-    # Subscribe to Corrosion lifecycle events for coordinated restarts
-    Phoenix.PubSub.subscribe(CorroPort.PubSub, @corrosion_lifecycle_topic)
     {:ok, %__MODULE__{status: :initializing}, {:continue, :start_subscription}}
   end
 
@@ -176,69 +153,18 @@ defmodule CorroPort.CorroSubscriber do
 
   @impl true
   def handle_info({:subscription_error, error}, state) do
-    # Ignore errors when paused for restart - we're coordinating with ConfigManager
-    if state.status == :paused_for_restart do
-      Logger.debug("CorroSubscriber: Ignoring error during paused_for_restart: #{inspect(error)}")
-      {:noreply, state}
-    else
-      Logger.warning("CorroSubscriber: Subscription error: #{inspect(error)}")
-      broadcast_event({:subscription_error, error})
-      new_state = %{state | status: :error}
-      {:noreply, new_state}
-    end
-  end
-
-  @impl true
-  def handle_info({:subscription_disconnected, reason}, state) do
-    # Ignore disconnection when paused for restart - we're coordinating with ConfigManager
-    if state.status == :paused_for_restart do
-      Logger.debug(
-        "CorroSubscriber: Ignoring disconnection during paused_for_restart: #{inspect(reason)}"
-      )
-
-      {:noreply, state}
-    else
-      Logger.warning("CorroSubscriber: Subscription closed: #{inspect(reason)}")
-      broadcast_event({:subscription_closed, reason})
-      new_state = %{state | status: :disconnected}
-      {:noreply, new_state}
-    end
-  end
-
-  @impl true
-  def handle_info({:corrosion_restarting}, state) do
-    Logger.info("CorroSubscriber: Corrosion restart initiated - pausing subscription")
-
-    # Gracefully stop the subscriber if it exists
-    if state.subscriber_pid do
-      CorroClient.Subscriber.stop(state.subscriber_pid)
-    end
-
-    broadcast_event({:subscription_paused_for_restart})
-
-    new_state = %{
-      state
-      | status: :paused_for_restart,
-        subscriber_pid: nil,
-        watch_id: nil
-    }
-
+    Logger.warning("CorroSubscriber: Subscription error: #{inspect(error)}")
+    broadcast_event({:subscription_error, error})
+    new_state = %{state | status: :error}
     {:noreply, new_state}
   end
 
   @impl true
-  def handle_info({:corrosion_ready}, state) do
-    Logger.info("CorroSubscriber: Corrosion ready - resuming subscription")
-
-    # Only resume if we were paused for restart
-    if state.status == :paused_for_restart do
-      # Trigger subscription restart using the existing continuation
-      {:noreply, state, {:continue, :start_subscription}}
-    else
-      # Ignore if we're in another state
-      Logger.debug("CorroSubscriber: Ignoring :corrosion_ready in state #{state.status}")
-      {:noreply, state}
-    end
+  def handle_info({:subscription_disconnected, reason}, state) do
+    Logger.warning("CorroSubscriber: Subscription closed: #{inspect(reason)}")
+    broadcast_event({:subscription_closed, reason})
+    new_state = %{state | status: :disconnected}
+    {:noreply, new_state}
   end
 
   defp process_subscription_event(event, state) do

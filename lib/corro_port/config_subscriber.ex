@@ -15,13 +15,13 @@ defmodule CorroPort.ConfigSubscriber do
   2. This subscriber receives the change notification
   3. Parses the new bootstrap_hosts (JSON array)
   4. Calls ConfigManager.update_bootstrap/2 with restart=true
-  5. ConfigManager handles the coordinated restart flow
+  5. ConfigManager updates the config file and restarts Corrosion
 
-  ## Coordinated Restart
+  ## Restart Behaviour
 
-  This module reuses the existing coordinated restart mechanism in ConfigManager
-  which broadcasts on the "corrosion_lifecycle" PubSub topic to pause subscriptions
-  before restarting Corrosion.
+  When Corrosion is restarted, this subscriber's connection will be lost.
+  The underlying CorroClient.Subscriber will automatically reconnect once
+  Corrosion becomes available again.
 
   ## Data Flow Example
 

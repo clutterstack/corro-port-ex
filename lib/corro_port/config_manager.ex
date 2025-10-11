@@ -13,43 +13,31 @@ defmodule CorroPort.ConfigManager do
 
   In production, dynamically generates configs based on environment variables.
 
-  ## Coordinated Restart Mechanism
+  ## Corrosion Restart Mechanism
 
-  This module coordinates with `CorroPort.CorroSubscriber` during Corrosion restarts
-  to prevent race conditions and database corruption. The coordination happens via
-  PubSub on the `"corrosion_lifecycle"` topic.
+  This module handles restarting Corrosion via Overmind and waiting for it to
+  become responsive again.
 
   ### Restart Lifecycle
 
   When `restart_corrosion/0` is called:
 
-  1. **Pre-restart notification** - Broadcasts `{:corrosion_restarting}` to all subscribers
-  2. **Grace period** - Waits 500ms for active subscriptions to gracefully close
-  3. **Restart execution** - Executes `overmind restart corrosion` command
-  4. **Health check** - Polls Corrosion API until responsive (up to 15 attempts @ 1s each)
-  5. **Initialization grace** - Additional 3.5s wait for subscription endpoint to stabilise
-  6. **Post-restart notification** - Broadcasts `{:corrosion_ready}` to resume subscriptions
+  1. **Restart execution** - Executes `overmind restart corrosion` command
+  2. **Health check** - Polls Corrosion API until responsive (up to 15 attempts @ 1s each)
 
-  ### Why This Is Necessary
+  ### Connection Resilience
 
-  Without coordination, restarting Corrosion while subscriptions are active causes:
-  - **Race conditions**: CorroSubscriber tries to reconnect before Corrosion is ready
-  - **Database corruption**: Subscription database creation fails if Corrosion isn't fully initialised
-  - **Connection refused errors**: Premature reconnection attempts to unavailable endpoints
+  Active subscriptions and other connections will automatically handle the
+  disconnection. The `CorroClient.Subscriber` has built-in reconnection logic
+  with exponential backoff, so subscriptions will automatically reconnect once
+  Corrosion is available.
 
-  The PubSub coordination ensures subscriptions pause cleanly before restart and only
-  resume once Corrosion is fully operational.
-
-  ### PubSub Events
-
-  - `{:corrosion_restarting}` - Broadcast before restart begins (subscribers should pause)
-  - `{:corrosion_ready}` - Broadcast after health check + grace period (subscribers can resume)
+  You may see "connection refused" errors in logs during the restart window -
+  this is expected behaviour while connections wait for Corrosion to become available.
   """
 
   require Logger
   alias CorroPort.{NodeConfig, ConnectionManager}
-
-  @corrosion_lifecycle_topic "corrosion_lifecycle"
 
   @doc """
   Gets the current bootstrap configuration from corrosion.toml.
@@ -94,29 +82,16 @@ defmodule CorroPort.ConfigManager do
   @doc """
   Restarts the Corrosion process via Overmind.
 
-  Coordinates with CorroSubscriber via PubSub to ensure graceful restart:
-  1. Broadcasts :corrosion_restarting to pause active subscriptions
-  2. Restarts Corrosion via overmind
-  3. Waits for Corrosion to become responsive
-  4. Broadcasts :corrosion_ready to resume subscriptions
+  1. Restarts Corrosion via overmind
+  2. Waits for Corrosion to become responsive
+
+  Active subscriptions will automatically reconnect via their built-in retry logic.
 
   Returns {:ok, output} or {:error, reason}.
   """
   def restart_corrosion do
     with :ok <- validate_overmind_available(),
          :ok <- validate_overmind_running() do
-      # Step 1: Notify subscribers to pause
-      Logger.info("ConfigManager: Broadcasting :corrosion_restarting")
-
-      Phoenix.PubSub.broadcast(
-        CorroPort.PubSub,
-        @corrosion_lifecycle_topic,
-        {:corrosion_restarting}
-      )
-
-      # Give subscribers time to gracefully close
-      Process.sleep(500)
-
       overmind_path = get_overmind_path()
       socket_path = get_overmind_socket_path()
 
@@ -130,27 +105,14 @@ defmodule CorroPort.ConfigManager do
 
       Logger.info("Restarting Corrosion via overmind: #{overmind_path} #{Enum.join(args, " ")}")
 
-      # Step 2: Execute restart
       case System.cmd(overmind_path, args, stderr_to_stdout: true) do
         {output, 0} ->
           Logger.info("Corrosion restart initiated: #{output}")
 
-          # Step 3: Wait for Corrosion to be responsive
+          # Wait for Corrosion to be responsive
           case wait_for_corrosion(15, 1000) do
             {:ok, _msg} ->
-              Logger.info("ConfigManager: Corrosion is responsive, adding grace period")
-              # Step 4: Grace period for full initialization (subscriptions need extra time)
-              Process.sleep(3500)
-
-              # Step 5: Notify subscribers to resume
-              Logger.info("ConfigManager: Broadcasting :corrosion_ready")
-
-              Phoenix.PubSub.broadcast(
-                CorroPort.PubSub,
-                @corrosion_lifecycle_topic,
-                {:corrosion_ready}
-              )
-
+              Logger.info("ConfigManager: Corrosion is responsive")
               {:ok, output}
 
             {:error, reason} ->

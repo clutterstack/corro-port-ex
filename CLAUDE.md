@@ -156,7 +156,7 @@ CorroPort is an Elixir Phoenix application that provides a web interface for mon
 
 ### Module Documentation Notes
 
-- `CorroPort.MessagesAPI` moduledoc now clarifies that the module sits on top of the `node_messages` table to handle persistence, ack tracking, and analytics wiring. Treat it as the single entry point for sending/reading replicated messages.
+- `CorroPort.MessagesAPI` moduledoc clarifies that the module sits on top of the `node_messages` table to handle persistence, ack tracking, and analytics wiring. Treat it as the single entry point for sending/reading replicated messages.
 - `CorroPort.CLIClusterData` moduledoc documents the GenServer that shells out to `corro_cli`, caches the CLI member list, and pushes `{:cli_members_updated, ...}` events to LiveViews.
 - `CorroPort.AnalyticsAggregator` moduledoc documents the current local-first aggregation strategy (short TTL cache, PubSub broadcasts). Remote polling helpers remain, but they are intentionally dormant until remote Corrosion APIs are stable.
 - `CorroPort.NodeNaming` moduledoc explicitly spells out the region-extraction behaviour and return values (`"unknown"` vs `"invalid"`).
@@ -165,6 +165,9 @@ CorroPort is an Elixir Phoenix application that provides a web interface for mon
 - `CorroPort.PubSubAckTester` moduledoc documents the cluster test broadcast flow, including request payload structure and tracking prerequisites.
 - `CorroPort.PubSubAckListener` moduledoc explains the Phoenix.PubSub subscription loop, supervised task hand-off, and self-origin filtering rules.
 - `CorroPort.PubSubAckTaskSupervisor` moduledoc clarifies why outbound PubSub ack jobs run under a dedicated `Task.Supervisor`.
+- `CorroPort.CorroSubscriber` moduledoc explains the automatic reconnection behaviour via CorroClient.Subscriber's built-in retry logic.
+- `CorroPort.ConfigManager` moduledoc documents the simplified restart mechanism without coordination - subscriptions reconnect automatically.
+- `CorroPort.ConfigSubscriber` moduledoc notes that restarts cause disconnections that are automatically handled by reconnection logic.
 
 ### Two-Layer Architecture
 
@@ -217,7 +220,7 @@ The system runs as **two independent layers** that must both be running:
 - `CorroPort.SystemMetrics` - Collects per-node runtime metrics and exposes experiment-scoped counters
 
 **Subscriptions & Helpers**
-- `CorroPort.CorroSubscriber` - Supervises the Corrosion subscription, coordinating restarts with `ConfigManager`
+- `CorroPort.CorroSubscriber` - Supervises the Corrosion subscription with automatic reconnection
 - `CorroPort.RegionExtractor` / `CorroPort.NodeNaming` - Canonical helpers for converting identifiers into Fly regions for UI display
 - `CorroPort.ClusterMemberPresenter` - Presentation transforms applied to CLI member maps before rendering
 
@@ -269,51 +272,23 @@ AckSender.get_duplicate_receptions(min_count \\ 2)
 
 **Performance**: Fast ETS lookups with `:read_concurrency` for high-throughput scenarios
 
-### Corrosion Restart Coordination
-
-**Problem**: Restarting Corrosion while subscriptions are active creates race conditions:
-- CorroSubscriber tries to reconnect before Corrosion is fully initialised
-- Subscription database creation fails (unable to open database file errors)
-- Connection refused errors from premature reconnection attempts
-
-**Solution**: `ConfigManager` and `CorroSubscriber` coordinate via PubSub on the `"corrosion_lifecycle"` topic.
-
-#### Restart Lifecycle
+### Corrosion Restart Behaviour
 
 When `ConfigManager.restart_corrosion/0` is called:
 
-1. **Pre-restart notification** - Broadcasts `{:corrosion_restarting}` to all subscribers
-2. **Grace period** - Waits 500ms for active subscriptions to gracefully close
-3. **Restart execution** - Executes `overmind restart corrosion` command
-4. **Health check** - Polls Corrosion API until responsive (up to 15 attempts @ 1s each)
-5. **Initialisation grace** - Additional 3.5s wait for subscription endpoint to stabilise
-6. **Post-restart notification** - Broadcasts `{:corrosion_ready}` to resume subscriptions
+1. **Restart execution** - Executes `overmind restart corrosion` command
+2. **Health check** - Polls Corrosion API until responsive (up to 15 attempts @ 1s each)
 
-#### CorroSubscriber Coordination
+#### Connection Resilience
 
-1. **Receives `{:corrosion_restarting}`**
-   - Stops active subscription via `CorroClient.Subscriber.stop/1`
-   - Sets state to `:paused_for_restart`
-   - Broadcasts `{:subscription_paused_for_restart}` event
+Active subscriptions (CorroSubscriber, ConfigSubscriber) handle disconnections automatically:
 
-2. **Ignores disconnect/error callbacks**
-   - While in `:paused_for_restart` state, ignores `{:subscription_disconnected}` and `{:subscription_error}`
-   - Prevents stopped subscriber's callbacks from corrupting the coordinated state
+- The underlying `CorroClient.Subscriber` has built-in reconnection logic with exponential backoff
+- Disconnections are logged as warnings but are expected during restarts
+- Subscriptions automatically reconnect once Corrosion becomes available
+- No coordination needed between ConfigManager and subscribers
 
-3. **Receives `{:corrosion_ready}`**
-   - Only processes if currently in `:paused_for_restart` state
-   - Triggers subscription restart via `handle_continue(:start_subscription)`
-   - Returns to `:connected` state once subscription is live
-
-#### Key Implementation Details
-
-- **PubSub Topic**: `"corrosion_lifecycle"`
-- **Events**: `{:corrosion_restarting}`, `{:corrosion_ready}`
-- **State Guard**: `:paused_for_restart` state prevents callback interference
-- **Timing**: 500ms pause + API health check + 3.5s grace = ~18s total restart time
-- **Backward Compatible**: Non-overmind setups unaffected
-
-See module docs for `CorroPort.ConfigManager` and `CorroPort.CorroSubscriber` for full details.
+You may see "connection refused" or "unable to open database" errors in logs during the restart window - this is normal behaviour while the reconnection logic waits for Corrosion to become available.
 
 ### Configuration
 
