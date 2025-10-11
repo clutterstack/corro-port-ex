@@ -104,7 +104,7 @@ defmodule CorroPortWeb.CoreComponents do
       """
     else
       ~H"""
-      <button class={["btn", @class]} {@rest}>
+      <button class={["btn btn-press-animation", @class]} {@rest}>
         {render_slot(@inner_block)}
       </button>
       """

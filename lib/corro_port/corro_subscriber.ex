@@ -2,7 +2,7 @@ defmodule CorroPort.CorroSubscriber do
   @moduledoc """
   Watches for changes in the node_messages table via Corrosion's subscription API.
 
-  This GenServer wraps CorroClient.Subscriber and provides proper supervision
+  This GenServer wraps CorroClient.Subscriber and provides supervision
   and state management for database subscriptions.
 
   ## Coordinated Restart Handling

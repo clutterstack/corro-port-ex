@@ -292,19 +292,19 @@ defmodule CorroPortWeb.MessagesLive do
           Send messages, track acknowledgments, and browse message history
         </:subtitle>
         <:actions>
-          <.button
-            phx-click="reset_tracking"
-            class="btn btn-warning btn-outline"
-            disabled={!(@ack_status && @ack_status.latest_message)}
-          >
-            <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Reset Tracking
-          </.button>
-          <.button phx-click="test_pubsub" class="btn btn-secondary btn-outline">
-            <.icon name="hero-signal" class="w-4 h-4 mr-2" /> Test Cluster PubSub
-          </.button>
-          <.button phx-click="send_message" variant="primary">
-            <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" /> Send Message
-          </.button>
+          <div class="flex gap-2">
+            <.button phx-click="reset_tracking" class="btn btn-warning btn-outline">
+              <.icon name="hero-arrow-path" class="w-4 h-4 mr-2" /> Reset Tracking
+            </.button>
+
+            <.button phx-click="test_pubsub" class="btn btn-secondary btn-outline">
+              <.icon name="hero-signal" class="w-4 h-4 mr-2" /> Test Cluster PubSub
+            </.button>
+
+            <.button phx-click="send_message" variant="primary">
+              <.icon name="hero-paper-airplane" class="w-4 h-4 mr-2" /> Send Message
+            </.button>
+          </div>
         </:actions>
       </.header>
       

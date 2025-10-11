@@ -161,6 +161,10 @@ CorroPort is an Elixir Phoenix application that provides a web interface for mon
 - `CorroPort.AnalyticsAggregator` moduledoc documents the current local-first aggregation strategy (short TTL cache, PubSub broadcasts). Remote polling helpers remain, but they are intentionally dormant until remote Corrosion APIs are stable.
 - `CorroPort.NodeNaming` moduledoc explicitly spells out the region-extraction behaviour and return values (`"unknown"` vs `"invalid"`).
 - `CorroPortWeb.Layouts` moduledoc example demonstrates the required `current_scope` assign when calling `<Layouts.app …>` from LiveViews.
+- `CorroPort.AckHttp` moduledoc covers the shared Req configuration, endpoint parsing, and logging conventions used by every outbound acknowledgment.
+- `CorroPort.PubSubAckTester` moduledoc documents the cluster test broadcast flow, including request payload structure and tracking prerequisites.
+- `CorroPort.PubSubAckListener` moduledoc explains the Phoenix.PubSub subscription loop, supervised task hand-off, and self-origin filtering rules.
+- `CorroPort.PubSubAckTaskSupervisor` moduledoc clarifies why outbound PubSub ack jobs run under a dedicated `Task.Supervisor`.
 
 ### Two-Layer Architecture
 
@@ -194,6 +198,10 @@ The system runs as **two independent layers** that must both be running:
 - `CorroPort.AckTracker` - ETS-backed tracker for the latest message, acknowledgment status, and experiment linkage
 - `CorroPort.AckSender` - Subscription listener that deduplicates gossip receptions and posts HTTP acknowledgments (see Gossip Analytics below)
 - `CorroPort.AckDiagnostics` - IEx helper module that inspects ack pipelines end-to-end when debugging issues
+- `CorroPort.AckHttp` - Shared Req client and endpoint utilities used by both gossip-driven and PubSub-driven acknowledgment flows
+- `CorroPort.PubSubAckTester` - Emits `"pubsub_ack_test"` broadcasts to kick off cluster-wide acknowledgment drills
+- `CorroPort.PubSubAckListener` - Subscribes to the test topic and posts HTTP acknowledgments back to the originator via supervised tasks
+- `CorroPort.PubSubAckTaskSupervisor` - Supervises each asynchronous HTTP ack job triggered by the PubSub listener
 
 **Connectivity & Configuration**
 - `CorroPort.ConnectionManager` - Centralised creation of Corrosion HTTP connections (standard and subscription)

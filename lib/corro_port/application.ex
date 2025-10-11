@@ -26,9 +26,8 @@ defmodule CorroPort.Application do
              default: [conn_opts: [transport_opts: [inet6: true]]]
            }},
 
-          # Core data services (legacy - kept for compatibility)
+          # Data exchange
           CorroPort.CorroSubscriber,
-          # ConfigSubscriber removed - now using PubSub-based ClusterConfigCoordinator
           CorroPort.NodeIdentityReporter,
           CorroPort.ClusterConfigCoordinator,
           CorroPort.AckTracker,
@@ -43,7 +42,7 @@ defmodule CorroPort.Application do
           CorroPort.SystemMetrics,
           CorroPort.AnalyticsAggregator,
 
-          # Web endpoints
+          # Endpoints
           CorroPortWeb.Endpoint,
           CorroPortWeb.APIEndpoint
         ]

@@ -9,6 +9,8 @@ CorroPort runs as **two independent layers**:
 1. **Corrosion Layer** (Database/Storage) - Separate agent processes handling data replication
 2. **CorroPort Layer** (Phoenix/Web UI) - Elixir application providing monitoring and interaction
 
+CorroPort subscribes to changes in the Corrosion database using Corrosion's subscription API.
+
 **Important**: Corrosion agents must be running before starting Phoenix nodes.
 
 ## Development Setup
@@ -197,3 +199,96 @@ cp corrosion/configs/canonical/node1.toml corrosion/configs/runtime/node1.toml
 ```
 
 See [`docs/CONFIG_MANAGEMENT.md`](docs/CONFIG_MANAGEMENT.md) for complete documentation.
+
+## Messaging Architecture
+
+CorroPort implements two parallel message propagation systems for testing distributed acknowledgments:
+
+### 1. Gossip-Based Messaging (via Corrosion)
+
+Messages stored in the `node_messages` table propagate via Corrosion's gossip protocol:
+
+**Flow:**
+1. Node writes message to `node_messages` via `CorroPort.MessagesAPI`
+2. Corrosion replicates to other nodes via gossip protocol
+3. Each node's subscription detects new row via `CorroPort.CorroSubscriber`
+4. `CorroPort.AckSender` deduplicates and sends HTTP acknowledgment
+
+**Deduplication:** Gossip protocol delivers messages multiple times. `AckSender` tracks reception count in ETS:
+```elixir
+# Only first reception triggers acknowledgment
+AckSender.get_message_stats(message_pk)
+# => %{reception_count: 5, first_seen: ~U[...], last_seen: ~U[...]}
+```
+
+**Query gossip redundancy:**
+```elixir
+# Messages received multiple times
+CorroPort.AckSender.get_duplicate_receptions(2)
+
+# All reception stats (for heatmap visualisation)
+CorroPort.AckSender.get_all_reception_stats()
+```
+
+See: `lib/corro_port/ack_sender.ex` for implementation details.
+
+### 2. PubSub-Based Messaging (via Phoenix.PubSub)
+
+Direct BEAM-to-BEAM messaging bypassing Corrosion for pure Elixir cluster testing:
+
+**Flow:**
+1. `CorroPort.PubSubAckTester.send_test_request/1` broadcasts to `"pubsub_ack_test"` topic
+2. All nodes' `CorroPort.PubSubAckListener` processes receive message **concurrently**
+3. Each listener spawns supervised task to send HTTP acknowledgment
+4. Tasks run under `CorroPort.PubSubAckTaskSupervisor`
+
+**Transport:** Uses Phoenix.PubSub with default PG adapter over Distributed Erlang
+- **Not raw TCP/IP** - uses BEAM's distribution protocol
+- **Concurrent delivery** - all nodes receive simultaneously (not sequential)
+- **Pool size: 1** (default) - single PubSub process per node handles distribution
+  - Increase pool size only for high-throughput scenarios (thousands of msgs/sec)
+  - **Must be identical across cluster** - different pool sizes break routing
+
+**Request payload:**
+```elixir
+%{
+  request_id: "pubsub_node1_1234567890",
+  originating_node_id: "node1",
+  originating_endpoint: "127.0.0.1:5001",  # Where to send acks
+  timestamp: "2025-01-01T10:00:00.000Z",
+  message: "PubSub cluster test (from node1)",
+  region: "yyz"
+}
+```
+
+See: `lib/corro_port/pubsub_ack_tester.ex` and `lib/corro_port/pubsub_ack_listener.ex`.
+
+### Comparison
+
+| Aspect | Gossip (Corrosion) | PubSub (Phoenix) |
+|--------|-------------------|------------------|
+| **Transport** | Corrosion QUIC gossip | Distributed Erlang |
+| **Delivery** | Multiple receptions | Single reception |
+| **Persistence** | Stored in SQLite | Ephemeral (memory only) |
+| **Deduplication** | Required (AckSender ETS) | Not needed |
+| **Use Case** | Test Corrosion replication | Test Elixir cluster connectivity |
+| **Latency** | Higher (database + gossip) | Lower (direct BEAM messaging) |
+
+### Common Infrastructure
+
+Both systems share:
+- **AckTracker** - ETS table tracking latest message and ack status
+- **AckHttp** - Shared Req HTTP client for acknowledgment POSTs
+- **LocalNode** - Node identity and endpoint resolution
+- **PropagationLive** - Geographic map visualising acknowledgments
+
+**Testing:**
+```bash
+# Test gossip-based propagation
+curl -X POST http://localhost:4001/api/messages/send \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Gossip test"}'
+
+# Test PubSub propagation (via web UI)
+# Navigate to http://localhost:4001/ and click "Send Message"
+```
