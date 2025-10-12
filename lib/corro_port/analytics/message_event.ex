@@ -15,6 +15,7 @@ defmodule CorroPort.Analytics.MessageEvent do
     field(:originating_node, :string)
     field(:target_node, :string)
     field(:event_type, Ecto.Enum, values: [:sent, :acked])
+    field(:event_timestamp, :utc_datetime_usec)
     field(:region, :string)
     field(:transaction_size_hint, :integer)
 
@@ -29,10 +30,11 @@ defmodule CorroPort.Analytics.MessageEvent do
       :originating_node,
       :target_node,
       :event_type,
+      :event_timestamp,
       :region,
       :transaction_size_hint
     ])
-    |> validate_required([:message_id, :experiment_id, :originating_node, :event_type])
+    |> validate_required([:message_id, :experiment_id, :originating_node, :event_type, :event_timestamp])
     |> validate_length(:message_id, min: 1)
     |> validate_length(:experiment_id, min: 1)
     |> validate_length(:originating_node, min: 1)

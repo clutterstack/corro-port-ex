@@ -49,7 +49,7 @@ defmodule CorroPort.AnalyticsStorage do
         originating_node,
         target_node,
         event_type,
-        _timestamp,
+        event_timestamp,
         region \\ nil,
         transaction_size_hint \\ nil
       ) do
@@ -59,6 +59,7 @@ defmodule CorroPort.AnalyticsStorage do
       originating_node: originating_node,
       target_node: target_node,
       event_type: event_type,
+      event_timestamp: event_timestamp,
       region: region,
       transaction_size_hint: transaction_size_hint
     })

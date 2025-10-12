@@ -30,8 +30,10 @@ defmodule CorroPortWeb.AnalyticsLive do
           Phoenix.PubSub.subscribe(CorroPort.PubSub, "analytics:#{current_experiment_id}")
         end
 
-        # Start periodic refresh
-        schedule_refresh()
+        # Start periodic refresh only if experiment is running
+        if current_experiment_id do
+          schedule_refresh()
+        end
 
         socket
         |> assign(:current_experiment, current_experiment_id)
@@ -49,6 +51,8 @@ defmodule CorroPortWeb.AnalyticsLive do
       |> assign(:timing_stats, [])
       |> assign(:system_metrics, [])
       |> assign(:active_nodes, [])
+      |> assign(:node_performance_stats, [])
+      |> assign(:latency_histogram, nil)
       |> assign(:last_update, nil)
       |> assign(:refresh_interval, 5000)
       |> assign(:local_node_id, LocalNode.get_node_id())
@@ -122,9 +126,13 @@ defmodule CorroPortWeb.AnalyticsLive do
           socket
           |> assign(:current_experiment, experiment_id)
           |> assign(:aggregation_status, :running)
+          |> assign(:viewing_mode, :current)
           |> assign(:message_progress, message_progress)
           |> put_flash(:info, "Started experiment #{experiment_id}" <> if(message_count > 0, do: " with #{message_count} messages", else: ""))
           |> push_patch(to: ~p"/analytics?experiment_id=#{experiment_id}")
+
+        # Start refresh polling for the running experiment
+        schedule_refresh()
 
         {:noreply, socket}
 
@@ -154,7 +162,7 @@ defmodule CorroPortWeb.AnalyticsLive do
   end
 
   @impl true
-  def handle_event("update_message_count", %{"value" => value}, socket) do
+  def handle_event("update_message_count", %{"message_count" => value}, socket) do
     case Integer.parse(value) do
       {count, _} when count >= 0 ->
         {:noreply, assign(socket, :message_count, count)}
@@ -165,7 +173,7 @@ defmodule CorroPortWeb.AnalyticsLive do
   end
 
   @impl true
-  def handle_event("update_message_interval", %{"value" => value}, socket) do
+  def handle_event("update_message_interval", %{"message_interval_ms" => value}, socket) do
     case Integer.parse(value) do
       {interval, _} when interval >= 100 ->
         {:noreply, assign(socket, :message_interval_ms, interval)}
@@ -197,6 +205,8 @@ defmodule CorroPortWeb.AnalyticsLive do
       |> assign(:cluster_summary, nil)
       |> assign(:timing_stats, [])
       |> assign(:system_metrics, [])
+      |> assign(:node_performance_stats, [])
+      |> assign(:latency_histogram, nil)
 
     {:noreply, push_patch(socket, to: ~p"/analytics")}
   end
@@ -223,8 +233,22 @@ defmodule CorroPortWeb.AnalyticsLive do
 
   @impl true
   def handle_info(:refresh, socket) do
-    socket = load_experiment_data(socket)
-    schedule_refresh()
+    # Only refresh if viewing current experiment that's still running
+    should_refresh =
+      socket.assigns.viewing_mode == :current and
+        socket.assigns.aggregation_status == :running
+
+    socket =
+      if should_refresh do
+        load_experiment_data(socket)
+      else
+        socket
+      end
+
+    # Only schedule next refresh if we should keep polling
+    if should_refresh do
+      schedule_refresh()
+    end
 
     {:noreply, socket}
   end
@@ -246,6 +270,24 @@ defmodule CorroPortWeb.AnalyticsLive do
   end
 
   @impl true
+  def handle_info({:experiment_stopped, experiment_id}, socket) do
+    if experiment_id == socket.assigns.current_experiment do
+      # Load final experiment data
+      socket = load_experiment_data(socket)
+
+      socket =
+        socket
+        |> assign(:aggregation_status, :stopped)
+        |> assign(:message_progress, %{sent: 0, total: 0})
+        |> put_flash(:info, "Experiment completed - all messages sent")
+
+      {:noreply, socket}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
   def handle_info(_msg, socket) do
     {:noreply, socket}
   end
@@ -263,413 +305,538 @@ defmodule CorroPortWeb.AnalyticsLive do
       
     <!-- Header -->
       <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900 mb-2">Analytics Dashboard</h1>
-        <p class="text-gray-600">Real-time cluster experiment monitoring</p>
+        <h1 class="text-3xl font-bold text-base-content mb-2">Analytics Dashboard</h1>
+        <p class="text-base-content/70">Real-time cluster experiment monitoring</p>
       </div>
 
       <!-- Experiment History -->
       <%= if @experiment_history != [] do %>
-        <div class="bg-white rounded-lg shadow p-6 mb-6">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold">Experiment History</h3>
-            <%= if @current_experiment && @viewing_mode == :historical do %>
-              <button
-                phx-click="clear_view"
-                class="text-sm text-blue-600 hover:text-blue-800"
-              >
-                Clear Selection
-              </button>
-            <% end %>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="min-w-full table-auto">
-              <thead>
-                <tr class="bg-gray-50">
-                  <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Experiment ID</th>
-                  <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Started</th>
-                  <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Duration</th>
-                  <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Messages</th>
-                  <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Acks</th>
-                  <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <%= for exp <- Enum.take(@experiment_history, 10) do %>
-                  <tr class={[
-                    "border-b hover:bg-gray-50",
-                    if(@current_experiment == exp.id, do: "bg-blue-50", else: "")
-                  ]}>
-                    <td class="px-4 py-2 text-sm font-mono">{exp.id}</td>
-                    <td class="px-4 py-2 text-sm">
-                      <%= if exp.time_range do %>
-                        {format_datetime(exp.time_range.start)}
-                      <% else %>
-                        <span class="text-gray-400">-</span>
-                      <% end %>
-                    </td>
-                    <td class="px-4 py-2 text-sm">
-                      <%= if exp.duration_seconds do %>
-                        {exp.duration_seconds}s
-                      <% else %>
-                        <span class="text-gray-400">-</span>
-                      <% end %>
-                    </td>
-                    <td class="px-4 py-2 text-sm">{exp.send_count}</td>
-                    <td class="px-4 py-2 text-sm">{exp.ack_count}</td>
-                    <td class="px-4 py-2 text-sm">
-                      <button
-                        phx-click="view_experiment"
-                        phx-value-experiment_id={exp.id}
-                        class="text-blue-600 hover:text-blue-800 text-sm"
-                      >
-                        View Details
-                      </button>
-                    </td>
-                  </tr>
-                <% end %>
-              </tbody>
-            </table>
-          </div>
-
-          <%= if length(@experiment_history) > 10 do %>
-            <div class="mt-4 text-sm text-gray-600 text-center">
-              Showing 10 most recent experiments of {length(@experiment_history)} total
-            </div>
-          <% end %>
-        </div>
-      <% end %>
-
-    <!-- Experiment Controls -->
-      <div class="bg-white rounded-lg shadow p-6 mb-6">
-        <h3 class="text-lg font-semibold mb-4">Experiment Control</h3>
-
-        <form phx-submit="start_aggregation" class="space-y-4">
-          <!-- Experiment ID -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              Experiment ID
-            </label>
-            <input
-              type="text"
-              name="experiment_id"
-              placeholder="Enter experiment ID"
-              value={@current_experiment}
-              class="border rounded px-3 py-2 w-full"
-              required
-              disabled={@aggregation_status == :running}
-            />
-          </div>
-
-          <!-- Message Sending Configuration -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">
-                Number of Messages (0 = manual sending)
-              </label>
-              <input
-                type="number"
-                name="message_count"
-                value={@message_count}
-                min="0"
-                max="1000"
-                class="border rounded px-3 py-2 w-full"
-                disabled={@aggregation_status == :running}
-                phx-change="update_message_count"
-              />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">
-                Message Interval (ms)
-              </label>
-              <input
-                type="number"
-                name="message_interval_ms"
-                value={@message_interval_ms}
-                min="100"
-                max="60000"
-                step="100"
-                class="border rounded px-3 py-2 w-full"
-                disabled={@aggregation_status == :running}
-                phx-change="update_message_interval"
-              />
-            </div>
-          </div>
-
-          <!-- Action Buttons -->
-          <div class="flex items-center gap-4">
-            <button
-              type="submit"
-              class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={@aggregation_status == :running}
-            >
-              Start Experiment
-            </button>
-
-            <button
-              type="button"
-              phx-click="stop_aggregation"
-              class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={@aggregation_status == :stopped}
-            >
-              Stop
-            </button>
-
-            <button
-              type="button"
-              phx-click="refresh_now"
-              class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
-            >
-              Refresh Now
-            </button>
-          </div>
-        </form>
-
-        <!-- Status Bar -->
-        <div class="mt-4 flex flex-wrap items-center gap-4 pt-4 border-t">
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-gray-600">Status:</span>
-            <span class={[
-              "px-2 py-1 rounded text-xs font-medium",
-              if(@aggregation_status == :running,
-                do: "bg-green-100 text-green-800",
-                else: "bg-gray-100 text-gray-800"
-              )
-            ]}>
-              {String.capitalize(to_string(@aggregation_status))}
-            </span>
-          </div>
-
-          <%= if @message_progress do %>
-            <div class="flex items-center gap-2">
-              <span class="text-sm text-gray-600">Messages:</span>
-              <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
-                {@message_progress.sent}/{@message_progress.total}
-              </span>
-              <%= if @message_progress.sent < @message_progress.total do %>
-                <div class="w-32 bg-gray-200 rounded-full h-2">
-                  <div
-                    class="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                    style={"width: #{Float.round(@message_progress.sent / @message_progress.total * 100, 1)}%"}
-                  >
-                  </div>
-                </div>
-              <% else %>
-                <span class="text-xs text-green-600 font-medium">Complete</span>
+        <div class="card bg-base-200 mb-6">
+          <div class="card-body">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="card-title text-lg">Experiment History</h3>
+              <%= if @current_experiment && @viewing_mode == :historical do %>
+                <button
+                  phx-click="clear_view"
+                  class="text-sm text-primary hover:text-primary-focus"
+                >
+                  Clear Selection
+                </button>
               <% end %>
             </div>
-          <% end %>
 
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-gray-600">Refresh:</span>
-            <select
-              phx-change="set_refresh_interval"
-              name="interval"
-              class="border rounded px-2 py-1 text-sm"
-            >
-              <option value="1000" selected={@refresh_interval == 1000}>1s</option>
-              <option value="5000" selected={@refresh_interval == 5000}>5s</option>
-              <option value="10000" selected={@refresh_interval == 10000}>10s</option>
-              <option value="30000" selected={@refresh_interval == 30000}>30s</option>
-            </select>
-          </div>
-
-          <%= if @last_update do %>
-            <div class="text-sm text-gray-600">
-              Last update: {format_time(@last_update)}
-            </div>
-          <% end %>
-        </div>
-      </div>
-      
-    <!-- Experiment Summary -->
-      <%= if @current_experiment do %>
-        <div class="bg-white rounded-lg shadow p-6 mb-6">
-          <h3 class="text-lg font-semibold mb-4">
-            Experiment: {@current_experiment}
-          </h3>
-
-          <%= if @cluster_summary do %>
-            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              <div class="text-center">
-                <div class="text-2xl font-bold text-blue-600">{@cluster_summary.node_count || 0}</div>
-                <div class="text-sm text-gray-600">Nodes</div>
-              </div>
-              <div class="text-center">
-                <div class="text-2xl font-bold text-green-600">
-                  {@cluster_summary.send_count || 0}
-                </div>
-                <div class="text-sm text-gray-600">Messages Sent</div>
-              </div>
-              <div class="text-center">
-                <div class="text-2xl font-bold text-purple-600">
-                  {@cluster_summary.ack_count || 0}
-                </div>
-                <div class="text-sm text-gray-600">Acknowledged</div>
-              </div>
-              <div class="text-center">
-                <div class="text-2xl font-bold text-orange-600">
-                  <%= if @cluster_summary.send_count && @cluster_summary.send_count > 0 && @cluster_summary.node_count > 1 do %>
-                    <% expected_acks = @cluster_summary.send_count * @cluster_summary.node_count %>
-                    {Float.round(@cluster_summary.ack_count / expected_acks * 100, 1)}%
-                  <% else %>
-                    0%
-                  <% end %>
-                </div>
-                <div class="text-sm text-gray-600">Ack Rate</div>
-              </div>
-              <div class="text-center">
-                <div class="text-2xl font-bold text-indigo-600">
-                  {@cluster_summary.system_metrics_count || 0}
-                </div>
-                <div class="text-sm text-gray-600">Metrics</div>
-              </div>
-              <div class="text-center">
-                <div class="text-2xl font-bold text-gray-600">
-                  {@cluster_summary.topology_snapshots_count || 0}
-                </div>
-                <div class="text-sm text-gray-600">Snapshots</div>
-              </div>
-            </div>
-          <% else %>
-            <div class="text-gray-500 text-center py-8">
-              No data available. Start aggregation to begin monitoring.
-            </div>
-          <% end %>
-        </div>
-        
-    <!-- Active Nodes -->
-        <div class="bg-white rounded-lg shadow p-6 mb-6">
-          <h3 class="text-lg font-semibold mb-4">Active Nodes</h3>
-
-          <%= if @active_nodes != [] do %>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <%= for node <- @active_nodes do %>
-                <div class="border rounded p-3">
-                  <div class="font-medium">{node.node_id}</div>
-                  <div class="text-sm text-gray-600">
-                    Region: {node.region || "Unknown"}
-                  </div>
-                  <%= if node.phoenix_port do %>
-                    <div class="text-sm text-gray-600">
-                      Port: {node.phoenix_port}
-                    </div>
-                  <% end %>
-                  <%= if node.is_local do %>
-                    <div class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded mt-1 inline-block">
-                      Local Node
-                    </div>
-                  <% end %>
-                </div>
-              <% end %>
-            </div>
-          <% else %>
-            <div class="text-gray-500 text-center py-4">
-              No active nodes detected
-            </div>
-          <% end %>
-        </div>
-        
-    <!-- Timing Statistics -->
-        <div class="bg-white rounded-lg shadow p-6 mb-6">
-          <h3 class="text-lg font-semibold mb-4">Message Timing Statistics</h3>
-
-          <%= if @timing_stats != [] do %>
             <div class="overflow-x-auto">
-              <table class="min-w-full table-auto">
+              <table class="table table-sm">
                 <thead>
-                  <tr class="bg-gray-50">
-                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Message ID</th>
-                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Send Time</th>
-                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Acks</th>
-                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Min Latency</th>
-                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Max Latency</th>
-                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Avg Latency</th>
-                    <th class="px-4 py-2 text-left text-sm font-medium text-gray-900">Nodes</th>
+                  <tr class="bg-base-300">
+                    <th class="text-base-content">Experiment ID</th>
+                    <th class="text-base-content">Started</th>
+                    <th class="text-base-content">Duration</th>
+                    <th class="text-base-content">Messages</th>
+                    <th class="text-base-content">Acks</th>
+                    <th class="text-base-content">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <%= for stat <- @timing_stats do %>
-                    <tr class="border-b">
-                      <td class="px-4 py-2 text-sm font-mono">{stat.message_id}</td>
-                      <td class="px-4 py-2 text-sm">{format_datetime(stat.send_time)}</td>
-                      <td class="px-4 py-2 text-sm">{stat.ack_count}</td>
-                      <td class="px-4 py-2 text-sm">
-                        <%= if stat.min_latency_ms do %>
-                          {stat.min_latency_ms}ms
+                  <%= for exp <- Enum.take(@experiment_history, 10) do %>
+                    <tr class={[
+                      "hover:bg-base-300/50",
+                      if(@current_experiment == exp.id, do: "bg-primary/10", else: "")
+                    ]}>
+                      <td class="font-mono">{exp.id}</td>
+                      <td>
+                        <%= if exp.time_range do %>
+                          {format_datetime(exp.time_range.start)}
                         <% else %>
-                          <span class="text-gray-400">-</span>
+                          <span class="text-base-content/40">-</span>
                         <% end %>
                       </td>
-                      <td class="px-4 py-2 text-sm">
-                        <%= if stat.max_latency_ms do %>
-                          {stat.max_latency_ms}ms
+                      <td>
+                        <%= if exp.duration_seconds do %>
+                          {exp.duration_seconds}s
                         <% else %>
-                          <span class="text-gray-400">-</span>
+                          <span class="text-base-content/40">-</span>
                         <% end %>
                       </td>
-                      <td class="px-4 py-2 text-sm">
-                        <%= if stat.avg_latency_ms do %>
-                          {stat.avg_latency_ms}ms
-                        <% else %>
-                          <span class="text-gray-400">-</span>
-                        <% end %>
+                      <td>{exp.send_count}</td>
+                      <td>{exp.ack_count}</td>
+                      <td>
+                        <button
+                          phx-click="view_experiment"
+                          phx-value-experiment_id={exp.id}
+                          class="text-primary hover:text-primary-focus text-sm"
+                        >
+                          View Details
+                        </button>
                       </td>
-                      <td class="px-4 py-2 text-sm">{length(stat.acknowledgments)}</td>
                     </tr>
                   <% end %>
                 </tbody>
               </table>
             </div>
-          <% else %>
-            <div class="text-gray-500 text-center py-8">
-              No timing statistics available
+
+            <%= if length(@experiment_history) > 10 do %>
+              <div class="mt-4 text-sm text-base-content/60 text-center">
+                Showing 10 most recent experiments of {length(@experiment_history)} total
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+    <!-- Experiment Controls -->
+      <div class="card bg-base-200 mb-6">
+        <div class="card-body">
+          <h3 class="card-title text-lg mb-4">Experiment Control</h3>
+
+          <form phx-submit="start_aggregation" class="space-y-4">
+            <!-- Experiment ID -->
+            <div>
+              <label class="block text-sm font-medium text-base-content mb-2">
+                Experiment ID
+              </label>
+              <input
+                type="text"
+                name="experiment_id"
+                placeholder="Enter experiment ID"
+                value={@current_experiment}
+                class="input input-bordered w-full"
+                required
+                disabled={@aggregation_status == :running}
+              />
             </div>
-          <% end %>
+
+            <!-- Message Sending Configuration -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-base-content mb-2">
+                  Number of Messages (0 = manual sending)
+                </label>
+                <input
+                  type="number"
+                  name="message_count"
+                  value={@message_count}
+                  min="0"
+                  max="1000"
+                  class="input input-bordered w-full"
+                  disabled={@aggregation_status == :running}
+                  phx-change="update_message_count"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-base-content mb-2">
+                  Message Interval (ms)
+                </label>
+                <input
+                  type="number"
+                  name="message_interval_ms"
+                  value={@message_interval_ms}
+                  min="100"
+                  max="60000"
+                  step="100"
+                  class="input input-bordered w-full"
+                  disabled={@aggregation_status == :running}
+                  phx-change="update_message_interval"
+                />
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center gap-4">
+              <button
+                type="submit"
+                class="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={@aggregation_status == :running}
+              >
+                Start Experiment
+              </button>
+
+              <button
+                type="button"
+                phx-click="stop_aggregation"
+                class="btn btn-error disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={@aggregation_status == :stopped}
+              >
+                Stop
+              </button>
+
+              <button
+                type="button"
+                phx-click="refresh_now"
+                class="btn btn-neutral"
+              >
+                Refresh Now
+              </button>
+            </div>
+          </form>
+
+          <!-- Status Bar -->
+          <div class="mt-4 flex flex-wrap items-center gap-4 pt-4 border-t border-base-300">
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-base-content/70">Status:</span>
+              <span class={[
+                "badge",
+                if(@aggregation_status == :running,
+                  do: "badge-success",
+                  else: "badge-ghost"
+                )
+              ]}>
+                {String.capitalize(to_string(@aggregation_status))}
+              </span>
+            </div>
+
+            <%= if @message_progress do %>
+              <div class="flex items-center gap-2">
+                <span class="text-sm text-base-content/70">Messages:</span>
+                <span class="badge badge-info">
+                  {@message_progress.sent}/{@message_progress.total}
+                </span>
+                <%= if @message_progress.sent < @message_progress.total do %>
+                  <div class="w-32 bg-base-300 rounded-full h-2">
+                    <div
+                      class="bg-primary h-2 rounded-full transition-all duration-300"
+                      style={"width: #{Float.round(@message_progress.sent / @message_progress.total * 100, 1)}%"}
+                    >
+                    </div>
+                  </div>
+                <% else %>
+                  <span class="text-xs text-success font-medium">Complete</span>
+                <% end %>
+              </div>
+            <% end %>
+
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-base-content/70">Refresh:</span>
+              <select
+                phx-change="set_refresh_interval"
+                name="interval"
+                class="select select-bordered select-sm"
+              >
+                <option value="1000" selected={@refresh_interval == 1000}>1s</option>
+                <option value="5000" selected={@refresh_interval == 5000}>5s</option>
+                <option value="10000" selected={@refresh_interval == 10000}>10s</option>
+                <option value="30000" selected={@refresh_interval == 30000}>30s</option>
+              </select>
+            </div>
+
+            <%= if @last_update do %>
+              <div class="text-sm text-base-content/60">
+                Last update: {format_time(@last_update)}
+              </div>
+            <% end %>
+          </div>
+        </div>
+      </div>
+      
+    <!-- Experiment Summary -->
+      <%= if @current_experiment do %>
+        <div class="card bg-base-200 mb-6">
+          <div class="card-body">
+            <h3 class="card-title text-lg mb-4">
+              Experiment: {@current_experiment}
+            </h3>
+
+            <%= if @cluster_summary do %>
+              <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <div class="text-center">
+                  <div class="text-2xl font-bold text-info">{@cluster_summary.node_count || 0}</div>
+                  <div class="text-sm text-base-content/60">Nodes</div>
+                </div>
+                <div class="text-center">
+                  <div class="text-2xl font-bold text-success">
+                    {@cluster_summary.send_count || 0}
+                  </div>
+                  <div class="text-sm text-base-content/60">Messages Sent</div>
+                </div>
+                <div class="text-center">
+                  <div class="text-2xl font-bold text-secondary">
+                    {@cluster_summary.ack_count || 0}
+                  </div>
+                  <div class="text-sm text-base-content/60">Acknowledged</div>
+                </div>
+                <div class="text-center">
+                  <div class="text-2xl font-bold text-warning">
+                    {format_percentage(ack_rate(@cluster_summary,
+                      active_nodes: @active_nodes,
+                      local_node_id: @local_node_id
+                    ))}
+                  </div>
+                  <div class="text-sm text-base-content/60">Ack Rate</div>
+                </div>
+                <div class="text-center">
+                  <div class="text-2xl font-bold text-accent">
+                    {@cluster_summary.system_metrics_count || 0}
+                  </div>
+                  <div class="text-sm text-base-content/60">Metrics</div>
+                </div>
+                <div class="text-center">
+                  <div class="text-2xl font-bold text-base-content/70">
+                    {@cluster_summary.topology_snapshots_count || 0}
+                  </div>
+                  <div class="text-sm text-base-content/60">Snapshots</div>
+                </div>
+              </div>
+            <% else %>
+              <div class="text-base-content/50 text-center py-8">
+                No data available. Start aggregation to begin monitoring.
+              </div>
+            <% end %>
+          </div>
+        </div>
+        
+    <!-- Node Performance Statistics -->
+        <%= if @node_performance_stats != [] do %>
+          <div class="card bg-base-200 mb-6">
+            <div class="card-body">
+              <h3 class="card-title text-lg mb-4">Node Performance (RTT)</h3>
+              <p class="text-sm text-base-content/70 mb-4">
+                Round-trip time from Corrosion write (via gossip) to acknowledgement receipt
+              </p>
+
+              <div class="overflow-x-auto">
+                <table class="table table-sm">
+                  <thead>
+                    <tr class="bg-base-300">
+                      <th class="text-base-content">Node ID</th>
+                      <th class="text-base-content">Total Acks</th>
+                      <th class="text-base-content">Min RTT</th>
+                      <th class="text-base-content">Avg RTT</th>
+                      <th class="text-base-content">Max RTT</th>
+                      <th class="text-base-content">P50</th>
+                      <th class="text-base-content">P95</th>
+                      <th class="text-base-content">P99</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <%= for {node_stat, index} <- Enum.with_index(@node_performance_stats) do %>
+                      <tr class={if(rem(index, 2) == 0, do: "", else: "bg-base-300/30")}>
+                        <td class="font-mono font-medium">{node_stat.node_id}</td>
+                        <td>{node_stat.ack_count}</td>
+                        <td>
+                          <span class={latency_color_class(node_stat.min_latency_ms)}>
+                            {node_stat.min_latency_ms}ms
+                          </span>
+                        </td>
+                        <td class="font-medium">
+                          <span class={latency_color_class(node_stat.avg_latency_ms)}>
+                            {node_stat.avg_latency_ms}ms
+                          </span>
+                        </td>
+                        <td>
+                          <span class={latency_color_class(node_stat.max_latency_ms)}>
+                            {node_stat.max_latency_ms}ms
+                          </span>
+                        </td>
+                        <td>{node_stat.p50_latency_ms}ms</td>
+                        <td>{node_stat.p95_latency_ms}ms</td>
+                        <td>{node_stat.p99_latency_ms}ms</td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="mt-4 flex items-center gap-4 text-xs text-base-content/70">
+                <div class="flex items-center gap-2">
+                  <span class="inline-block w-3 h-3 rounded-full bg-success"></span>
+                  <span>&lt; 50ms (Excellent)</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="inline-block w-3 h-3 rounded-full bg-warning"></span>
+                  <span>50-200ms (Good)</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="inline-block w-3 h-3 rounded-full bg-[#F97316]"></span>
+                  <span>200-500ms (Fair)</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="inline-block w-3 h-3 rounded-full bg-error"></span>
+                  <span>&gt; 500ms (Slow)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+    <!-- Latency Distribution Histogram -->
+        <%= if @latency_histogram && @latency_histogram.total_count > 0 do %>
+          <div class="card bg-base-200 mb-6">
+            <div class="card-body">
+              <h3 class="card-title text-lg mb-2">Latency Distribution</h3>
+              <p class="text-sm text-base-content/70 mb-4">
+                Distribution of round-trip times across all {@ latency_histogram.total_count} acknowledgements
+              </p>
+
+              <!-- SVG Histogram -->
+              <div class="w-full" style="height: 300px;">
+                <%= render_latency_histogram(@latency_histogram) %>
+              </div>
+
+              <!-- Percentile Markers Legend -->
+              <div class="mt-4 flex items-center gap-6 text-sm">
+                <div class="flex items-center gap-2">
+                  <div class="w-0.5 h-4 bg-info"></div>
+                  <span class="text-base-content/70">
+                    P50 (median): <span class="font-medium">{@latency_histogram.percentiles.p50}ms</span>
+                  </span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <div class="w-0.5 h-4 bg-warning"></div>
+                  <span class="text-base-content/70">
+                    P95: <span class="font-medium">{@latency_histogram.percentiles.p95}ms</span>
+                  </span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <div class="w-0.5 h-4 bg-error"></div>
+                  <span class="text-base-content/70">
+                    P99: <span class="font-medium">{@latency_histogram.percentiles.p99}ms</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% end %>
+
+    <!-- Active Nodes -->
+        <div class="card bg-base-200 mb-6">
+          <div class="card-body">
+            <h3 class="card-title text-lg mb-4">Active Nodes</h3>
+
+            <%= if @active_nodes != [] do %>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <%= for node <- @active_nodes do %>
+                  <div class="border border-base-300 rounded-lg p-3 bg-base-100">
+                    <div class="font-medium">{node.node_id}</div>
+                    <div class="text-sm text-base-content/70">
+                      Region: {node.region || "Unknown"}
+                    </div>
+                    <%= if node.phoenix_port do %>
+                      <div class="text-sm text-base-content/70">
+                        Port: {node.phoenix_port}
+                      </div>
+                    <% end %>
+                    <%= if node.is_local do %>
+                      <div class="badge badge-info badge-sm mt-1">
+                        Local Node
+                      </div>
+                    <% end %>
+                  </div>
+                <% end %>
+              </div>
+            <% else %>
+              <div class="text-base-content/50 text-center py-4">
+                No active nodes detected
+              </div>
+            <% end %>
+          </div>
+        </div>
+
+    <!-- Timing Statistics -->
+        <div class="card bg-base-200 mb-6">
+          <div class="card-body">
+            <h3 class="card-title text-lg mb-4">Message Timing Statistics</h3>
+
+            <%= if @timing_stats != [] do %>
+              <div class="overflow-x-auto">
+                <table class="table table-sm">
+                  <thead>
+                    <tr class="bg-base-300">
+                      <th class="text-base-content">Message ID</th>
+                      <th class="text-base-content">Send Time</th>
+                      <th class="text-base-content">Acks</th>
+                      <th class="text-base-content">Min Latency</th>
+                      <th class="text-base-content">Max Latency</th>
+                      <th class="text-base-content">Avg Latency</th>
+                      <th class="text-base-content">Nodes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <%= for stat <- @timing_stats do %>
+                      <tr class="hover:bg-base-300/50">
+                        <td class="font-mono">{stat.message_id}</td>
+                        <td>{format_datetime(stat.send_time)}</td>
+                        <td>{stat.ack_count}</td>
+                        <td>
+                          <%= if stat.min_latency_ms do %>
+                            {stat.min_latency_ms}ms
+                          <% else %>
+                            <span class="text-base-content/40">-</span>
+                          <% end %>
+                        </td>
+                        <td>
+                          <%= if stat.max_latency_ms do %>
+                            {stat.max_latency_ms}ms
+                          <% else %>
+                            <span class="text-base-content/40">-</span>
+                          <% end %>
+                        </td>
+                        <td>
+                          <%= if stat.avg_latency_ms do %>
+                            {stat.avg_latency_ms}ms
+                          <% else %>
+                            <span class="text-base-content/40">-</span>
+                          <% end %>
+                        </td>
+                        <td>{length(stat.acknowledgments)}</td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            <% else %>
+              <div class="text-base-content/50 text-center py-8">
+                No timing statistics available
+              </div>
+            <% end %>
+          </div>
         </div>
         
     <!-- System Metrics Chart -->
-        <div class="bg-white rounded-lg shadow p-6">
-          <h3 class="text-lg font-semibold mb-4">System Metrics</h3>
+        <div class="card bg-base-200">
+          <div class="card-body">
+            <h3 class="card-title text-lg mb-4">System Metrics</h3>
 
-          <%= if @system_metrics != [] do %>
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <!-- Memory Usage -->
-              <div>
-                <h4 class="font-medium mb-2">Memory Usage (MB)</h4>
-                <div class="space-y-2">
-                  <%= for metric <- Enum.take(@system_metrics, 10) do %>
-                    <div class="flex items-center justify-between text-sm">
-                      <span class="text-gray-600">{metric.node_id}</span>
-                      <span class="font-medium">{metric.memory_mb} MB</span>
-                    </div>
-                  <% end %>
+            <%= if @system_metrics != [] do %>
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Memory Usage -->
+                <div>
+                  <h4 class="font-medium mb-2">Memory Usage (MB)</h4>
+                  <div class="space-y-2">
+                    <%= for metric <- Enum.take(@system_metrics, 10) do %>
+                      <div class="flex items-center justify-between text-sm">
+                        <span class="text-base-content/70">{metric.node_id}</span>
+                        <span class="font-medium">{metric.memory_mb} MB</span>
+                      </div>
+                    <% end %>
+                  </div>
+                </div>
+
+      <!-- Process Count -->
+                <div>
+                  <h4 class="font-medium mb-2">Erlang Processes</h4>
+                  <div class="space-y-2">
+                    <%= for metric <- Enum.take(@system_metrics, 10) do %>
+                      <div class="flex items-center justify-between text-sm">
+                        <span class="text-base-content/70">{metric.node_id}</span>
+                        <span class="font-medium">{metric.erlang_processes}</span>
+                      </div>
+                    <% end %>
+                  </div>
                 </div>
               </div>
-              
-    <!-- Process Count -->
-              <div>
-                <h4 class="font-medium mb-2">Erlang Processes</h4>
-                <div class="space-y-2">
-                  <%= for metric <- Enum.take(@system_metrics, 10) do %>
-                    <div class="flex items-center justify-between text-sm">
-                      <span class="text-gray-600">{metric.node_id}</span>
-                      <span class="font-medium">{metric.erlang_processes}</span>
-                    </div>
-                  <% end %>
-                </div>
+            <% else %>
+              <div class="text-base-content/50 text-center py-8">
+                No system metrics available
               </div>
-            </div>
-          <% else %>
-            <div class="text-gray-500 text-center py-8">
-              No system metrics available
-            </div>
-          <% end %>
+            <% end %>
+          </div>
         </div>
       <% else %>
-        <div class="bg-white rounded-lg shadow p-6 text-center">
-          <h3 class="text-lg font-semibold mb-2">No Experiment Selected</h3>
-          <p class="text-gray-600">Enter an experiment ID above to start monitoring</p>
+        <div class="card bg-base-200 text-center">
+          <div class="card-body">
+            <h3 class="card-title text-lg mb-2">No Experiment Selected</h3>
+            <p class="text-base-content/70">Enter an experiment ID above to start monitoring</p>
+          </div>
         </div>
       <% end %>
     </div>
@@ -703,11 +870,19 @@ defmodule CorroPortWeb.AnalyticsLive do
 
       active_nodes = AnalyticsAggregator.get_active_nodes()
 
+      # Get per-node performance statistics
+      node_performance_stats = Analytics.get_node_performance_stats(experiment_id)
+
+      # Get latency histogram
+      latency_histogram = Analytics.get_latency_histogram(experiment_id)
+
       socket
       |> assign(:cluster_summary, cluster_summary)
       |> assign(:timing_stats, timing_stats)
       |> assign(:system_metrics, system_metrics)
       |> assign(:active_nodes, active_nodes)
+      |> assign(:node_performance_stats, node_performance_stats)
+      |> assign(:latency_histogram, latency_histogram)
       |> assign(:last_update, DateTime.utc_now())
     else
       socket
@@ -739,6 +914,79 @@ defmodule CorroPortWeb.AnalyticsLive do
       end, {:desc, DateTime})
 
     assign(socket, :experiment_history, history)
+  end
+
+  defp ack_rate(summary, opts \\ [])
+  defp ack_rate(nil, _opts), do: 0.0
+
+  defp ack_rate(summary, opts) do
+    send_count = Map.get(summary, :send_count, 0)
+    ack_count = Map.get(summary, :ack_count, 0)
+    expected_acks = send_count * ack_node_count(summary, opts)
+
+    if expected_acks > 0 do
+      Float.round(ack_count / expected_acks * 100, 1)
+    else
+      0.0
+    end
+  end
+
+  defp ack_node_count(summary, opts) do
+    cond do
+      is_integer(Map.get(summary, :remote_node_count)) and Map.get(summary, :remote_node_count) >= 0 ->
+        Map.get(summary, :remote_node_count)
+
+      (remote_from_active = remote_count_from_active_nodes(opts)) != nil ->
+        remote_from_active
+
+      true ->
+        case Map.get(summary, :node_count) do
+          count when is_integer(count) and count > 0 ->
+            remote = count - 1
+
+            if remote < 0 do
+              0
+            else
+              remote
+            end
+
+          _ ->
+            0
+        end
+    end
+  end
+
+  defp remote_count_from_active_nodes(opts) do
+    active_nodes = Keyword.get(opts, :active_nodes)
+
+    cond do
+      not is_list(active_nodes) ->
+        nil
+
+      active_nodes == [] ->
+        nil
+
+      true ->
+        local_node_id = Keyword.get(opts, :local_node_id)
+
+        Enum.count(active_nodes, fn node ->
+          node_id = Map.get(node, :node_id)
+          node_id && node_id != local_node_id
+        end)
+    end
+  end
+
+  defp format_percentage(nil), do: "0%"
+
+  defp format_percentage(value) when is_float(value) do
+    value
+    |> :erlang.float_to_binary(decimals: 1)
+    |> String.trim_trailing(".0")
+    |> Kernel.<>("%")
+  end
+
+  defp format_percentage(value) when is_integer(value) do
+    "#{value}%"
   end
 
   defp calculate_duration(nil), do: nil
@@ -774,4 +1022,169 @@ defmodule CorroPortWeb.AnalyticsLive do
   end
 
   defp format_time(_), do: "-"
+
+  defp latency_color_class(latency_ms) when is_number(latency_ms) do
+    cond do
+      latency_ms < 50 -> "text-green-600 font-medium"
+      latency_ms < 200 -> "text-yellow-600 font-medium"
+      latency_ms < 500 -> "text-orange-600 font-medium"
+      true -> "text-red-600 font-medium"
+    end
+  end
+
+  defp latency_color_class(_), do: "text-gray-600"
+
+  defp render_latency_histogram(histogram) do
+    chart_height = 250
+    chart_width = 800
+    padding = %{top: 20, right: 20, bottom: 40, left: 60}
+
+    plot_width = chart_width - padding.left - padding.right
+    plot_height = chart_height - padding.top - padding.bottom
+
+    buckets = histogram.buckets
+    max_count = histogram.max_count
+    bucket_count = length(buckets)
+
+    bar_width = if bucket_count > 0, do: plot_width / bucket_count * 0.8, else: 0
+    bar_spacing = if bucket_count > 0, do: plot_width / bucket_count, else: 0
+
+    assigns = %{
+      chart_width: chart_width,
+      chart_height: chart_height,
+      padding: padding,
+      plot_width: plot_width,
+      plot_height: plot_height,
+      buckets: buckets,
+      max_count: max_count,
+      bar_width: bar_width,
+      bar_spacing: bar_spacing,
+      percentiles: histogram.percentiles
+    }
+
+    ~H"""
+    <svg width="100%" height="100%" viewBox={"0 0 #{@chart_width} #{@chart_height}"} class="border border-gray-200 rounded">
+      <!-- Y-axis -->
+      <line
+        x1={@padding.left}
+        y1={@padding.top}
+        x2={@padding.left}
+        y2={@chart_height - @padding.bottom}
+        stroke="#9CA3AF"
+        stroke-width="1"
+      />
+      <!-- X-axis -->
+      <line
+        x1={@padding.left}
+        y1={@chart_height - @padding.bottom}
+        x2={@chart_width - @padding.right}
+        y2={@chart_height - @padding.bottom}
+        stroke="#9CA3AF"
+        stroke-width="1"
+      />
+
+      <!-- Y-axis label -->
+      <text x="20" y={@padding.top + @plot_height / 2} text-anchor="middle" transform={"rotate(-90, 20, #{@padding.top + @plot_height / 2})"} class="text-xs fill-gray-600">
+        Count
+      </text>
+
+      <!-- X-axis label -->
+      <text x={@padding.left + @plot_width / 2} y={@chart_height - 5} text-anchor="middle" class="text-xs fill-gray-600">
+        Latency (ms)
+      </text>
+
+      <!-- Y-axis ticks -->
+      <%= for i <- 0..5 do %>
+        <% y = @chart_height - @padding.bottom - (@plot_height * i / 5) %>
+        <% value = Float.round(@max_count * i / 5, 1) %>
+        <line x1={@padding.left - 5} y1={y} x2={@padding.left} y2={y} stroke="#9CA3AF" stroke-width="1" />
+        <text x={@padding.left - 10} y={y + 4} text-anchor="end" class="text-xs fill-gray-600">
+          {value}
+        </text>
+      <% end %>
+
+      <!-- Bars -->
+      <%= for {bucket, index} <- Enum.with_index(@buckets) do %>
+        <% x = @padding.left + index * @bar_spacing %>
+        <% bar_height = if @max_count > 0, do: bucket.count / @max_count * @plot_height, else: 0 %>
+        <% y = @chart_height - @padding.bottom - bar_height %>
+        <% fill_color = bucket_fill_color(bucket.min) %>
+
+        <!-- Bar -->
+        <rect
+          x={x}
+          y={y}
+          width={@bar_width}
+          height={bar_height}
+          fill={fill_color}
+          opacity="0.8"
+        />
+
+        <!-- Count label on top of bar -->
+        <%= if bucket.count > 0 do %>
+          <text x={x + @bar_width / 2} y={y - 5} text-anchor="middle" class="text-xs fill-gray-700 font-medium">
+            {bucket.count}
+          </text>
+        <% end %>
+
+        <!-- X-axis label -->
+        <text
+          x={x + @bar_width / 2}
+          y={@chart_height - @padding.bottom + 15}
+          text-anchor="middle"
+          class="text-xs fill-gray-600"
+          transform={"rotate(-45, #{x + @bar_width / 2}, #{@chart_height - @padding.bottom + 15})"}
+        >
+          {bucket.label}
+        </text>
+      <% end %>
+
+      <!-- Percentile markers -->
+      <%= for {percentile_name, percentile_value, color} <- [{"P50", @percentiles.p50, "#3B82F6"}, {"P95", @percentiles.p95, "#F97316"}, {"P99", @percentiles.p99, "#EF4444"}] do %>
+        <%= if percentile_value do %>
+          <% x_pos = calculate_percentile_position(percentile_value, @buckets, @bar_spacing, @padding.left) %>
+          <line
+            x1={x_pos}
+            y1={@padding.top}
+            x2={x_pos}
+            y2={@chart_height - @padding.bottom}
+            stroke={color}
+            stroke-width="2"
+            stroke-dasharray="5,5"
+            opacity="0.7"
+          />
+          <text x={x_pos + 5} y={@padding.top + 15} class="text-xs font-medium" fill={color}>
+            {percentile_name}
+          </text>
+        <% end %>
+      <% end %>
+    </svg>
+    """
+  end
+
+  defp bucket_fill_color(min_latency) do
+    cond do
+      min_latency < 50 -> "#10B981"
+      min_latency < 200 -> "#F59E0B"
+      min_latency < 500 -> "#F97316"
+      true -> "#EF4444"
+    end
+  end
+
+  defp calculate_percentile_position(percentile_value, buckets, bar_spacing, left_padding) do
+    # Find which bucket the percentile falls into
+    bucket_index =
+      buckets
+      |> Enum.find_index(fn bucket ->
+        case bucket.max do
+          :infinity -> percentile_value >= bucket.min
+          max_val -> percentile_value >= bucket.min && percentile_value < max_val
+        end
+      end)
+
+    case bucket_index do
+      nil -> left_padding
+      index -> left_padding + index * bar_spacing + bar_spacing / 2
+    end
+  end
 end

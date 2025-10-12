@@ -307,16 +307,42 @@ defmodule CorroPort.AnalyticsAggregator do
         # Broadcast progress update
         broadcast_message_progress(state.experiment_id, new_sent_count, total_count)
 
-        # Schedule next message if more to send
-        message_timer_ref =
-          if new_sent_count < total_count do
-            Process.send_after(self(), :send_message, state.message_config.interval_ms)
-          else
-            Logger.info("AnalyticsAggregator: Completed sending all #{total_count} messages")
-            nil
+        # Schedule next message if more to send, otherwise stop experiment
+        if new_sent_count < total_count do
+          message_timer_ref = Process.send_after(self(), :send_message, state.message_config.interval_ms)
+          {:noreply, %{state | message_config: new_message_config, message_timer_ref: message_timer_ref}}
+        else
+          Logger.info("AnalyticsAggregator: Completed sending all #{total_count} messages - stopping experiment")
+
+          # Stop the experiment automatically
+          # Cancel timers
+          if state.timer_ref do
+            Process.cancel_timer(state.timer_ref)
           end
 
-        {:noreply, %{state | message_config: new_message_config, message_timer_ref: message_timer_ref}}
+          # Clear experiment tracking
+          CorroPort.SystemMetrics.set_experiment_id(nil)
+          CorroPort.AckTracker.set_experiment_id(nil)
+
+          # Broadcast experiment stopped
+          Phoenix.PubSub.broadcast(
+            CorroPort.PubSub,
+            "analytics:#{state.experiment_id}",
+            {:experiment_stopped, state.experiment_id}
+          )
+
+          new_state = %{
+            state
+            | aggregating: false,
+              timer_ref: nil,
+              message_timer_ref: nil,
+              experiment_id: nil,
+              cache: %{},
+              message_config: %{enabled: false, total_count: 0, sent_count: 0, interval_ms: 1000}
+          }
+
+          {:noreply, new_state}
+        end
       else
         {:noreply, %{state | message_timer_ref: nil}}
       end

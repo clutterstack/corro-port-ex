@@ -76,7 +76,9 @@ demo_app.md
 npm-debug.log
 /assets/node_modules/
 
-
+# analytics data
+analytics/*.db
+analytics/*.db-*
 
 
 corrosion/*
