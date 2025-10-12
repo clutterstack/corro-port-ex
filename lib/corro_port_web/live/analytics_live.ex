@@ -64,6 +64,7 @@ defmodule CorroPortWeb.AnalyticsLive do
       |> assign(:experiment_history, [])
       |> assign(:viewing_mode, :current)
       |> assign(:transport_mode, :corrosion)
+      |> assign(:experiment_id, "")
 
     # Load data if there's a running experiment
     socket =
@@ -198,6 +199,11 @@ defmodule CorroPortWeb.AnalyticsLive do
   def handle_event("update_transport_mode", _params, socket) do
     # Fallback for when called without params
     {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("update_form", %{"experiment_id" => experiment_id} = _params, socket) do
+    {:noreply, assign(socket, :experiment_id, experiment_id)}
   end
 
   @impl true
@@ -344,6 +350,7 @@ defmodule CorroPortWeb.AnalyticsLive do
         refresh_interval={@refresh_interval}
         last_update={@last_update}
         transport_mode={@transport_mode}
+        experiment_id={@experiment_id}
       />
 
       <%= if @current_experiment do %>

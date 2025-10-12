@@ -120,6 +120,7 @@ defmodule CorroPortWeb.AnalyticsLive.Components do
   attr :refresh_interval, :integer, required: true
   attr :last_update, :any, default: nil
   attr :transport_mode, :atom, default: :corrosion
+  attr :experiment_id, :string, default: ""
 
   def experiment_controls(assigns) do
     ~H"""
@@ -169,7 +170,7 @@ defmodule CorroPortWeb.AnalyticsLive.Components do
           </p>
         </div>
 
-        <form phx-submit="start_aggregation" class="space-y-4" id="experiment-form">
+        <form phx-submit="start_aggregation" phx-change="update_form" class="space-y-4" id="experiment-form">
           <!-- Hidden input to include transport_mode in form submission -->
           <input type="hidden" name="transport_mode" value={@transport_mode} />
 
@@ -178,17 +179,16 @@ defmodule CorroPortWeb.AnalyticsLive.Components do
             <label class="block text-sm font-medium text-base-content mb-2">
               Experiment ID
             </label>
-            <div phx-update="ignore" id="experiment-id-container">
-              <input
-                type="text"
-                name="experiment_id"
-                id="experiment_id_input"
-                placeholder="Enter experiment ID"
-                class="input input-bordered w-full"
-                required
-                disabled={@aggregation_status == :running}
-              />
-            </div>
+            <input
+              type="text"
+              name="experiment_id"
+              id="experiment_id_input"
+              placeholder="Enter experiment ID"
+              value={@experiment_id}
+              class="input input-bordered w-full"
+              required
+              disabled={@aggregation_status == :running}
+            />
           </div>
 
           <!-- Message Sending Configuration -->
