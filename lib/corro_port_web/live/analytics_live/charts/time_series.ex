@@ -56,7 +56,7 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeries do
       all_times = Enum.map(all_points, & &1.send_time)
       min_time = Enum.min(all_times, DateTime)
       max_time = Enum.max(all_times, DateTime)
-      time_range_seconds = DateTime.diff(max_time, min_time, :second)
+      time_range_ms = DateTime.diff(max_time, min_time, :millisecond)
 
       # Calculate RTT range
       all_rtts = Enum.map(all_points, & &1.rtt_ms)
@@ -90,7 +90,7 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeries do
         rtt_time_series: rtt_time_series,
         min_time: min_time,
         max_time: max_time,
-        time_range_seconds: time_range_seconds,
+        time_range_ms: time_range_ms,
         plot_min_rtt: plot_min_rtt,
         plot_max_rtt: plot_max_rtt,
         rtt_range: plot_max_rtt - plot_min_rtt,
@@ -141,8 +141,8 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeries do
         <!-- X-axis ticks (time) -->
         <%= for i <- 0..4 do %>
           <% x = @padding.left + (@plot_width * i / 4) %>
-          <% time_offset = @time_range_seconds * i / 4 %>
-          <% tick_time = DateTime.add(@min_time, trunc(time_offset), :second) %>
+          <% time_offset_ms = @time_range_ms * i / 4 %>
+          <% tick_time = DateTime.add(@min_time, trunc(time_offset_ms), :millisecond) %>
           <line x1={x} y1={@chart_height - @padding.bottom} y2={@chart_height - @padding.bottom + 5} stroke="#9CA3AF" stroke-width="1" />
           <text x={x} y={@chart_height - @padding.bottom + 20} text-anchor="middle" class="text-xs fill-gray-600">
             {format_time_tick(tick_time)}
@@ -158,7 +158,7 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeries do
             <% path_data = build_line_path(
               series.data_points,
               @min_time,
-              @time_range_seconds,
+              @time_range_ms,
               @plot_min_rtt,
               @rtt_range,
               @padding,
@@ -170,7 +170,7 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeries do
 
           <!-- Data points -->
           <%= for point <- series.data_points do %>
-            <% x = calculate_x_position(point.send_time, @min_time, @time_range_seconds, @padding.left, @plot_width) %>
+            <% x = calculate_x_position(point.send_time, @min_time, @time_range_ms, @padding.left, @plot_width) %>
             <% y = calculate_y_position(point.rtt_ms, @plot_min_rtt, @rtt_range, @chart_height, @padding.bottom, @plot_height) %>
             <circle cx={x} cy={y} r="3" fill={colour} opacity="0.8" />
           <% end %>
@@ -204,13 +204,13 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeries do
   @doc """
   Calculates the X position for a given timestamp within the plot area.
 
-  Maps the timestamp onto the plot width based on the time range.
-  Returns the centre position if time_range_seconds is 0.
+  Maps the timestamp onto the plot width based on the time range in milliseconds.
+  Returns the centre position if time_range_ms is 0.
   """
-  def calculate_x_position(time, min_time, time_range_seconds, left_padding, plot_width) do
-    if time_range_seconds > 0 do
-      time_offset = DateTime.diff(time, min_time, :second)
-      left_padding + time_offset / time_range_seconds * plot_width
+  def calculate_x_position(time, min_time, time_range_ms, left_padding, plot_width) do
+    if time_range_ms > 0 do
+      time_offset_ms = DateTime.diff(time, min_time, :millisecond)
+      left_padding + time_offset_ms / time_range_ms * plot_width
     else
       left_padding + plot_width / 2
     end
@@ -248,7 +248,7 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeries do
   def build_line_path(
         data_points,
         min_time,
-        time_range_seconds,
+        time_range_ms,
         plot_min_rtt,
         rtt_range,
         padding,
@@ -260,7 +260,7 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeries do
     data_points
     |> Enum.map(fn point ->
       x =
-        calculate_x_position(point.send_time, min_time, time_range_seconds, padding.left, plot_width)
+        calculate_x_position(point.send_time, min_time, time_range_ms, padding.left, plot_width)
 
       y =
         calculate_y_position(

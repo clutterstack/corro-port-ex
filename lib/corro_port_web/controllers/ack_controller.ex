@@ -100,7 +100,7 @@ defmodule CorroPortWeb.AcknowledgmentController do
     )
 
     # Add the acknowledgment to our tracker
-    case CorroPort.AckTracker.add_acknowledgment(ack_data.ack_node_id) do
+    case CorroPort.AckTracker.add_acknowledgment(ack_data.message_pk, ack_data.ack_node_id) do
       :ok ->
         Logger.info(
           "AcknowledgmentController: Successfully recorded acknowledgment from #{ack_data.ack_node_id}"
@@ -115,9 +115,9 @@ defmodule CorroPortWeb.AcknowledgmentController do
           message_pk: ack_data.message_pk
         })
 
-      {:error, :no_message_tracked} ->
+      {:error, :unknown_message} ->
         Logger.warning(
-          "AcknowledgmentController: Received acknowledgment for #{ack_data.message_pk} but no message is currently being tracked"
+          "AcknowledgmentController: Received acknowledgment for #{ack_data.message_pk} but no matching message is currently being tracked"
         )
 
         conn
@@ -146,7 +146,7 @@ defmodule CorroPortWeb.AcknowledgmentController do
       "AcknowledgmentController: Received PubSub acknowledgment from #{ack_data.ack_node_id}"
     )
 
-    case CorroPort.AckTracker.add_acknowledgment(ack_data.ack_node_id) do
+    case CorroPort.AckTracker.add_acknowledgment(ack_data.request_id, ack_data.ack_node_id) do
       :ok ->
         conn
         |> put_status(:ok)
@@ -157,10 +157,13 @@ defmodule CorroPortWeb.AcknowledgmentController do
           request_id: ack_data.request_id
         })
 
-      {:error, :no_message_tracked} ->
+      {:error, :unknown_message} ->
         conn
         |> put_status(:not_found)
-        |> json(%{error: "No request currently being tracked"})
+        |> json(%{
+          error: "No request currently being tracked",
+          request_id: ack_data.request_id
+        })
 
       {:error, reason} ->
         Logger.error(

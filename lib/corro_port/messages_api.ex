@@ -26,13 +26,11 @@ defmodule CorroPort.MessagesAPI do
   - `{:ok, message_data}` on success
   - `{:error, reason}` on failure
   """
-  def send_and_track_message(content) do
+  def send_and_track_message(content, opts \\ []) do
     local_node_id = LocalNode.get_node_id()
 
     message_content =
       "#{content} (from #{local_node_id} at #{DateTime.utc_now() |> DateTime.to_iso8601()})"
-
-    send_timestamp = DateTime.utc_now()
 
     case insert_message(local_node_id, message_content) do
       {:ok, result} ->
@@ -44,13 +42,24 @@ defmodule CorroPort.MessagesAPI do
         track_message_data = %{
           pk: message_pk,
           timestamp: result.timestamp,
-          node_id: result.node_id
+          node_id: result.node_id,
+          experiment_id: Keyword.get(opts, :experiment_id)
         }
 
         case AckTracker.track_latest_message(track_message_data) do
           :ok ->
+            # Parse the database timestamp to use consistently for analytics
+            # This ensures the send event timestamp matches the actual message timestamp
+            {:ok, db_timestamp, 0} = DateTime.from_iso8601(result.timestamp)
+
             # Record send event in analytics if experiment is active
-            record_send_event(message_pk, local_node_id, send_timestamp, result.region)
+            record_send_event(
+              message_pk,
+              local_node_id,
+              db_timestamp,
+              result.region,
+              Keyword.get(opts, :experiment_id)
+            )
 
             message_data = %{
               pk: message_pk,
@@ -263,25 +272,23 @@ defmodule CorroPort.MessagesAPI do
     end
   end
 
-  defp record_send_event(message_id, originating_node, timestamp, region) do
-    # Only record if AckTracker has an active experiment
-    case AckTracker.get_experiment_id() do
-      nil ->
-        # No active experiment, skip analytics
-        :ok
+  defp record_send_event(message_id, originating_node, timestamp, region, experiment_id_opt) do
+    experiment_id =
+      experiment_id_opt ||
+        AckTracker.get_experiment_id()
 
-      experiment_id ->
-        # Record the send event
-        AnalyticsStorage.record_message_event(
-          message_id,
-          experiment_id,
-          originating_node,
-          # target_node is nil for send events
-          nil,
-          :sent,
-          timestamp,
-          region
-        )
+    if experiment_id do
+      AnalyticsStorage.record_message_event(
+        message_id,
+        experiment_id,
+        originating_node,
+        nil,
+        :sent,
+        timestamp,
+        region
+      )
+    else
+      :ok
     end
   end
 end

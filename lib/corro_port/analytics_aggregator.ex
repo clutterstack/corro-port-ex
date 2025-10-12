@@ -28,6 +28,8 @@ defmodule CorroPort.AnalyticsAggregator do
   @default_collection_interval_ms 10_000
   # Cache for 30 seconds
   @cache_ttl_ms 30_000
+  # Wait before final collection after sending last message
+  @finalize_delay_ms 3_000
   # HTTP request timeout
   @http_timeout_ms 5_000
 
@@ -128,7 +130,8 @@ defmodule CorroPort.AnalyticsAggregator do
         sent_count: 0,
         interval_ms: 1000
       },
-      message_timer_ref: nil
+      message_timer_ref: nil,
+      finalize_timer_ref: nil
     }
 
     {:ok, state}
@@ -138,13 +141,9 @@ defmodule CorroPort.AnalyticsAggregator do
     Logger.info("AnalyticsAggregator: Starting aggregation for experiment #{experiment_id}")
 
     # Cancel existing timers if any
-    if state.timer_ref do
-      Process.cancel_timer(state.timer_ref)
-    end
-
-    if state.message_timer_ref do
-      Process.cancel_timer(state.message_timer_ref)
-    end
+    cancel_timer(state.timer_ref)
+    cancel_timer(state.message_timer_ref)
+    cancel_timer(state.finalize_timer_ref)
 
     # Set experiment ID in SystemMetrics and AckTracker so message operations get recorded
     CorroPort.SystemMetrics.set_experiment_id(experiment_id)
@@ -183,42 +182,20 @@ defmodule CorroPort.AnalyticsAggregator do
         message_timer_ref: message_timer_ref,
         # Clear cache for new experiment
         cache: %{},
-        active_nodes: discover_cluster_nodes()
+        active_nodes: discover_cluster_nodes(),
+        finalize_timer_ref: nil
     }
 
     # Trigger immediate collection
-    collect_cluster_data(new_state)
+    updated_state = collect_cluster_data(new_state)
 
-    {:reply, :ok, new_state}
+    {:reply, :ok, updated_state}
   end
 
   def handle_call(:stop_aggregation, _from, state) do
     Logger.info("AnalyticsAggregator: Stopping aggregation")
 
-    # Cancel timers
-    if state.timer_ref do
-      Process.cancel_timer(state.timer_ref)
-    end
-
-    if state.message_timer_ref do
-      Process.cancel_timer(state.message_timer_ref)
-    end
-
-    # Clear experiment ID from SystemMetrics and AckTracker
-    CorroPort.SystemMetrics.set_experiment_id(nil)
-    CorroPort.AckTracker.set_experiment_id(nil)
-
-    new_state = %{
-      state
-      | aggregating: false,
-        timer_ref: nil,
-        message_timer_ref: nil,
-        experiment_id: nil,
-        cache: %{},
-        message_config: %{enabled: false, total_count: 0, sent_count: 0, interval_ms: 1000}
-    }
-
-    {:reply, :ok, new_state}
+    {:reply, :ok, stop_experiment(state)}
   end
 
   def handle_call(:get_current_experiment_id, _from, state) do
@@ -228,10 +205,11 @@ defmodule CorroPort.AnalyticsAggregator do
   def handle_call({:get_cluster_summary, experiment_id}, _from, state) do
     case get_cached_or_collect(:summary, experiment_id, state) do
       {:ok, data, new_state} ->
+        summary = normalize_summary(data)
         # CLIClusterData excludes local node, so add 1 for total cluster size
         # This gives us the complete cluster size for display
-        total_cluster_nodes = length(state.active_nodes) + 1
-        updated_data = Map.put(data, :node_count, total_cluster_nodes)
+        total_cluster_nodes = length(new_state.active_nodes) + 1
+        updated_data = Map.put(summary, :node_count, total_cluster_nodes)
         {:reply, {:ok, updated_data}, new_state}
 
       {:error, reason} ->
@@ -265,22 +243,35 @@ defmodule CorroPort.AnalyticsAggregator do
   end
 
   def handle_cast({:collect_now, experiment_id}, state) do
-    if state.aggregating and state.experiment_id == experiment_id do
-      collect_cluster_data(state)
-    end
+    new_state =
+      if state.aggregating and state.experiment_id == experiment_id do
+        collect_cluster_data(state)
+      else
+        state
+      end
 
-    {:noreply, state}
+    {:noreply, new_state}
   end
 
   def handle_info(:collect_data, state) do
     if state.aggregating and state.experiment_id do
-      collect_cluster_data(state)
+      state = collect_cluster_data(state)
 
       # Schedule next collection
       timer_ref = Process.send_after(self(), :collect_data, state.interval_ms)
       {:noreply, %{state | timer_ref: timer_ref}}
     else
       {:noreply, %{state | timer_ref: nil}}
+    end
+  end
+
+  def handle_info({:finalize_experiment, experiment_id}, state) do
+    if state.experiment_id == experiment_id do
+      Logger.info("AnalyticsAggregator: Performing final collection for experiment #{experiment_id}")
+      state = collect_cluster_data(state)
+      {:noreply, stop_experiment(%{state | finalize_timer_ref: nil})}
+    else
+      {:noreply, state}
     end
   end
 
@@ -293,7 +284,9 @@ defmodule CorroPort.AnalyticsAggregator do
         # Send the message
         message_content = "Experiment #{state.experiment_id} message #{sent_count + 1}/#{total_count}"
 
-        case CorroPort.MessagesAPI.send_and_track_message(message_content) do
+        case CorroPort.MessagesAPI.send_and_track_message(message_content,
+               experiment_id: state.experiment_id
+             ) do
           {:ok, _message_data} ->
             Logger.info("AnalyticsAggregator: Sent message #{sent_count + 1}/#{total_count}")
 
@@ -313,33 +306,18 @@ defmodule CorroPort.AnalyticsAggregator do
           message_timer_ref = Process.send_after(self(), :send_message, state.message_config.interval_ms)
           {:noreply, %{state | message_config: new_message_config, message_timer_ref: message_timer_ref}}
         else
-          Logger.info("AnalyticsAggregator: Completed sending all #{total_count} messages - stopping experiment")
-
-          # Stop the experiment automatically
-          # Cancel timers
-          if state.timer_ref do
-            Process.cancel_timer(state.timer_ref)
-          end
-
-          # Clear experiment tracking
-          CorroPort.SystemMetrics.set_experiment_id(nil)
-          CorroPort.AckTracker.set_experiment_id(nil)
-
-          # Broadcast experiment stopped
-          Phoenix.PubSub.broadcast(
-            CorroPort.PubSub,
-            "analytics:#{state.experiment_id}",
-            {:experiment_stopped, state.experiment_id}
+          Logger.info(
+            "AnalyticsAggregator: Completed sending all #{total_count} messages - scheduling final collection"
           )
+
+          finalize_timer_ref =
+            Process.send_after(self(), {:finalize_experiment, state.experiment_id}, @finalize_delay_ms)
 
           new_state = %{
             state
-            | aggregating: false,
-              timer_ref: nil,
+            | message_config: %{state.message_config | sent_count: new_sent_count, enabled: false},
               message_timer_ref: nil,
-              experiment_id: nil,
-              cache: %{},
-              message_config: %{enabled: false, total_count: 0, sent_count: 0, interval_ms: 1000}
+              finalize_timer_ref: finalize_timer_ref
           }
 
           {:noreply, new_state}
@@ -353,13 +331,9 @@ defmodule CorroPort.AnalyticsAggregator do
   end
 
   def terminate(_reason, state) do
-    if Map.get(state, :timer_ref) do
-      Process.cancel_timer(state.timer_ref)
-    end
-
-    if Map.get(state, :message_timer_ref) do
-      Process.cancel_timer(state.message_timer_ref)
-    end
+    cancel_timer(Map.get(state, :timer_ref))
+    cancel_timer(Map.get(state, :message_timer_ref))
+    cancel_timer(Map.get(state, :finalize_timer_ref))
 
     Logger.info("AnalyticsAggregator shutting down")
     :ok
@@ -405,29 +379,79 @@ defmodule CorroPort.AnalyticsAggregator do
       # Wait for all tasks with timeout
       results = Task.yield_many(tasks, 12_000)
 
+      Enum.each(results, fn {task, res} ->
+        if res == nil do
+          Task.shutdown(task, :brutal_kill)
+        end
+      end)
+
       # Process results and update cache
       now = System.monotonic_time(:millisecond)
 
-      new_cache =
-        Enum.reduce(results, state.cache, fn {task, result}, cache ->
+      {new_cache, updated?} =
+        Enum.reduce(results, {state.cache, false}, fn {task, result}, {cache, changed?} ->
           case result do
             {:ok, {:ok, data}} ->
               data_type = get_task_data_type(task)
               cache_key = {data_type, state.experiment_id}
-              Map.put(cache, cache_key, {data, now})
+              updated_cache = Map.put(cache, cache_key, {data, now})
+              {updated_cache, true}
 
             _ ->
-              cache
+              {cache, changed?}
           end
         end)
 
-      # Broadcast updates if we have new data
-      if map_size(new_cache) > map_size(state.cache) do
+      if updated? do
         broadcast_cluster_update(state.experiment_id, active_nodes)
       end
 
       Logger.debug("AnalyticsAggregator: Collected data from #{length(active_nodes)} nodes")
+
+      %{
+        state
+        | cache: new_cache,
+          active_nodes: active_nodes,
+          last_collection: DateTime.utc_now()
+      }
+    else
+      state
     end
+  end
+
+  defp stop_experiment(state) do
+    cancel_timer(state.timer_ref)
+    cancel_timer(state.message_timer_ref)
+    cancel_timer(state.finalize_timer_ref)
+
+    if state.experiment_id do
+      CorroPort.SystemMetrics.set_experiment_id(nil)
+      CorroPort.AckTracker.set_experiment_id(nil)
+
+      Phoenix.PubSub.broadcast(
+        CorroPort.PubSub,
+        "analytics:#{state.experiment_id}",
+        {:experiment_stopped, state.experiment_id}
+      )
+    end
+
+    %{
+      state
+      | aggregating: false,
+        timer_ref: nil,
+        message_timer_ref: nil,
+        finalize_timer_ref: nil,
+        experiment_id: nil,
+        cache: %{},
+        message_config: %{enabled: false, total_count: 0, sent_count: 0, interval_ms: 1000}
+    }
+  end
+
+  defp cancel_timer(nil), do: :ok
+
+  defp cancel_timer(timer_ref) do
+    Process.cancel_timer(timer_ref)
+    :ok
   end
 
   defp collect_specific_data(:summary, experiment_id, _state) do
@@ -668,6 +692,9 @@ defmodule CorroPort.AnalyticsAggregator do
       node_count: 0
     }
   end
+
+  defp normalize_summary(%{} = summary), do: summary
+  defp normalize_summary(_), do: default_empty_summary()
 
   defp get_node_timing_stats(%{is_local: true}, experiment_id) do
     Queries.get_message_timing_stats(experiment_id)
