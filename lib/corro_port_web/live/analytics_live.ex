@@ -63,6 +63,7 @@ defmodule CorroPortWeb.AnalyticsLive do
       |> assign(:message_progress, nil)
       |> assign(:experiment_history, [])
       |> assign(:viewing_mode, :current)
+      |> assign(:transport_mode, :corrosion)
 
     # Load data if there's a running experiment
     socket =
@@ -104,10 +105,12 @@ defmodule CorroPortWeb.AnalyticsLive do
     experiment_id = Map.get(params, "experiment_id")
     message_count = String.to_integer(Map.get(params, "message_count", "0"))
     message_interval_ms = String.to_integer(Map.get(params, "message_interval_ms", "1000"))
+    transport_mode = String.to_existing_atom(Map.get(params, "transport_mode", "corrosion"))
 
     opts = [
       message_count: message_count,
-      message_interval_ms: message_interval_ms
+      message_interval_ms: message_interval_ms,
+      transport_mode: transport_mode
     ]
 
     case AnalyticsAggregator.start_experiment_aggregation(experiment_id, opts) do
@@ -183,6 +186,18 @@ defmodule CorroPortWeb.AnalyticsLive do
       _ ->
         {:noreply, socket}
     end
+  end
+
+  @impl true
+  def handle_event("update_transport_mode", %{"transport_mode" => mode}, socket) do
+    transport_mode = String.to_existing_atom(mode)
+    {:noreply, assign(socket, :transport_mode, transport_mode)}
+  end
+
+  @impl true
+  def handle_event("update_transport_mode", _params, socket) do
+    # Fallback for when called without params
+    {:noreply, socket}
   end
 
   @impl true
@@ -328,6 +343,7 @@ defmodule CorroPortWeb.AnalyticsLive do
         message_progress={@message_progress}
         refresh_interval={@refresh_interval}
         last_update={@last_update}
+        transport_mode={@transport_mode}
       />
 
       <%= if @current_experiment do %>

@@ -23,6 +23,7 @@ defmodule CorroPort.AnalyticsAggregator do
 
   alias CorroPort.{ClusterMembership, LocalNode, Analytics}
   alias CorroPort.Analytics.Queries
+  alias CorroPort.{MessagesAPI, PubSubMessageSender}
 
   # Poll every 10 seconds
   @default_collection_interval_ms 10_000
@@ -45,6 +46,7 @@ defmodule CorroPort.AnalyticsAggregator do
   Options:
   - `:message_count` - Number of messages to send automatically (default: 0, disabled)
   - `:message_interval_ms` - Interval between messages in milliseconds (default: 1000)
+  - `:transport_mode` - Message transport: `:corrosion` (default) or `:pubsub`
   """
   def start_experiment_aggregation(experiment_id, opts \\ []) do
     GenServer.call(__MODULE__, {:start_aggregation, experiment_id, opts})
@@ -128,7 +130,8 @@ defmodule CorroPort.AnalyticsAggregator do
         enabled: false,
         total_count: 0,
         sent_count: 0,
-        interval_ms: 1000
+        interval_ms: 1000,
+        transport_mode: :corrosion
       },
       message_timer_ref: nil,
       finalize_timer_ref: nil
@@ -152,18 +155,20 @@ defmodule CorroPort.AnalyticsAggregator do
     # Configure message sending
     message_count = Keyword.get(opts, :message_count, 0)
     message_interval_ms = Keyword.get(opts, :message_interval_ms, 1000)
+    transport_mode = Keyword.get(opts, :transport_mode, :corrosion)
 
     message_config = %{
       enabled: message_count > 0,
       total_count: message_count,
       sent_count: 0,
-      interval_ms: message_interval_ms
+      interval_ms: message_interval_ms,
+      transport_mode: transport_mode
     }
 
     # Start message sending if configured
     message_timer_ref =
       if message_config.enabled do
-        Logger.info("AnalyticsAggregator: Will send #{message_count} messages at #{message_interval_ms}ms intervals")
+        Logger.info("AnalyticsAggregator: Will send #{message_count} messages at #{message_interval_ms}ms intervals via #{transport_mode}")
         Process.send_after(self(), :send_message, 500)
       else
         nil
@@ -281,17 +286,29 @@ defmodule CorroPort.AnalyticsAggregator do
       total_count = state.message_config.total_count
 
       if sent_count < total_count do
-        # Send the message
+        # Send the message using the configured transport
         message_content = "Experiment #{state.experiment_id} message #{sent_count + 1}/#{total_count}"
+        transport_mode = state.message_config.transport_mode
 
-        case CorroPort.MessagesAPI.send_and_track_message(message_content,
-               experiment_id: state.experiment_id
-             ) do
+        result =
+          case transport_mode do
+            :pubsub ->
+              PubSubMessageSender.send_and_track_message(message_content,
+                experiment_id: state.experiment_id
+              )
+
+            _ ->
+              MessagesAPI.send_and_track_message(message_content,
+                experiment_id: state.experiment_id
+              )
+          end
+
+        case result do
           {:ok, _message_data} ->
-            Logger.info("AnalyticsAggregator: Sent message #{sent_count + 1}/#{total_count}")
+            Logger.info("AnalyticsAggregator: Sent message #{sent_count + 1}/#{total_count} via #{transport_mode}")
 
           {:error, reason} ->
-            Logger.warning("AnalyticsAggregator: Failed to send message: #{inspect(reason)}")
+            Logger.warning("AnalyticsAggregator: Failed to send message via #{transport_mode}: #{inspect(reason)}")
         end
 
         # Update sent count
@@ -443,7 +460,7 @@ defmodule CorroPort.AnalyticsAggregator do
         finalize_timer_ref: nil,
         experiment_id: nil,
         cache: %{},
-        message_config: %{enabled: false, total_count: 0, sent_count: 0, interval_ms: 1000}
+        message_config: %{enabled: false, total_count: 0, sent_count: 0, interval_ms: 1000, transport_mode: :corrosion}
     }
   end
 

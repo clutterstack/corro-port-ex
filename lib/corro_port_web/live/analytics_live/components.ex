@@ -119,6 +119,7 @@ defmodule CorroPortWeb.AnalyticsLive.Components do
   attr :message_progress, :map, default: nil
   attr :refresh_interval, :integer, required: true
   attr :last_update, :any, default: nil
+  attr :transport_mode, :atom, default: :corrosion
 
   def experiment_controls(assigns) do
     ~H"""
@@ -126,21 +127,68 @@ defmodule CorroPortWeb.AnalyticsLive.Components do
       <div class="card-body">
         <h3 class="card-title text-lg mb-4">Experiment Control</h3>
 
-        <form phx-submit="start_aggregation" class="space-y-4">
+        <!-- Transport Mode Selection (Outside Form) -->
+        <div class="mb-4" id="transport-mode-section">
+          <label class="block text-sm font-medium text-base-content mb-2">
+            Message Transport
+          </label>
+          <div class="flex gap-4">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="transport_mode_display"
+                value="corrosion"
+                checked={@transport_mode == :corrosion}
+                class="radio radio-primary"
+                disabled={@aggregation_status == :running}
+                phx-click="update_transport_mode"
+                phx-value-transport_mode="corrosion"
+              />
+              <span class="text-base-content">Corrosion (Gossip)</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="transport_mode_display"
+                value="pubsub"
+                checked={@transport_mode == :pubsub}
+                class="radio radio-primary"
+                disabled={@aggregation_status == :running}
+                phx-click="update_transport_mode"
+                phx-value-transport_mode="pubsub"
+              />
+              <span class="text-base-content">PubSub (Direct)</span>
+            </label>
+          </div>
+          <p class="text-xs text-base-content/60 mt-1" id="transport-mode-help">
+            <%= if @transport_mode == :corrosion do %>
+              Messages propagate via Corrosion's gossip protocol (database replication)
+            <% else %>
+              Messages propagate via Phoenix.PubSub (direct BEAM messaging)
+            <% end %>
+          </p>
+        </div>
+
+        <form phx-submit="start_aggregation" class="space-y-4" id="experiment-form">
+          <!-- Hidden input to include transport_mode in form submission -->
+          <input type="hidden" name="transport_mode" value={@transport_mode} />
+
           <!-- Experiment ID -->
           <div>
             <label class="block text-sm font-medium text-base-content mb-2">
               Experiment ID
             </label>
-            <input
-              type="text"
-              name="experiment_id"
-              placeholder="Enter experiment ID"
-              value={@current_experiment}
-              class="input input-bordered w-full"
-              required
-              disabled={@aggregation_status == :running}
-            />
+            <div phx-update="ignore" id="experiment-id-container">
+              <input
+                type="text"
+                name="experiment_id"
+                id="experiment_id_input"
+                placeholder="Enter experiment ID"
+                class="input input-bordered w-full"
+                required
+                disabled={@aggregation_status == :running}
+              />
+            </div>
           </div>
 
           <!-- Message Sending Configuration -->
@@ -219,6 +267,16 @@ defmodule CorroPortWeb.AnalyticsLive.Components do
               )
             ]}>
               {String.capitalize(to_string(@aggregation_status))}
+            </span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-base-content/70">Transport:</span>
+            <span class={[
+              "badge",
+              if(@transport_mode == :pubsub, do: "badge-info", else: "badge-neutral")
+            ]}>
+              {if @transport_mode == :pubsub, do: "PubSub", else: "Corrosion"}
             </span>
           </div>
 
