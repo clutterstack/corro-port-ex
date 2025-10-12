@@ -44,6 +44,14 @@ defmodule CorroPortWeb.Router do
         AnalyticsApiController,
         :topology_snapshots
 
+    # Analytics export endpoints
+    get "/analytics/experiments/list", AnalyticsApiController, :list_experiments
+    get "/analytics/experiments/compare", AnalyticsApiController, :export_comparison
+
+    get "/analytics/experiments/:experiment_id/export",
+        AnalyticsApiController,
+        :export_experiment
+
     # Analytics control endpoints
     post "/analytics/aggregation/start", AnalyticsApiController, :start_aggregation
     post "/analytics/aggregation/stop", AnalyticsApiController, :stop_aggregation

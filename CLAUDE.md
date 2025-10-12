@@ -138,6 +138,41 @@ curl http://localhost:4001/api/analytics/aggregation/status | jq
 curl http://localhost:4001/api/analytics/experiments/test_exp/summary | jq
 ```
 
+### Analytics Export
+```bash
+# List all available experiments
+curl http://localhost:4001/api/analytics/experiments/list | jq
+
+# Export single experiment as JSON (complete dataset)
+curl http://localhost:4001/api/analytics/experiments/test_exp/export?format=json | jq
+
+# Export as CSV (spreadsheet-friendly)
+curl http://localhost:4001/api/analytics/experiments/test_exp/export?format=csv > experiment.csv
+
+# Export without raw events (smaller file size)
+curl "http://localhost:4001/api/analytics/experiments/test_exp/export?format=json&include_raw_events=false" | jq
+
+# Compare multiple experiments
+curl "http://localhost:4001/api/analytics/experiments/compare?ids=exp1,exp2,exp3&format=csv"
+
+# Compare as JSON
+curl "http://localhost:4001/api/analytics/experiments/compare?ids=exp1,exp2,exp3&format=json" | jq
+```
+
+**Export Data Includes:**
+- Experiment metadata (ID, duration, timestamps, configuration)
+- Cluster topology (nodes, regions, bootstrap peers)
+- Performance metrics (latency distribution, success rates, percentiles)
+- Per-node performance statistics
+- Latency histogram and RTT time series
+- Message flow patterns
+- System metrics (CPU, memory, Erlang processes)
+- Raw event log (optional, can be excluded for smaller exports)
+
+**Export Formats:**
+- **JSON**: Complete nested structure, ideal for programmatic analysis and re-import
+- **CSV**: Flattened format with sections for experiment summary, topology, performance stats, and histogram data
+
 ### Gossip Analytics
 ```elixir
 # In IEx console - check message reception statistics

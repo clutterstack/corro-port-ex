@@ -27,9 +27,59 @@ defmodule CorroPortWeb.AnalyticsLive.ExperimentSummaryComponent do
     ~H"""
     <div class="card bg-base-200 mb-6">
       <div class="card-body">
-        <h3 class="card-title text-lg mb-4">
-          Experiment: {@experiment_id}
-        </h3>
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="card-title text-lg">
+            Experiment: {@experiment_id}
+          </h3>
+
+          <!-- Export Buttons -->
+          <div class="flex gap-2">
+            <a
+              href={"/api/analytics/experiments/#{@experiment_id}/export?format=json"}
+              target="_blank"
+              class="btn btn-sm btn-outline btn-primary"
+              title="Export experiment data as JSON"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-4 w-4 mr-1"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+              JSON
+            </a>
+            <a
+              href={"/api/analytics/experiments/#{@experiment_id}/export?format=csv"}
+              download={"experiment_#{@experiment_id}.csv"}
+              class="btn btn-sm btn-outline btn-secondary"
+              title="Export experiment data as CSV"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-4 w-4 mr-1"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+              CSV
+            </a>
+          </div>
+        </div>
 
         <%= if @cluster_summary do %>
           <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">

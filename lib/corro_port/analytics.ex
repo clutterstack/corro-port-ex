@@ -276,4 +276,53 @@ defmodule CorroPort.Analytics do
     end)
   end
 
+  ## Experiment Export
+
+  @doc """
+  Export a single experiment with complete analytics data.
+
+  Delegates to `CorroPort.Analytics.Exporter` for format conversion.
+
+  ## Formats
+  - `:json` - Nested map structure with all experiment data
+  - `:csv` - Flattened CSV format for spreadsheet analysis
+
+  ## Options
+  - `:include_raw_events` - Include all raw message events (default: true)
+  - `:include_system_metrics` - Include detailed system metrics (default: true)
+
+  ## Examples
+
+      {:ok, data} = Analytics.export_experiment("exp123", :json)
+      {:ok, csv} = Analytics.export_experiment("exp123", :csv)
+  """
+  defdelegate export_experiment(experiment_id, format \\ :json, opts \\ []),
+    to: CorroPort.Analytics.Exporter
+
+  @doc """
+  Export multiple experiments as a comparison summary.
+
+  Returns a summary table with key metrics for each experiment.
+
+  ## Examples
+
+      {:ok, comparison} = Analytics.export_comparison(["exp1", "exp2", "exp3"], :json)
+      {:ok, csv} = Analytics.export_comparison(["exp1", "exp2"], :csv)
+  """
+  defdelegate export_comparison(experiment_ids, format \\ :json),
+    to: CorroPort.Analytics.Exporter
+
+  @doc """
+  List all available experiments with basic information.
+
+  Returns `{:ok, experiments}` where experiments is a list of maps with:
+  - `experiment_id`
+  - `message_count`
+  - `send_count`
+  - `ack_count`
+  - `time_range`
+  """
+  defdelegate list_available_experiments(),
+    to: CorroPort.Analytics.Exporter
+
 end

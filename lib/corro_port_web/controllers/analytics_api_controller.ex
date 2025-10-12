@@ -363,10 +363,191 @@ defmodule CorroPortWeb.AnalyticsApiController do
     end
   end
 
+  @doc """
+  GET /api/analytics/experiments/:experiment_id/export
+
+  Export experiment data in the requested format.
+
+  Query parameters:
+  - `format` - Export format: "json" (default) or "csv"
+  - `include_raw_events` - Include raw events: "true" (default) or "false"
+  - `include_system_metrics` - Include system metrics: "true" (default) or "false"
+  """
+  def export_experiment(conn, params) do
+    experiment_id = Map.get(params, "experiment_id")
+    format = parse_format(Map.get(params, "format", "json"))
+    include_raw_events = parse_boolean(Map.get(params, "include_raw_events", "true"))
+    include_system_metrics = parse_boolean(Map.get(params, "include_system_metrics", "true"))
+
+    opts = [
+      include_raw_events: include_raw_events,
+      include_system_metrics: include_system_metrics
+    ]
+
+    try do
+      case Analytics.export_experiment(experiment_id, format, opts) do
+        {:ok, data} when format == :json ->
+          json(conn, data)
+
+        {:ok, csv_data} when format == :csv ->
+          conn
+          |> put_resp_content_type("text/csv")
+          |> put_resp_header("content-disposition", "attachment; filename=\"experiment_#{experiment_id}.csv\"")
+          |> send_resp(200, csv_data)
+
+        {:error, reason} ->
+          conn
+          |> put_status(:bad_request)
+          |> json(%{
+            status: "error",
+            error: reason,
+            timestamp: DateTime.utc_now()
+          })
+      end
+    rescue
+      error ->
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{
+          status: "error",
+          error: "Failed to export experiment: #{inspect(error)}",
+          timestamp: DateTime.utc_now()
+        })
+    end
+  end
+
+  @doc """
+  GET /api/analytics/experiments/compare
+
+  Export comparison of multiple experiments.
+
+  Query parameters:
+  - `ids` - Comma-separated list of experiment IDs
+  - `format` - Export format: "json" (default) or "csv"
+  """
+  def export_comparison(conn, params) do
+    experiment_ids =
+      params
+      |> Map.get("ids", "")
+      |> String.split(",")
+      |> Enum.map(&String.trim/1)
+      |> Enum.reject(&(&1 == ""))
+
+    format = parse_format(Map.get(params, "format", "json"))
+
+    if experiment_ids == [] do
+      conn
+      |> put_status(:bad_request)
+      |> json(%{
+        status: "error",
+        error: "No experiment IDs provided. Use ?ids=exp1,exp2,exp3",
+        timestamp: DateTime.utc_now()
+      })
+    else
+      try do
+        case Analytics.export_comparison(experiment_ids, format) do
+          {:ok, data} when format == :json ->
+            json(conn, data)
+
+          {:ok, csv_data} when format == :csv ->
+            conn
+            |> put_resp_content_type("text/csv")
+            |> put_resp_header("content-disposition", "attachment; filename=\"experiment_comparison.csv\"")
+            |> send_resp(200, csv_data)
+
+          {:error, reason} ->
+            conn
+            |> put_status(:bad_request)
+            |> json(%{
+              status: "error",
+              error: reason,
+              timestamp: DateTime.utc_now()
+            })
+        end
+      rescue
+        error ->
+          conn
+          |> put_status(:internal_server_error)
+          |> json(%{
+            status: "error",
+            error: "Failed to export comparison: #{inspect(error)}",
+            timestamp: DateTime.utc_now()
+          })
+      end
+    end
+  end
+
+  @doc """
+  GET /api/analytics/experiments/list
+
+  List all available experiments with basic information.
+  """
+  def list_experiments(conn, _params) do
+    try do
+      case Analytics.list_available_experiments() do
+        {:ok, experiments} ->
+          # Convert datetime fields to ISO8601
+          experiments_json =
+            Enum.map(experiments, fn exp ->
+              %{
+                experiment_id: exp.experiment_id,
+                message_count: exp.message_count,
+                send_count: exp.send_count,
+                ack_count: exp.ack_count,
+                time_range:
+                  case exp.time_range do
+                    %{start: start_time, end: end_time} ->
+                      %{
+                        start: format_datetime(start_time),
+                        end: format_datetime(end_time)
+                      }
+
+                    nil ->
+                      nil
+                  end
+              }
+            end)
+
+          json(conn, %{
+            status: "success",
+            experiments: experiments_json,
+            count: length(experiments_json),
+            timestamp: DateTime.utc_now()
+          })
+
+        {:error, reason} ->
+          conn
+          |> put_status(:internal_server_error)
+          |> json(%{
+            status: "error",
+            error: reason,
+            timestamp: DateTime.utc_now()
+          })
+      end
+    rescue
+      error ->
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{
+          status: "error",
+          error: "Failed to list experiments: #{inspect(error)}",
+          timestamp: DateTime.utc_now()
+        })
+    end
+  end
+
   # Private helpers
 
   defp format_datetime(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
   defp format_datetime(%NaiveDateTime{} = ndt), do: NaiveDateTime.to_iso8601(ndt)
   defp format_datetime(nil), do: nil
   defp format_datetime(other), do: other
+
+  defp parse_format("json"), do: :json
+  defp parse_format("csv"), do: :csv
+  defp parse_format(_), do: :json
+
+  defp parse_boolean("true"), do: true
+  defp parse_boolean("false"), do: false
+  defp parse_boolean(_), do: true
 end
