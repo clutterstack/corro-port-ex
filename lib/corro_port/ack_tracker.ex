@@ -31,9 +31,14 @@ defmodule CorroPort.AckTracker do
 
   @doc """
   Add an acknowledgment from another node for the current latest message.
+
+  ## Parameters
+  - `message_pk` - Message primary key
+  - `ack_node_id` - Node that received the message
+  - `receipt_timestamp` - ISO8601 timestamp when message was first received (optional)
   """
-  def add_acknowledgment(message_pk, ack_node_id) do
-    GenServer.call(__MODULE__, {:add_acknowledgment, message_pk, ack_node_id})
+  def add_acknowledgment(message_pk, ack_node_id, receipt_timestamp \\ nil) do
+    GenServer.call(__MODULE__, {:add_acknowledgment, message_pk, ack_node_id, receipt_timestamp})
   end
 
   @doc """
@@ -111,7 +116,7 @@ defmodule CorroPort.AckTracker do
     {:reply, :ok, state}
   end
 
-  def handle_call({:add_acknowledgment, message_pk, ack_node_id}, _from, state) do
+  def handle_call({:add_acknowledgment, message_pk, ack_node_id, receipt_timestamp}, _from, state) do
     current_time = DateTime.utc_now()
 
     Logger.info("AckTracker: Adding acknowledgment from #{ack_node_id}")
@@ -133,11 +138,28 @@ defmodule CorroPort.AckTracker do
 
             :ets.insert(@table_name, {ack_key, ack_value})
 
+            # Parse receipt_timestamp if provided
+            parsed_receipt_timestamp =
+              case receipt_timestamp do
+                nil ->
+                  nil
+
+                ts when is_binary(ts) ->
+                  case DateTime.from_iso8601(ts) do
+                    {:ok, dt, _offset} -> dt
+                    _error -> nil
+                  end
+
+                %DateTime{} ->
+                  receipt_timestamp
+              end
+
             record_ack_event(
               message_pk,
               message_data.node_id,
               ack_node_id,
               current_time,
+              parsed_receipt_timestamp,
               message_data.experiment_id
             )
 
@@ -358,7 +380,14 @@ defmodule CorroPort.AckTracker do
     Phoenix.PubSub.broadcast(CorroPort.PubSub, "ack_events", {:ack_update, status})
   end
 
-  defp record_ack_event(message_id, originating_node, ack_node_id, timestamp, experiment_id) do
+  defp record_ack_event(
+         message_id,
+         originating_node,
+         ack_node_id,
+         ack_received_timestamp,
+         receipt_timestamp,
+         experiment_id
+       ) do
     # Only record if we have an active experiment
     if experiment_id do
       # Extract region from ack_node_id if possible
@@ -372,8 +401,13 @@ defmodule CorroPort.AckTracker do
         # target_node is the ack sender
         ack_node_id,
         :acked,
-        timestamp,
-        region
+        # event_timestamp is when ack was received back
+        ack_received_timestamp,
+        region,
+        # transaction_size_hint
+        nil,
+        # receipt_timestamp is when message first arrived at remote node
+        receipt_timestamp
       )
     else
       # No active experiment, skip analytics

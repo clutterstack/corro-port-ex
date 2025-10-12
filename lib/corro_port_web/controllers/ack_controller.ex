@@ -9,7 +9,7 @@ defmodule CorroPortWeb.AcknowledgmentController do
   {
     "message_pk": "node1_1234567890",
     "ack_node_id": "node2",
-    "message_timestamp": "2025-06-11T10:00:00Z"  // for logging/debugging
+    "receipt_timestamp": "2025-06-11T10:00:05Z"  // when message was first received
   }
   """
   def acknowledge(conn, params) do
@@ -56,8 +56,7 @@ defmodule CorroPortWeb.AcknowledgmentController do
          %{
            message_pk: params["message_pk"],
            ack_node_id: params["ack_node_id"],
-           # optional, for logging
-           message_timestamp: params["message_timestamp"]
+           receipt_timestamp: params["receipt_timestamp"]
          }}
 
       {:error, missing_fields} ->
@@ -100,7 +99,11 @@ defmodule CorroPortWeb.AcknowledgmentController do
     )
 
     # Add the acknowledgment to our tracker
-    case CorroPort.AckTracker.add_acknowledgment(ack_data.message_pk, ack_data.ack_node_id) do
+    case CorroPort.AckTracker.add_acknowledgment(
+           ack_data.message_pk,
+           ack_data.ack_node_id,
+           ack_data.receipt_timestamp
+         ) do
       :ok ->
         Logger.info(
           "AcknowledgmentController: Successfully recorded acknowledgment from #{ack_data.ack_node_id}"

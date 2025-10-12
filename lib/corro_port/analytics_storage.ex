@@ -52,7 +52,8 @@ defmodule CorroPort.AnalyticsStorage do
         event_type,
         event_timestamp,
         region \\ nil,
-        transaction_size_hint \\ nil
+        transaction_size_hint \\ nil,
+        receipt_timestamp \\ nil
       ) do
     Analytics.record_message_event(%{
       message_id: message_id,
@@ -61,6 +62,7 @@ defmodule CorroPort.AnalyticsStorage do
       target_node: target_node,
       event_type: event_type,
       event_timestamp: event_timestamp,
+      receipt_timestamp: receipt_timestamp,
       region: region,
       transaction_size_hint: transaction_size_hint
     })

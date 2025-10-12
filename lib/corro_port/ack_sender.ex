@@ -15,6 +15,35 @@ defmodule CorroPort.AckSender do
 
   This design eliminates GenServer overhead for what is essentially a
   message-driven task spawner with no meaningful state to maintain.
+
+  ## Gossip Deduplication and Receipt Tracking
+
+  Messages propagate through the cluster via Corrosion's gossip protocol, which
+  means nodes may receive the same message multiple times from different peers.
+  This module implements deduplication to ensure only one acknowledgment is sent
+  per message.
+
+  **ETS Cache Structure:**
+  - Tracks `{message_pk, reception_count, first_seen, last_seen}` for each message
+  - `first_seen` timestamp is used as the `receipt_timestamp` in analytics
+  - Cache entries expire after 24 hours
+
+  **Behavior:**
+  - First reception: Send acknowledgment with `receipt_timestamp` (local clock time)
+  - Subsequent receptions: Log duplicate, skip acknowledgment
+
+  **Acknowledgment Payload:**
+  ```json
+  {
+    "message_pk": "node1_1234567890",
+    "ack_node_id": "node2",
+    "receipt_timestamp": "2025-06-11T10:00:05.123456Z"
+  }
+  ```
+
+  The `receipt_timestamp` captures when the message first arrived via gossip at
+  the acknowledging node's local clock. This enables analysis of message propagation
+  patterns without requiring clock synchronisation between nodes.
   """
 
   require Logger
@@ -173,12 +202,11 @@ defmodule CorroPort.AckSender do
     local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
     originating_endpoint = Map.get(message_map, "originating_endpoint")
     message_pk = Map.get(message_map, "pk")
-    message_timestamp = Map.get(message_map, "timestamp")
 
     if originating_endpoint && message_pk do
       # Check if this is the first time we're receiving this message
       case record_message_reception(message_pk) do
-        :first_reception ->
+        {:first_reception, receipt_timestamp} ->
           Logger.info("AckSender: First reception of message #{message_pk}")
 
           case AckHttp.parse_endpoint(originating_endpoint) do
@@ -187,7 +215,7 @@ defmodule CorroPort.AckSender do
                 api_url,
                 originating_endpoint,
                 message_pk,
-                message_timestamp,
+                receipt_timestamp,
                 local_node_id
               )
 
@@ -226,7 +254,7 @@ defmodule CorroPort.AckSender do
          api_url,
          originating_endpoint,
          message_pk,
-         message_timestamp,
+         receipt_timestamp,
          local_node_id
        ) do
     path = "/api/acknowledge"
@@ -235,7 +263,7 @@ defmodule CorroPort.AckSender do
     payload = %{
       "message_pk" => message_pk,
       "ack_node_id" => local_node_id,
-      "message_timestamp" => message_timestamp
+      "receipt_timestamp" => DateTime.to_iso8601(receipt_timestamp)
     }
 
     Logger.info("AckSender: Sending POST to #{ack_url} with payload: #{inspect(payload)}")
@@ -291,7 +319,7 @@ defmodule CorroPort.AckSender do
         }
 
         :ets.insert(@reception_cache_table, {message_pk, stats})
-        :first_reception
+        {:first_reception, now}
 
       [{^message_pk, stats}] ->
         # We've seen this message before - increment counter

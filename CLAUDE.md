@@ -297,6 +297,14 @@ See moduledocs for `CorroPort.CorroSubscriber` and `CorroPort.ConfigSubscriber` 
 
 **Analytics Pipeline**
 - `CorroPort.Analytics` / `CorroPort.AnalyticsStorage` - Ecto context + persistence for experiment events, metrics, and topology snapshots
+- `CorroPort.Analytics.MessageEvent` - Event schema with three timestamp types:
+  - `event_timestamp` - When the event occurred (message sent or ack received back)
+  - `receipt_timestamp` - When message first arrived via gossip at remote node (acks only)
+  - `inserted_at` - When event was recorded in database
+- `CorroPort.Analytics.Queries` - Complex analytical queries including:
+  - Message timing statistics (RTT, latency distributions, percentiles)
+  - Receipt time distribution analysis (propagation patterns, spread times)
+  - Time series data for performance visualisation
 - `CorroPort.AnalyticsAggregator` - Orchestrates experiment aggregation, caches results with a short TTL, and uses `local_broadcast` for `analytics:*` messages (`:experiment_stopped`, `:cluster_update`, `:message_progress`) since these are local GenServer → local LiveView communications
 - `CorroPort.SystemMetrics` - Collects per-node runtime metrics and exposes experiment-scoped counters
 
@@ -322,6 +330,7 @@ See moduledocs for `CorroPort.CorroSubscriber` and `CorroPort.ConfigSubscriber` 
 **Features**:
 - **ETS Cache**: Tracks `{message_pk, reception_count, first_seen, last_seen}` for each received message
 - **Automatic Deduplication**: Only sends acknowledgment on first message reception
+- **Receipt Timestamp Tracking**: Captures `first_seen` timestamp for analytics
 - **Gossip Analytics**: Tracks how many times each message arrives via gossip (heatmap data)
 - **Automatic Cleanup**: Purges entries older than 24 hours every hour
 
@@ -330,7 +339,7 @@ See moduledocs for `CorroPort.CorroSubscriber` and `CorroPort.ConfigSubscriber` 
 # Get stats for specific message
 AckSender.get_message_stats(message_pk)
 
-# Get all reception data (for heatmap visualization)
+# Get all reception data (for heatmap visualisation)
 AckSender.get_all_reception_stats()
 
 # Find messages with high gossip redundancy
@@ -347,11 +356,40 @@ AckSender.get_duplicate_receptions(min_count \\ 2)
 }
 ```
 
-**Behavior**:
-- First reception → Send acknowledgment, log "First reception"
+**Behaviour**:
+- First reception → Send acknowledgment with `receipt_timestamp`, log "First reception"
 - Subsequent receptions → Skip acknowledgment, log "Duplicate reception #N (via gossip)"
 
+**Acknowledgment Payload**:
+```json
+{
+  "message_pk": "node1_1234567890",
+  "ack_node_id": "node2",
+  "receipt_timestamp": "2025-06-11T10:00:05.123456Z"
+}
+```
+
+The `receipt_timestamp` field captures when the message first arrived at the acknowledging node's local clock. This enables propagation pattern analysis without requiring clock synchronisation between nodes.
+
 **Performance**: Fast ETS lookups with `:read_concurrency` for high-throughput scenarios
+
+**Receipt Time Analytics** (`lib/corro_port/analytics/queries.ex`):
+```elixir
+# Analyse message receipt time distribution
+alias CorroPort.Analytics.Queries
+Queries.get_receipt_time_distribution(experiment_id)
+
+# Returns:
+# - per_node: When each node first/last received messages
+# - overall_stats: Message spread times (min/avg/max/percentiles)
+# - temporal_distribution: Timeline showing receipt clustering patterns
+```
+
+This data helps understand:
+- How quickly messages propagate through gossip topology
+- Which nodes receive messages early vs late
+- Temporal patterns and clustering in message arrival times
+- Effectiveness of different bootstrap peer configurations
 
 ### Corrosion Restart Behaviour
 

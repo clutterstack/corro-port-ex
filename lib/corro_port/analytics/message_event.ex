@@ -4,6 +4,12 @@ defmodule CorroPort.Analytics.MessageEvent do
 
   Records precise timing of message send and acknowledgment events
   with experimental context for performance analysis.
+
+  ## Timestamp Fields
+
+  - `event_timestamp` - When the event occurred (message sent or ack received)
+  - `receipt_timestamp` - When the message was first received via gossip (acks only)
+  - `inserted_at` - When this event was recorded in the database
   """
 
   use Ecto.Schema
@@ -16,6 +22,7 @@ defmodule CorroPort.Analytics.MessageEvent do
     field(:target_node, :string)
     field(:event_type, Ecto.Enum, values: [:sent, :acked])
     field(:event_timestamp, :utc_datetime_usec)
+    field(:receipt_timestamp, :utc_datetime_usec)
     field(:region, :string)
     field(:transaction_size_hint, :integer)
 
@@ -31,6 +38,7 @@ defmodule CorroPort.Analytics.MessageEvent do
       :target_node,
       :event_type,
       :event_timestamp,
+      :receipt_timestamp,
       :region,
       :transaction_size_hint
     ])
