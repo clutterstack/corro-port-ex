@@ -14,6 +14,7 @@ defmodule CorroPort.AnalyticsStorage do
   require Logger
 
   alias CorroPort.Analytics
+  alias CorroPort.Analytics.Queries
 
   # Client API
 
@@ -120,7 +121,7 @@ defmodule CorroPort.AnalyticsStorage do
   Get message timing statistics for an experiment.
   """
   def get_message_timing_stats(experiment_id) do
-    {:ok, Analytics.get_message_timing_stats(experiment_id)}
+    {:ok, Queries.get_message_timing_stats(experiment_id)}
   end
 
   # GenServer Implementation

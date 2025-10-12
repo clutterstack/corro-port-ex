@@ -22,6 +22,7 @@ defmodule CorroPort.AnalyticsAggregator do
   require Logger
 
   alias CorroPort.{ClusterMembership, LocalNode, Analytics}
+  alias CorroPort.Analytics.Queries
 
   # Poll every 10 seconds
   @default_collection_interval_ms 10_000
@@ -669,7 +670,7 @@ defmodule CorroPort.AnalyticsAggregator do
   end
 
   defp get_node_timing_stats(%{is_local: true}, experiment_id) do
-    Analytics.get_message_timing_stats(experiment_id)
+    Queries.get_message_timing_stats(experiment_id)
   end
 
   defp get_node_timing_stats(node_info, experiment_id) do

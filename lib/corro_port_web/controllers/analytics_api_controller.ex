@@ -12,6 +12,7 @@ defmodule CorroPortWeb.AnalyticsApiController do
   use CorroPortWeb, :controller
 
   alias CorroPort.Analytics
+  alias CorroPort.Analytics.Queries
 
   @doc """
   GET /api/analytics/experiments/:experiment_id/summary
@@ -47,7 +48,7 @@ defmodule CorroPortWeb.AnalyticsApiController do
   """
   def timing_stats(conn, %{"experiment_id" => experiment_id}) do
     try do
-      timing_stats = Analytics.get_message_timing_stats(experiment_id)
+      timing_stats = Queries.get_message_timing_stats(experiment_id)
 
       # Convert to JSON-friendly format
       stats_json =
