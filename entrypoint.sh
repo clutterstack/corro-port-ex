@@ -67,6 +67,10 @@ echo "✅ Database directories prepared:
    Corrosion: /opt/data/corrosion/
    Analytics: /opt/data/analytics/"
 
+echo "🗄️  Running database migrations..."
+/app/bin/corro_port eval "CorroPort.Release.migrate()"
+echo "✅ Migrations complete"
+
 echo "🔧 Starting services with Overmind..."
 
 # Switch to corrosion user and start overmind
