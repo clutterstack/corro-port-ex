@@ -17,7 +17,18 @@ defmodule CorroPortWeb.AnalyticsLive do
 
   alias CorroPort.{AnalyticsAggregator, LocalNode}
   alias CorroPortWeb.NavTabs
-  alias CorroPortWeb.AnalyticsLive.{Components, DataLoader, Helpers}
+  alias CorroPortWeb.AnalyticsLive.{DataLoader, Helpers}
+
+  # Import all component modules
+  import CorroPortWeb.AnalyticsLive.ExperimentHistoryComponent
+  import CorroPortWeb.AnalyticsLive.ExperimentControlsComponent
+  import CorroPortWeb.AnalyticsLive.ExperimentSummaryComponent
+  import CorroPortWeb.AnalyticsLive.NodePerformanceComponent
+  import CorroPortWeb.AnalyticsLive.LatencyHistogramComponent
+  import CorroPortWeb.AnalyticsLive.RttTimeSeriesComponent
+  import CorroPortWeb.AnalyticsLive.ActiveNodesComponent
+  import CorroPortWeb.AnalyticsLive.TimingStatsComponent
+  import CorroPortWeb.AnalyticsLive.SystemMetricsComponent
 
   @impl true
   def mount(_params, _session, socket) do
@@ -65,6 +76,9 @@ defmodule CorroPortWeb.AnalyticsLive do
       |> assign(:viewing_mode, :current)
       |> assign(:transport_mode, :corrosion)
       |> assign(:experiment_id, "")
+      |> assign(:show_confirm_delete, false)
+      |> assign(:confirm_delete_experiment_id, nil)
+      |> assign(:show_confirm_clear, false)
 
     # Load data if there's a running experiment
     socket =
@@ -256,6 +270,124 @@ defmodule CorroPortWeb.AnalyticsLive do
   end
 
   @impl true
+  def handle_event("confirm_delete_experiment", %{"experiment_id" => experiment_id}, socket) do
+    socket =
+      socket
+      |> assign(:show_confirm_delete, true)
+      |> assign(:confirm_delete_experiment_id, experiment_id)
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("cancel_delete", _params, socket) do
+    socket =
+      socket
+      |> assign(:show_confirm_delete, false)
+      |> assign(:confirm_delete_experiment_id, nil)
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("delete_experiment", %{"experiment_id" => experiment_id}, socket) do
+    alias CorroPort.Analytics
+
+    case Analytics.delete_experiment(experiment_id) do
+      {:ok, deleted_counts} ->
+        total_deleted =
+          deleted_counts.message_events +
+            deleted_counts.topology_snapshots +
+            deleted_counts.system_metrics
+
+        socket =
+          socket
+          |> assign(:show_confirm_delete, false)
+          |> assign(:confirm_delete_experiment_id, nil)
+          |> put_flash(:info, "Deleted experiment #{experiment_id} (#{total_deleted} records)")
+          |> DataLoader.load_experiment_history()
+
+        # If the deleted experiment was currently being viewed, clear the view
+        socket =
+          if socket.assigns.current_experiment == experiment_id do
+            socket
+            |> assign(:current_experiment, nil)
+            |> assign(:viewing_mode, :current)
+            |> assign(:cluster_summary, nil)
+            |> assign(:timing_stats, [])
+            |> assign(:system_metrics, [])
+            |> assign(:node_performance_stats, [])
+            |> assign(:latency_histogram, nil)
+            |> assign(:rtt_time_series, [])
+            |> push_patch(to: ~p"/analytics")
+          else
+            socket
+          end
+
+        {:noreply, socket}
+
+      {:error, reason} ->
+        socket =
+          socket
+          |> assign(:show_confirm_delete, false)
+          |> assign(:confirm_delete_experiment_id, nil)
+          |> put_flash(:error, "Failed to delete experiment: #{inspect(reason)}")
+
+        {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("confirm_clear_all", _params, socket) do
+    socket = assign(socket, :show_confirm_clear, true)
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("cancel_clear_all", _params, socket) do
+    socket = assign(socket, :show_confirm_clear, false)
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("clear_all_experiments", _params, socket) do
+    alias CorroPort.Analytics
+
+    case Analytics.delete_all_experiments() do
+      {:ok, deleted_counts} ->
+        total_deleted =
+          deleted_counts.message_events +
+            deleted_counts.topology_snapshots +
+            deleted_counts.system_metrics
+
+        socket =
+          socket
+          |> assign(:show_confirm_clear, false)
+          |> assign(:current_experiment, nil)
+          |> assign(:viewing_mode, :current)
+          |> assign(:cluster_summary, nil)
+          |> assign(:timing_stats, [])
+          |> assign(:system_metrics, [])
+          |> assign(:node_performance_stats, [])
+          |> assign(:latency_histogram, nil)
+          |> assign(:rtt_time_series, [])
+          |> put_flash(:info, "Cleared all experiment history (#{total_deleted} records)")
+          |> DataLoader.load_experiment_history()
+          |> push_patch(to: ~p"/analytics")
+
+        {:noreply, socket}
+
+      {:error, reason} ->
+        socket =
+          socket
+          |> assign(:show_confirm_clear, false)
+          |> put_flash(:error, "Failed to clear history: #{inspect(reason)}")
+
+        {:noreply, socket}
+    end
+  end
+
+  @impl true
   def handle_info(:refresh, socket) do
     # Only refresh if viewing current experiment that's still running
     should_refresh =
@@ -334,14 +466,17 @@ defmodule CorroPortWeb.AnalyticsLive do
       </div>
 
       <!-- Experiment History -->
-      <Components.experiment_history
+      <.experiment_history
         experiment_history={@experiment_history}
         current_experiment={@current_experiment}
         viewing_mode={@viewing_mode}
+        show_confirm_delete={@show_confirm_delete}
+        confirm_delete_experiment_id={@confirm_delete_experiment_id}
+        show_confirm_clear={@show_confirm_clear}
       />
 
       <!-- Experiment Controls -->
-      <Components.experiment_controls
+      <.experiment_controls
         current_experiment={@current_experiment}
         aggregation_status={@aggregation_status}
         message_count={@message_count}
@@ -355,7 +490,7 @@ defmodule CorroPortWeb.AnalyticsLive do
 
       <%= if @current_experiment do %>
         <!-- Experiment Summary -->
-        <Components.experiment_summary
+        <.experiment_summary
           experiment_id={@current_experiment}
           cluster_summary={@cluster_summary}
           active_nodes={@active_nodes}
@@ -363,22 +498,22 @@ defmodule CorroPortWeb.AnalyticsLive do
         />
 
         <!-- Node Performance Statistics -->
-        <Components.node_performance_table node_performance_stats={@node_performance_stats} />
+        <.node_performance_table node_performance_stats={@node_performance_stats} />
 
         <!-- Latency Histogram -->
-        <Components.latency_histogram_chart latency_histogram={@latency_histogram} />
+        <.latency_histogram_chart latency_histogram={@latency_histogram} />
 
         <!-- RTT Time Series -->
-        <Components.rtt_time_series_chart rtt_time_series={@rtt_time_series} />
+        <.rtt_time_series_chart rtt_time_series={@rtt_time_series} />
 
         <!-- Active Nodes -->
-        <Components.active_nodes_grid active_nodes={@active_nodes} />
+        <.active_nodes_grid active_nodes={@active_nodes} />
 
         <!-- Timing Statistics -->
-        <Components.timing_stats_table timing_stats={@timing_stats} />
+        <.timing_stats_table timing_stats={@timing_stats} />
 
         <!-- System Metrics -->
-        <Components.system_metrics system_metrics={@system_metrics} />
+        <.system_metrics system_metrics={@system_metrics} />
       <% else %>
         <div class="card bg-base-200 text-center">
           <div class="card-body">

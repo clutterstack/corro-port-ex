@@ -201,4 +201,79 @@ defmodule CorroPort.Analytics do
     |> Enum.sort()
   end
 
+  ## Experiment Deletion
+
+  @doc """
+  Deletes all data for a specific experiment.
+
+  This removes:
+  - All message events
+  - All topology snapshots
+  - All system metrics
+
+  Returns `{:ok, deleted_counts}` on success where deleted_counts is a map
+  with counts of deleted records per table.
+  """
+  def delete_experiment(experiment_id) do
+    Repo.transaction(fn ->
+      message_events_deleted =
+        MessageEvent
+        |> where([m], m.experiment_id == ^experiment_id)
+        |> Repo.delete_all()
+        |> elem(0)
+
+      topology_snapshots_deleted =
+        TopologySnapshot
+        |> where([t], t.experiment_id == ^experiment_id)
+        |> Repo.delete_all()
+        |> elem(0)
+
+      system_metrics_deleted =
+        SystemMetric
+        |> where([s], s.experiment_id == ^experiment_id)
+        |> Repo.delete_all()
+        |> elem(0)
+
+      Logger.info(
+        "Deleted experiment #{experiment_id}: " <>
+          "#{message_events_deleted} message events, " <>
+          "#{topology_snapshots_deleted} topology snapshots, " <>
+          "#{system_metrics_deleted} system metrics"
+      )
+
+      %{
+        message_events: message_events_deleted,
+        topology_snapshots: topology_snapshots_deleted,
+        system_metrics: system_metrics_deleted
+      }
+    end)
+  end
+
+  @doc """
+  Deletes all experiment data from all tables.
+
+  Use with caution - this clears the entire analytics history.
+  Returns `{:ok, deleted_counts}` on success.
+  """
+  def delete_all_experiments do
+    Repo.transaction(fn ->
+      message_events_deleted = Repo.delete_all(MessageEvent) |> elem(0)
+      topology_snapshots_deleted = Repo.delete_all(TopologySnapshot) |> elem(0)
+      system_metrics_deleted = Repo.delete_all(SystemMetric) |> elem(0)
+
+      Logger.info(
+        "Deleted all experiments: " <>
+          "#{message_events_deleted} message events, " <>
+          "#{topology_snapshots_deleted} topology snapshots, " <>
+          "#{system_metrics_deleted} system metrics"
+      )
+
+      %{
+        message_events: message_events_deleted,
+        topology_snapshots: topology_snapshots_deleted,
+        system_metrics: system_metrics_deleted
+      }
+    end)
+  end
+
 end
