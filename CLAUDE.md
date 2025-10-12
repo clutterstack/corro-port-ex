@@ -262,7 +262,7 @@ See moduledocs for `CorroPort.CorroSubscriber` and `CorroPort.ConfigSubscriber` 
 
 **Analytics Pipeline**
 - `CorroPort.Analytics` / `CorroPort.AnalyticsStorage` - Ecto context + persistence for experiment events, metrics, and topology snapshots
-- `CorroPort.AnalyticsAggregator` - Orchestrates experiment aggregation, caches results with a short TTL, and broadcasts `analytics:*` messages
+- `CorroPort.AnalyticsAggregator` - Orchestrates experiment aggregation, caches results with a short TTL, and uses `local_broadcast` for `analytics:*` messages (`:experiment_stopped`, `:cluster_update`, `:message_progress`) since these are local GenServer → local LiveView communications
 - `CorroPort.SystemMetrics` - Collects per-node runtime metrics and exposes experiment-scoped counters
 
 **Subscriptions & Helpers**
@@ -453,8 +453,9 @@ The application is designed for multi-node cluster testing:
 
 - **AnalyticsLive** (`/analytics` – nav tab "Analytics")
   - Controls experiment aggregation via `CorroPort.AnalyticsAggregator`.
-  - Renders timing/system metrics and listens for `analytics:*` broadcasts per experiment.
+  - Renders timing/system metrics and listens for `analytics:*` local broadcasts per experiment.
   - Supports manual refresh cadence adjustments in the UI.
+  - Performance optimization: Heavy visualizations (charts/tables) only render when `aggregation_status == :stopped`. During active collection (`:running`), shows lightweight progress indicator to reduce server load.
 
 - **QueryConsoleLive** (`/query-console` – nav tab "Query Console")
   - Preset-backed SQL/API scratchpad that reuses `ConnectionManager` for Corrosion sessions.
@@ -472,11 +473,19 @@ Router source of truth: `lib/corro_port_web/router.ex`.
 
 ## Development Guidelines
 
-
+### General
 - Use Tidewave tools if possible before resorting to unix tools
 - Use `CorroPort.ConnectionManager` helpers (`get_connection/0`, `get_subscription_connection/0`) instead of building raw Corrosion URLs in new code.
 - Source cluster data through the existing abstractions (`CorroPort.CLIClusterData`, `CorroPort.DNSLookup`, `CorroPort.LocalNode`) so the LiveViews keep receiving consistent shapes.
 - Use `CorroClient.transaction/2` to make changes to the Corrosion database and `CorroClient.query/2` to read from it.
+
+### PubSub Best Practices
+- Use `Phoenix.PubSub.local_broadcast/3` for local-only events (e.g., GenServer → LiveView on same node)
+- Use `Phoenix.PubSub.broadcast/3` only for cluster-wide events that need to reach all nodes
+- Examples of local-only patterns:
+  - Analytics aggregator state changes (`:experiment_stopped`, `:cluster_update`, `:message_progress`)
+  - Local LiveView updates that don't need cross-node coordination
+- This reduces unnecessary network traffic between cluster nodes
 
 
 ## Prod deployment

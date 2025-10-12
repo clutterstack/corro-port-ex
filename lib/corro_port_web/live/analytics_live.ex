@@ -9,7 +9,17 @@ defmodule CorroPortWeb.AnalyticsLive do
   - Real-time aggregated data updates
 
   The dashboard automatically refreshes with data from the AnalyticsAggregator
-  and subscribes to PubSub updates for real-time monitoring.
+  and subscribes to local PubSub updates for real-time monitoring.
+
+  ## Performance Optimization
+
+  To reduce server load during active data collection, heavy visualizations
+  (charts, tables, performance stats) only render when `aggregation_status == :stopped`.
+  While an experiment is running (`:aggregation_status == :running`), the UI shows
+  only the experiment summary and a lightweight "Collecting Data..." indicator.
+
+  This prevents unnecessary re-renders of expensive components during active collection
+  and ensures visualizations are only computed once when the final dataset is available.
   """
 
   use CorroPortWeb, :live_view
@@ -489,7 +499,7 @@ defmodule CorroPortWeb.AnalyticsLive do
       />
 
       <%= if @current_experiment do %>
-        <!-- Experiment Summary -->
+        <!-- Experiment Summary (always shown) -->
         <.experiment_summary
           experiment_id={@current_experiment}
           cluster_summary={@cluster_summary}
@@ -497,23 +507,42 @@ defmodule CorroPortWeb.AnalyticsLive do
           local_node_id={@local_node_id}
         />
 
-        <!-- Node Performance Statistics -->
-        <.node_performance_table node_performance_stats={@node_performance_stats} />
+        <%= if @aggregation_status == :running do %>
+          <!-- Active Collection Indicator -->
+          <div class="card bg-base-200 mb-6">
+            <div class="card-body">
+              <div class="flex items-center gap-4">
+                <span class="loading loading-spinner loading-lg text-primary"></span>
+                <div>
+                  <h3 class="text-lg font-semibold">Collecting Data...</h3>
+                  <p class="text-base-content/70">
+                    Detailed visualizations will appear when data collection completes
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% else %>
+          <!-- Detailed Visualizations (only shown after collection completes) -->
 
-        <!-- Latency Histogram -->
-        <.latency_histogram_chart latency_histogram={@latency_histogram} />
+          <!-- Node Performance Statistics -->
+          <.node_performance_table node_performance_stats={@node_performance_stats} />
 
-        <!-- RTT Time Series -->
-        <.rtt_time_series_chart rtt_time_series={@rtt_time_series} />
+          <!-- Latency Histogram -->
+          <.latency_histogram_chart latency_histogram={@latency_histogram} />
 
-        <!-- Active Nodes -->
-        <.active_nodes_grid active_nodes={@active_nodes} />
+          <!-- RTT Time Series -->
+          <.rtt_time_series_chart rtt_time_series={@rtt_time_series} />
 
-        <!-- Timing Statistics -->
-        <.timing_stats_table timing_stats={@timing_stats} />
+          <!-- Active Nodes -->
+          <.active_nodes_grid active_nodes={@active_nodes} />
 
-        <!-- System Metrics -->
-        <.system_metrics system_metrics={@system_metrics} />
+          <!-- Timing Statistics -->
+          <.timing_stats_table timing_stats={@timing_stats} />
+
+          <!-- System Metrics -->
+          <.system_metrics system_metrics={@system_metrics} />
+        <% end %>
       <% else %>
         <div class="card bg-base-200 text-center">
           <div class="card-body">

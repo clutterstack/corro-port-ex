@@ -3,18 +3,20 @@ defmodule CorroPort.AnalyticsAggregator do
   Coordinates analytics collection for experiment dashboards.
 
   The GenServer schedules periodic refreshes, caches summaries/timing/metrics
-  with a short TTL, and broadcasts PubSub updates so LiveViews can refresh
-  without polling. At the moment all collections are local-first – we call into
-  the `CorroPort.Analytics` context directly and reuse the cached results for a
-  few seconds. The module still carries helper functions for multi-node polling
-  (via `CorroPort.CLIClusterData` discovery and HTTP requests), but those paths
-  are intentionally dormant until the remote Corrosion agents can expose the
-  required APIs without 500s.
+  with a short TTL, and uses `local_broadcast` for PubSub updates so LiveViews
+  can refresh without polling. At the moment all collections are local-first –
+  we call into the `CorroPort.Analytics` context directly and reuse the cached
+  results for a few seconds. The module still carries helper functions for
+  multi-node polling (via `CorroPort.CLIClusterData` discovery and HTTP requests),
+  but those paths are intentionally dormant until the remote Corrosion agents can
+  expose the required APIs without 500s.
 
   Key responsibilities:
   - start/stop experiment aggregation cycles on demand
   - keep a short-lived cache per experiment for summary, timing, and metric data
-  - broadcast `analytics:*` PubSub messages after fresh collections
+  - use `local_broadcast` for `analytics:*` messages (`:experiment_stopped`,
+    `:cluster_update`, `:message_progress`) since these are local GenServer to
+    local LiveView communications that don't need cluster-wide distribution
   - surface discovered node metadata for future multi-node analytics work
   """
 
@@ -445,7 +447,7 @@ defmodule CorroPort.AnalyticsAggregator do
       CorroPort.SystemMetrics.set_experiment_id(nil)
       CorroPort.AckTracker.set_experiment_id(nil)
 
-      Phoenix.PubSub.broadcast(
+      Phoenix.PubSub.local_broadcast(
         CorroPort.PubSub,
         "analytics:#{state.experiment_id}",
         {:experiment_stopped, state.experiment_id}
@@ -821,7 +823,7 @@ defmodule CorroPort.AnalyticsAggregator do
   end
 
   defp broadcast_cluster_update(experiment_id, active_nodes) do
-    Phoenix.PubSub.broadcast(
+    Phoenix.PubSub.local_broadcast(
       CorroPort.PubSub,
       "analytics:#{experiment_id}",
       {:cluster_update,
@@ -834,7 +836,7 @@ defmodule CorroPort.AnalyticsAggregator do
   end
 
   defp broadcast_message_progress(experiment_id, sent_count, total_count) do
-    Phoenix.PubSub.broadcast(
+    Phoenix.PubSub.local_broadcast(
       CorroPort.PubSub,
       "analytics:#{experiment_id}",
       {:message_progress,
