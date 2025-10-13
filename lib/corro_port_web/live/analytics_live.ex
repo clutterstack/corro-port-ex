@@ -36,6 +36,7 @@ defmodule CorroPortWeb.AnalyticsLive do
   import CorroPortWeb.AnalyticsLive.NodePerformanceComponent
   import CorroPortWeb.AnalyticsLive.LatencyHistogramComponent
   import CorroPortWeb.AnalyticsLive.RttTimeSeriesComponent
+  import CorroPortWeb.AnalyticsLive.ReceiptTimeComponent
   import CorroPortWeb.AnalyticsLive.ActiveNodesComponent
   import CorroPortWeb.AnalyticsLive.TimingStatsComponent
   import CorroPortWeb.AnalyticsLive.SystemMetricsComponent
@@ -76,6 +77,8 @@ defmodule CorroPortWeb.AnalyticsLive do
       |> assign(:node_performance_stats, [])
       |> assign(:latency_histogram, nil)
       |> assign(:rtt_time_series, [])
+      |> assign(:receipt_time_series, [])
+      |> assign(:receipt_time_dist, %{per_node: [], overall_stats: %{total_events: 0}, temporal_distribution: []})
       |> assign(:last_update, nil)
       |> assign(:refresh_interval, 5000)
       |> assign(:local_node_id, LocalNode.get_node_id())
@@ -255,6 +258,7 @@ defmodule CorroPortWeb.AnalyticsLive do
       |> assign(:node_performance_stats, [])
       |> assign(:latency_histogram, nil)
       |> assign(:rtt_time_series, [])
+      |> assign(:receipt_time_series, [])
 
     {:noreply, push_patch(socket, to: ~p"/analytics")}
   end
@@ -329,6 +333,7 @@ defmodule CorroPortWeb.AnalyticsLive do
             |> assign(:node_performance_stats, [])
             |> assign(:latency_histogram, nil)
             |> assign(:rtt_time_series, [])
+            |> assign(:receipt_time_series, [])
             |> push_patch(to: ~p"/analytics")
           else
             socket
@@ -381,6 +386,7 @@ defmodule CorroPortWeb.AnalyticsLive do
           |> assign(:node_performance_stats, [])
           |> assign(:latency_histogram, nil)
           |> assign(:rtt_time_series, [])
+          |> assign(:receipt_time_series, [])
           |> put_flash(:info, "Cleared all experiment history (#{total_deleted} records)")
           |> DataLoader.load_experiment_history()
           |> push_patch(to: ~p"/analytics")
@@ -525,14 +531,17 @@ defmodule CorroPortWeb.AnalyticsLive do
         <% else %>
           <!-- Detailed Visualizations (only shown after collection completes) -->
 
+          <!-- Receipt Time Distribution -->
+          <.receipt_time_distribution receipt_time_dist={@receipt_time_dist} />
+
           <!-- Node Performance Statistics -->
           <.node_performance_table node_performance_stats={@node_performance_stats} />
 
           <!-- Latency Histogram -->
           <.latency_histogram_chart latency_histogram={@latency_histogram} />
 
-          <!-- RTT Time Series -->
-          <.rtt_time_series_chart rtt_time_series={@rtt_time_series} />
+          <!-- Combined Latency Time Series (RTT + Propagation Delays) -->
+          <.rtt_time_series_chart rtt_time_series={@rtt_time_series} receipt_time_series={@receipt_time_series} />
 
           <!-- Active Nodes -->
           <.active_nodes_grid active_nodes={@active_nodes} />

@@ -24,6 +24,8 @@ defmodule CorroPortWeb.AnalyticsLive.DataLoader do
   - Node performance stats
   - Latency histogram
   - RTT time series
+  - Receipt time series
+  - Receipt time distribution
 
   Returns the socket if no current experiment is set.
   """
@@ -61,6 +63,12 @@ defmodule CorroPortWeb.AnalyticsLive.DataLoader do
       # Get RTT time series
       rtt_time_series = Queries.get_rtt_time_series(experiment_id)
 
+      # Get receipt time series (propagation delays over time)
+      receipt_time_series = Queries.get_receipt_time_series(experiment_id)
+
+      # Get receipt time distribution
+      receipt_time_dist = Queries.get_receipt_time_distribution(experiment_id)
+
       socket
       |> Phoenix.Component.assign(:cluster_summary, cluster_summary)
       |> Phoenix.Component.assign(:timing_stats, timing_stats)
@@ -69,6 +77,8 @@ defmodule CorroPortWeb.AnalyticsLive.DataLoader do
       |> Phoenix.Component.assign(:node_performance_stats, node_performance_stats)
       |> Phoenix.Component.assign(:latency_histogram, latency_histogram)
       |> Phoenix.Component.assign(:rtt_time_series, rtt_time_series)
+      |> Phoenix.Component.assign(:receipt_time_series, receipt_time_series)
+      |> Phoenix.Component.assign(:receipt_time_dist, receipt_time_dist)
       |> Phoenix.Component.assign(:last_update, DateTime.utc_now())
     else
       socket

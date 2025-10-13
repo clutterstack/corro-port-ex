@@ -170,53 +170,129 @@ defmodule CorroPort.Analytics.Queries do
   end
 
   @doc """
-  Analyzes message receipt time distribution across nodes.
+  Analyzes message receipt time distribution across nodes with propagation delays.
 
-  Returns statistics about when messages arrive at remote nodes via gossip,
-  useful for understanding propagation patterns without relying on clock synchronisation.
+  Joins send events with receipt events to calculate per-message propagation delays
+  from the originating node's perspective (requires same node for clock accuracy).
 
   Returns a map containing:
-  - per_node: List of per-node receipt time statistics
+  - per_node: List of per-node statistics including propagation delay distribution
   - overall_stats: Aggregated statistics across all nodes
-  - temporal_distribution: Receipt time histogram showing clustering patterns
-
-  Note: This compares receipt_timestamps (when messages first arrive via gossip)
-  rather than calculating absolute latencies, since nodes may have clock skew.
   """
   def get_receipt_time_distribution(experiment_id) do
+    # Get send events for this experiment
+    send_events_query =
+      from(e in MessageEvent,
+        where: e.experiment_id == ^experiment_id and e.event_type == :sent,
+        select: {e.message_id, e.originating_node, e.event_timestamp}
+      )
+
+    send_events = Repo.all(send_events_query) |> Map.new(fn {msg_id, node, ts} -> {msg_id, {node, ts}} end)
+
     # Get all ack events with receipt timestamps
-    events_query =
+    ack_events_query =
       from(e in MessageEvent,
         where:
           e.experiment_id == ^experiment_id and
             e.event_type == :acked and
             not is_nil(e.receipt_timestamp),
-        select: {e.message_id, e.target_node, e.event_timestamp, e.receipt_timestamp, e.region},
+        select: {e.message_id, e.originating_node, e.target_node, e.event_timestamp, e.receipt_timestamp, e.region},
         order_by: [e.message_id, e.receipt_timestamp]
       )
 
-    events = Repo.all(events_query)
+    ack_events = Repo.all(ack_events_query)
 
-    if events == [] do
+    if ack_events == [] do
       %{
         per_node: [],
-        overall_stats: %{total_events: 0},
-        temporal_distribution: []
+        overall_stats: %{total_events: 0}
       }
     else
-      # Group by message to analyze spread patterns
-      message_groups = Enum.group_by(events, &elem(&1, 0))
+      # Calculate propagation delays by joining with send events
+      enriched_events =
+        ack_events
+        |> Enum.map(fn {msg_id, origin_node, target_node, _ack_ts, receipt_ts, region} ->
+          case Map.get(send_events, msg_id) do
+            {^origin_node, send_ts} ->
+              # Same originating node - can calculate propagation delay
+              delay_ms = DateTime.diff(receipt_ts, send_ts, :millisecond)
+              {msg_id, origin_node, target_node, receipt_ts, delay_ms, region}
 
-      per_node_stats = calculate_per_node_receipt_stats(events)
-      overall_stats = calculate_overall_receipt_stats(message_groups)
-      temporal_dist = calculate_temporal_distribution(message_groups)
+            _ ->
+              # No matching send event or different node
+              {msg_id, origin_node, target_node, receipt_ts, nil, region}
+          end
+        end)
+
+      per_node_stats = calculate_per_node_propagation_stats(enriched_events)
+      overall_stats = calculate_overall_propagation_stats(enriched_events)
 
       %{
         per_node: per_node_stats,
-        overall_stats: overall_stats,
-        temporal_distribution: temporal_dist
+        overall_stats: overall_stats
       }
     end
+  end
+
+  @doc """
+  Gets receipt time series data organised by receiving node.
+
+  Returns a list of maps, one per node, containing:
+  - node_id: The receiving node identifier
+  - data_points: List of %{send_time: DateTime, receipt_time: DateTime, propagation_delay_ms: integer}
+
+  Shows when messages actually arrived at each node via gossip, allowing visualization
+  of propagation patterns over the course of the experiment.
+  """
+  def get_receipt_time_series(experiment_id) do
+    # Get send events
+    send_events_query =
+      from(e in MessageEvent,
+        where: e.experiment_id == ^experiment_id and e.event_type == :sent,
+        select: {e.message_id, e.originating_node, e.event_timestamp}
+      )
+
+    send_events = Repo.all(send_events_query) |> Map.new(fn {msg_id, node, ts} -> {msg_id, {node, ts}} end)
+
+    # Get ack events with receipt timestamps
+    ack_events_query =
+      from(e in MessageEvent,
+        where:
+          e.experiment_id == ^experiment_id and
+            e.event_type == :acked and
+            not is_nil(e.receipt_timestamp),
+        select: {e.message_id, e.originating_node, e.target_node, e.receipt_timestamp},
+        order_by: [e.receipt_timestamp]
+      )
+
+    ack_events = Repo.all(ack_events_query)
+
+    # Build time series per node
+    ack_events
+    |> Enum.map(fn {msg_id, origin_node, target_node, receipt_time} ->
+      case Map.get(send_events, msg_id) do
+        {^origin_node, send_time} ->
+          delay_ms = DateTime.diff(receipt_time, send_time, :millisecond)
+          %{
+            node_id: target_node,
+            send_time: send_time,
+            receipt_time: receipt_time,
+            propagation_delay_ms: delay_ms
+          }
+
+        _ ->
+          nil
+      end
+    end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.group_by(& &1.node_id)
+    |> Enum.map(fn {node_id, points} ->
+      %{
+        node_id: node_id,
+        data_points: points
+      }
+    end)
+    |> Enum.sort_by(& &1.node_id)
   end
 
   @doc """
@@ -262,95 +338,84 @@ defmodule CorroPort.Analytics.Queries do
 
   # Private helpers
 
-  defp calculate_per_node_receipt_stats(events) do
-    events
-    |> Enum.group_by(&elem(&1, 1))
+  defp calculate_per_node_propagation_stats(enriched_events) do
+    enriched_events
+    |> Enum.group_by(&elem(&1, 2))
     |> Enum.map(fn {node_id, node_events} ->
       receipt_times = Enum.map(node_events, &elem(&1, 3))
       first_receipt = Enum.min(receipt_times, DateTime)
       last_receipt = Enum.max(receipt_times, DateTime)
+
+      # Extract propagation delays (only non-nil values)
+      # Preserve temporal order from the query (ordered by message_id, receipt_timestamp)
+      delays_temporal =
+        node_events
+        |> Enum.map(&elem(&1, 4))
+        |> Enum.reject(&is_nil/1)
+
+      delay_stats =
+        if delays_temporal != [] do
+          sorted_delays = Enum.sort(delays_temporal)
+
+          %{
+            min_delay_ms: Enum.min(sorted_delays),
+            max_delay_ms: Enum.max(sorted_delays),
+            avg_delay_ms: Float.round(Enum.sum(delays_temporal) / length(delays_temporal), 1),
+            median_delay_ms: calculate_percentile(sorted_delays, 50),
+            p95_delay_ms: calculate_percentile(sorted_delays, 95),
+            delays: delays_temporal  # Keep temporal order for visualization
+          }
+        else
+          nil
+        end
 
       %{
         node_id: node_id,
         total_messages: length(node_events),
         first_receipt: first_receipt,
         last_receipt: last_receipt,
-        time_span_seconds: DateTime.diff(last_receipt, first_receipt, :second)
+        time_span_seconds: DateTime.diff(last_receipt, first_receipt, :second),
+        propagation_delay_stats: delay_stats
       }
     end)
     |> Enum.sort_by(& &1.node_id)
   end
 
-  defp calculate_overall_receipt_stats(message_groups) do
-    # For each message, calculate spread time (first to last receipt)
-    spread_times =
-      message_groups
-      |> Enum.map(fn {_msg_id, events} ->
-        receipt_times = Enum.map(events, &elem(&1, 3))
+  defp calculate_overall_propagation_stats(enriched_events) do
+    total_events = length(enriched_events)
 
-        if length(receipt_times) > 1 do
-          first = Enum.min(receipt_times, DateTime)
-          last = Enum.max(receipt_times, DateTime)
-          DateTime.diff(last, first, :millisecond)
-        else
-          0
-        end
-      end)
-      |> Enum.filter(&(&1 > 0))
+    # Extract all propagation delays (only non-nil)
+    all_delays =
+      enriched_events
+      |> Enum.map(&elem(&1, 4))
+      |> Enum.reject(&is_nil/1)
 
-    total_events = Enum.sum(Enum.map(message_groups, fn {_, events} -> length(events) end))
+    # Count unique messages
+    unique_messages =
+      enriched_events
+      |> Enum.map(&elem(&1, 0))
+      |> Enum.uniq()
+      |> length()
 
-    if spread_times == [] do
+    if all_delays == [] do
       %{
         total_events: total_events,
-        total_messages: map_size(message_groups),
+        total_messages: unique_messages,
         avg_spread_ms: 0,
-        min_spread_ms: 0,
-        max_spread_ms: 0
+        p95_spread_ms: 0
       }
     else
+      sorted_delays = Enum.sort(all_delays)
+
       %{
         total_events: total_events,
-        total_messages: map_size(message_groups),
-        avg_spread_ms: Float.round(Enum.sum(spread_times) / length(spread_times), 1),
-        min_spread_ms: Enum.min(spread_times),
-        max_spread_ms: Enum.max(spread_times),
-        p50_spread_ms: calculate_percentile(spread_times, 50),
-        p95_spread_ms: calculate_percentile(spread_times, 95)
+        total_messages: unique_messages,
+        avg_spread_ms: Float.round(Enum.sum(sorted_delays) / length(sorted_delays), 1),
+        p50_spread_ms: calculate_percentile(sorted_delays, 50),
+        p95_spread_ms: calculate_percentile(sorted_delays, 95),
+        min_delay_ms: Enum.min(sorted_delays),
+        max_delay_ms: Enum.max(sorted_delays)
       }
-    end
-  end
-
-  defp calculate_temporal_distribution(message_groups) do
-    # Flatten all receipt timestamps and create a timeline
-    all_receipts =
-      message_groups
-      |> Enum.flat_map(fn {msg_id, events} ->
-        Enum.map(events, fn event ->
-          {elem(event, 3), msg_id, elem(event, 1)}
-        end)
-      end)
-      |> Enum.sort_by(&elem(&1, 0), DateTime)
-
-    if all_receipts == [] do
-      []
-    else
-      # Group receipts into time buckets (1 second intervals)
-      first_time = elem(List.first(all_receipts), 0)
-
-      all_receipts
-      |> Enum.group_by(fn {receipt_time, _, _} ->
-        DateTime.diff(receipt_time, first_time, :second)
-      end)
-      |> Enum.map(fn {seconds_offset, receipts} ->
-        %{
-          seconds_offset: seconds_offset,
-          receipt_count: length(receipts),
-          unique_messages: receipts |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> length(),
-          unique_nodes: receipts |> Enum.map(&elem(&1, 2)) |> Enum.uniq() |> length()
-        }
-      end)
-      |> Enum.sort_by(& &1.seconds_offset)
     end
   end
 
