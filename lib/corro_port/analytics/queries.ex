@@ -369,8 +369,6 @@ defmodule CorroPort.Analytics.Queries do
           %{
             min_delay_ms: Enum.min(sorted_offsets),
             max_delay_ms: Enum.max(sorted_offsets),
-            avg_delay_ms: Float.round(Enum.sum(time_offsets_temporal) / length(time_offsets_temporal), 1),
-            median_delay_ms: calculate_percentile(sorted_offsets, 50),
             p95_delay_ms: calculate_percentile(sorted_offsets, 95),
             delays: time_offsets_temporal  # Keep temporal order for visualization (these are time offsets, not delays)
           }

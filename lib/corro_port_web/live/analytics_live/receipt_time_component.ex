@@ -31,7 +31,7 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
             <h3 class="card-title text-lg">Message Receipt Time Analysis</h3>
             <p class="text-sm opacity-90">
               Per-node gossip propagation showing when messages first arrived at each node.
-              Times relative to message send (requires same-node comparison for accuracy).
+              Offsets are relative to the experiment start, using the originating node's clock.
             </p>
           </div>
         </div>
@@ -101,9 +101,9 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
     <%= if @nodes != [] do %>
       <div class="card bg-base-200">
         <div class="card-body">
-          <h4 class="card-title text-md mb-4">Per-Node Propagation Delay Analysis</h4>
+          <h4 class="card-title text-md mb-4">Per-Node Arrival Timeline</h4>
           <p class="text-sm text-base-content/70 mb-4">
-            Propagation time from message send to receipt at each node (measured from originating node clock)
+            Arrival offsets from the experiment start time, helping you spot when each node first saw new messages.
           </p>
 
           <div class="overflow-x-auto">
@@ -112,11 +112,9 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
                 <tr class="bg-base-300">
                   <th class="text-base-content">Node ID</th>
                   <th class="text-base-content">Messages</th>
-                  <th class="text-base-content">Min Delay</th>
-                  <th class="text-base-content">Median</th>
-                  <th class="text-base-content">Avg Delay</th>
+                  <th class="text-base-content">Earliest Arrival</th>
                   <th class="text-base-content">P95</th>
-                  <th class="text-base-content">Max Delay</th>
+                  <th class="text-base-content">Latest Arrival</th>
                   <th class="text-base-content">Jitter</th>
                 </tr>
               </thead>
@@ -127,27 +125,17 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
                     <td>{node.total_messages}</td>
                     <%= if node.propagation_delay_stats do %>
                       <td class="font-mono text-xs">
-                        <span class={delay_colour_class(node.propagation_delay_stats.min_delay_ms)}>
+                        <span class={arrival_colour_class(node.propagation_delay_stats.min_delay_ms)}>
                           {node.propagation_delay_stats.min_delay_ms}ms
                         </span>
                       </td>
                       <td class="font-mono text-xs">
-                        <span class={delay_colour_class(node.propagation_delay_stats.median_delay_ms)}>
-                          {node.propagation_delay_stats.median_delay_ms}ms
-                        </span>
-                      </td>
-                      <td class="font-mono text-xs font-medium">
-                        <span class={delay_colour_class(node.propagation_delay_stats.avg_delay_ms)}>
-                          {node.propagation_delay_stats.avg_delay_ms}ms
-                        </span>
-                      </td>
-                      <td class="font-mono text-xs">
-                        <span class={delay_colour_class(node.propagation_delay_stats.p95_delay_ms)}>
+                        <span class={arrival_colour_class(node.propagation_delay_stats.p95_delay_ms)}>
                           {node.propagation_delay_stats.p95_delay_ms}ms
                         </span>
                       </td>
                       <td class="font-mono text-xs">
-                        <span class={delay_colour_class(node.propagation_delay_stats.max_delay_ms)}>
+                        <span class={arrival_colour_class(node.propagation_delay_stats.max_delay_ms)}>
                           {node.propagation_delay_stats.max_delay_ms}ms
                         </span>
                       </td>
@@ -157,7 +145,7 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
                         </span>
                       </td>
                     <% else %>
-                      <td colspan="6" class="text-xs text-base-content/50">No propagation data</td>
+                      <td colspan="4" class="text-xs text-base-content/50">No arrival data</td>
                     <% end %>
                   </tr>
                 <% end %>
@@ -185,13 +173,13 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
           <div class="mt-4 text-xs text-base-content/70">
             <p>
               <strong>Jitter:</strong>
-              Standard deviation of propagation delays, showing consistency of message delivery.
+              Standard deviation of arrival offsets relative to the experiment start, showing consistency of message delivery.
               Lower jitter indicates more predictable propagation patterns.
             </p>
             <p class="mt-2">
               <strong>Note:</strong>
-              These measurements use the originating node's clock for both send and receipt times,
-              eliminating clock skew issues and providing accurate propagation delay data.
+              These offsets use the originating node's clock for both send and receipt timestamps,
+              keeping clock skew from other nodes out of the picture.
             </p>
           </div>
         </div>
@@ -224,7 +212,7 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
 
   defp spread_colour_class(_), do: ""
 
-  defp delay_colour_class(ms) when is_number(ms) do
+  defp arrival_colour_class(ms) when is_number(ms) do
     cond do
       ms < 50 -> "text-success"
       ms < 200 -> "text-warning"
@@ -233,7 +221,7 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
     end
   end
 
-  defp delay_colour_class(_), do: ""
+  defp arrival_colour_class(_), do: ""
 
   defp jitter_colour_class(jitter) when is_number(jitter) do
     cond do

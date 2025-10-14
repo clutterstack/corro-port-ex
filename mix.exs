@@ -68,8 +68,7 @@ defmodule CorroPort.MixProject do
        git: "https://github.com/clutterstack/corro_cli.git", branch: "main", override: true},
       {:fly_map_ex,
        git: "https://github.com/clutterstack/fly_map_ex.git", branch: "main", override: true},
-      {:vega_lite, "~> 0.1"},
-      {:kino_vega_lite, "~> 0.1"}
+      {:vega_lite, "~> 0.1"}
     ]
   end
 
@@ -82,7 +81,11 @@ defmodule CorroPort.MixProject do
   defp aliases do
     [
       setup: ["deps.get", "assets.setup", "assets.build"],
-      "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
+      "assets.setup": [
+        "tailwind.install --if-missing",
+        "esbuild.install --if-missing",
+        "cmd npm install --prefix assets"
+      ],
       "assets.build": ["tailwind corro_port", "esbuild corro_port"],
       "assets.deploy": [
         "tailwind corro_port --minify",

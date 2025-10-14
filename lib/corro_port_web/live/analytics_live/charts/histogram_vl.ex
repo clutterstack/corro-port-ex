@@ -45,15 +45,18 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.HistogramVl do
       """
     else
       # Prepare bucket data for VegaLite
+      # Add index to preserve bucket order for ordinal x-axis
       bucket_data =
         histogram.buckets
-        |> Enum.map(fn bucket ->
+        |> Enum.with_index()
+        |> Enum.map(fn {bucket, index} ->
           %{
             "label" => bucket.label,
             "min" => bucket.min,
             "max" => if(bucket.max == :infinity, do: 10000, else: bucket.max),
             "count" => bucket.count,
-            "colour" => VegaLiteHelper.latency_colour(bucket.min)
+            "colour" => VegaLiteHelper.latency_colour(bucket.min),
+            "order" => index
           }
         end)
 
@@ -74,7 +77,8 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.HistogramVl do
         |> Vl.encode_field(:x, "label",
           type: :ordinal,
           title: "Latency (ms)",
-          axis: [label_angle: -45]
+          axis: [label_angle: -45],
+          sort: [field: "order", order: :ascending]
         )
         |> Vl.encode_field(:y, "count",
           type: :quantitative,

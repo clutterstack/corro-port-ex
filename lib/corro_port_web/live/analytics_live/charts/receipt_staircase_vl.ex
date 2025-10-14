@@ -29,7 +29,7 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.ReceiptStaircaseVl do
 
     * `node_id` - The receiving node identifier
     * `delays` - List of time offsets from experiment start in temporal order (milliseconds)
-    * `stats` - Statistics map containing min/max/avg/median/p95 values
+    * `stats` - Statistics map containing min/max/p95 values
   """
   attr :node_id, :string, required: true
   attr :delays, :list, required: true
@@ -58,8 +58,8 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.ReceiptStaircaseVl do
           }
         end)
 
-      # Colour based on average time offset
-      bar_colour = VegaLiteHelper.time_offset_colour(stats.avg_delay_ms)
+      # Colour based on the latest arrival offset
+      bar_colour = VegaLiteHelper.time_offset_colour(stats.max_delay_ms)
 
       # Build VegaLite spec - compact layout
       spec =
@@ -70,11 +70,12 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.ReceiptStaircaseVl do
           padding: %{top: 5, right: 10, bottom: 25, left: 50}
         )
         |> Vl.data_from_values(chart_data)
-        |> Vl.mark(:bar, opacity: 0.8, color: bar_colour)
+        |> Vl.mark(:bar, opacity: 0.8, color: bar_colour, width: %{band: 1})
         |> Vl.encode_field(:x, "message_index",
-          type: :quantitative,
+          type: :ordinal,
           title: "Message Index",
-          axis: [grid: false]
+          axis: [grid: false],
+          scale: [padding_inner: 0, padding_outer: 0]
         )
         |> Vl.encode_field(:y, "time_offset_ms",
           type: :quantitative,
@@ -106,7 +107,7 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.ReceiptStaircaseVl do
         <div class="flex items-center justify-between mb-2">
           <span class="font-mono font-medium text-sm">{@node_id}</span>
           <span class="text-xs text-base-content/70">
-            {length(@delays)} msgs · {@stats.avg_delay_ms}ms avg · {@stats.median_delay_ms}ms median
+            {length(@delays)} msgs · first {@stats.min_delay_ms}ms · last {@stats.max_delay_ms}ms
           </span>
         </div>
 
