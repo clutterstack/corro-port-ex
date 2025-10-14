@@ -7,7 +7,7 @@ defmodule CorroPortWeb.AnalyticsLive.LatencyHistogramComponent do
   """
 
   use Phoenix.Component
-  alias CorroPortWeb.AnalyticsLive.Charts.Histogram
+  alias CorroPortWeb.AnalyticsLive.Charts.HistogramVl
 
   @doc """
   Renders the latency histogram chart with percentile markers.
@@ -24,9 +24,9 @@ defmodule CorroPortWeb.AnalyticsLive.LatencyHistogramComponent do
             Distribution of round-trip times across all {@latency_histogram.total_count} acknowledgements
           </p>
 
-          <!-- SVG Histogram -->
-          <div class="w-full" style="height: 300px;">
-            <Histogram.render_latency_histogram histogram={@latency_histogram} />
+          <!-- VegaLite Histogram -->
+          <div class="w-full">
+            <HistogramVl.render_latency_histogram histogram={@latency_histogram} />
           </div>
 
           <!-- Percentile Markers Legend -->

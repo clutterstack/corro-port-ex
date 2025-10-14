@@ -7,7 +7,7 @@ defmodule CorroPortWeb.AnalyticsLive.RttTimeSeriesComponent do
   """
 
   use Phoenix.Component
-  alias CorroPortWeb.AnalyticsLive.Charts.TimeSeries
+  alias CorroPortWeb.AnalyticsLive.Charts.TimeSeriesVl
 
   @doc """
   Renders the RTT time series chart showing round-trip times for each node.
@@ -25,9 +25,9 @@ defmodule CorroPortWeb.AnalyticsLive.RttTimeSeriesComponent do
             Round-trip times for acknowledgements from each node over the experiment duration.
           </p>
 
-          <!-- SVG Time Series Plot -->
-          <div class="w-full" style="height: 400px;">
-            <TimeSeries.render_rtt_time_series rtt_time_series={@rtt_time_series} receipt_time_series={@receipt_time_series} />
+          <!-- VegaLite Time Series Plot -->
+          <div class="w-full">
+            <TimeSeriesVl.render_rtt_time_series rtt_time_series={@rtt_time_series} receipt_time_series={@receipt_time_series} />
           </div>
 
           <div class="mt-4 text-sm text-base-content/70">

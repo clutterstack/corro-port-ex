@@ -67,7 +67,9 @@ defmodule CorroPort.MixProject do
       {:corro_cli,
        git: "https://github.com/clutterstack/corro_cli.git", branch: "main", override: true},
       {:fly_map_ex,
-       git: "https://github.com/clutterstack/fly_map_ex.git", branch: "main", override: true}
+       git: "https://github.com/clutterstack/fly_map_ex.git", branch: "main", override: true},
+      {:vega_lite, "~> 0.1"},
+      {:kino_vega_lite, "~> 0.1"}
     ]
   end
 

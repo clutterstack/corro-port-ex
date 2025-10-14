@@ -14,7 +14,7 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
   """
 
   use Phoenix.Component
-  alias CorroPortWeb.AnalyticsLive.Charts.ReceiptStaircase
+  alias CorroPortWeb.AnalyticsLive.Charts.ReceiptStaircaseVl
 
   @doc """
   Renders the complete receipt time distribution analysis.
@@ -173,7 +173,7 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
             </p>
             <%= for node <- @nodes do %>
               <%= if node.propagation_delay_stats && length(node.propagation_delay_stats.delays) > 0 do %>
-                <ReceiptStaircase.render_staircase
+                <ReceiptStaircaseVl.render_staircase
                   node_id={node.node_id}
                   delays={node.propagation_delay_stats.delays}
                   stats={node.propagation_delay_stats}

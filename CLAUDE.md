@@ -6,6 +6,103 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Keeping track of work
 Use the `bd` tool instead of markdown for all new work
 
+### Using the bd tool
+
+The `bd` tool is a dependency-aware issue tracker where issues are chained together like beads. It uses a local SQLite database that auto-syncs with git via JSONL exports.
+
+**Getting started:**
+```bash
+# Initialize bd in your project (already done for this repo)
+bd init                    # Auto-detects prefix from directory name
+bd init --prefix api       # Custom prefix (issues named: api-1, api-2, ...)
+```
+
+**Creating issues:**
+```bash
+# Basic issue creation
+bd create "Issue title" -d "Detailed description"
+
+# With type, priority, and assignee
+bd create "Add auth" -t feature -p 0 -d "Description" --assignee alice
+
+# Issue types: bug, feature, task, epic, chore
+bd create "Fix login bug" -t bug -d "Bug description"
+```
+
+**Managing dependencies:**
+```bash
+# Add dependency (bd-2 blocks bd-1, so bd-2 must complete first)
+bd dep add bd-1 bd-2
+
+# Visualize dependency tree
+bd dep tree bd-1
+
+# Detect circular dependencies
+bd dep cycles
+```
+
+**Dependency types:**
+- `blocks` - Task B must complete before task A (hard blocker)
+- `related` - Soft connection, doesn't block progress
+- `parent-child` - Epic/subtask hierarchical relationship
+- `discovered-from` - Auto-created when AI discovers related work
+
+**Finding ready work:**
+```bash
+# Show issues ready to work on (open status + no blocking dependencies)
+bd ready
+
+# Perfect for agents to claim next work!
+```
+
+**Listing and filtering:**
+```bash
+# List all issues
+bd list
+
+# Filter by status
+bd list --status open
+bd list --status in_progress
+
+# Filter by priority (0-4, 0=highest)
+bd list --priority 0
+bd list -p 1
+
+# Filter by type
+bd list --type bug
+bd list -t feature
+
+# Filter by assignee
+bd list --assignee alice
+bd list -a bob
+
+# Limit results
+bd list -n 10
+```
+
+**Viewing and updating:**
+```bash
+# Show issue details
+bd show bd-1
+
+# Update issue
+bd update bd-1 --status in_progress
+bd update bd-1 --priority 0
+bd update bd-1 --assignee bob
+
+# Close issues
+bd close bd-1
+bd close bd-2 bd-3 --reason "Fixed in PR #42"
+```
+
+**Important notes:**
+- Priority: 0=highest (P0), 4=lowest (P4), default=2 (P2)
+- Status values: open, closed, in_progress
+- Database auto-syncs with git (5s debounce after CRUD, auto-import after git pull)
+- Database location hierarchy: `--db` flag → `$BEADS_DB` env var → `.beads/*.db` in current/ancestor dirs → `~/.beads/default.db`
+- Use `--json` flags for programmatic parsing
+- Can extend the SQLite database with custom tables for application-specific data
+
 ## Common Development Commands
 
 ### Setup and Dependencies

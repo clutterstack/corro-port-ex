@@ -77,6 +77,50 @@ Hooks.RegionMap = {
   }
 }
 
+Hooks.VegaLiteChart = {
+  mounted() {
+    this.renderChart()
+
+    // Re-render chart when data updates from server
+    this.handleEvent("update_chart", () => {
+      this.renderChart()
+    })
+  },
+
+  updated() {
+    this.renderChart()
+  },
+
+  renderChart() {
+    const spec = JSON.parse(this.el.dataset.spec)
+
+    // Configure vega-embed options
+    const options = {
+      actions: {
+        export: true,
+        source: false,
+        compiled: false,
+        editor: false
+      },
+      renderer: "canvas"
+    }
+
+    // Clear previous chart
+    this.el.innerHTML = ''
+
+    // Render the chart using the global vegaEmbed function
+    if (typeof window.vegaEmbed === 'function') {
+      window.vegaEmbed(this.el, spec, options).catch(error => {
+        console.error("VegaLite chart rendering error:", error)
+        this.el.innerHTML = `<div class="text-error p-4">Chart rendering failed: ${error.message}</div>`
+      })
+    } else {
+      console.error("vegaEmbed is not loaded")
+      this.el.innerHTML = '<div class="text-error p-4">VegaLite library not loaded</div>'
+    }
+  }
+}
+
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
