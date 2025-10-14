@@ -205,13 +205,13 @@ defmodule CorroPortWeb.PropagationLive do
     <div class="space-y-6">
       <!-- Navigation Tabs -->
       <NavTabs.nav_tabs active={:propagation} />
-      
+
     <!-- Page Header with Actions -->
       <PropagationHeader.propagation_header dns_data={@dns_data} />
-      
+
     <!-- Error alerts using pre-computed configurations -->
       <.error_alert :if={@dns_alert} config={@dns_alert} />
-      
+
     <!-- Enhanced World Map with Regions -->
       <div :if={@loading} class="flex items-center justify-center py-12">
         <div class="text-base-content/70">Loading map...</div>
@@ -221,11 +221,11 @@ defmodule CorroPortWeb.PropagationLive do
         :if={!@loading and @marker_groups}
         marker_groups={@marker_groups}
         real_time={true}
-        channel="map:#{@map_id}"
+        channel={"map:#{@map_id}"}
         update_throttle={5}
         layout={:nolegend}
       />
-      
+
     <!-- Last Updated -->
       <div class="text-xs text-base-content/70 text-center">
         Page updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}

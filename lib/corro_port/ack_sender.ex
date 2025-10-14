@@ -73,7 +73,7 @@ defmodule CorroPort.AckSender do
 
     # Create ETS table for message reception tracking and deduplication
     :ets.new(@reception_cache_table, [:set, :public, :named_table, read_concurrency: true])
-    Logger.info("AckSender: Created message reception cache table")
+    Logger.debug("AckSender: Created message reception cache table")
 
     # Subscribe to CorroSubscriber's message updates
     Phoenix.PubSub.subscribe(CorroPort.PubSub, "message_updates")
@@ -187,7 +187,7 @@ defmodule CorroPort.AckSender do
       local_node_id = CorroPort.NodeConfig.get_corrosion_node_id()
 
       if originating_node_id && originating_node_id != local_node_id do
-        Logger.info("AckSender: INSERT change from #{originating_node_id}; start ack task")
+        Logger.debug("AckSender: INSERT change from #{originating_node_id}; start ack task")
 
         start_async_ack(message_map)
       end
@@ -207,7 +207,7 @@ defmodule CorroPort.AckSender do
       # Check if this is the first time we're receiving this message
       case record_message_reception(message_pk) do
         {:first_reception, receipt_timestamp} ->
-          Logger.info("AckSender: First reception of message #{message_pk}")
+          Logger.debug("AckSender: First reception of message #{message_pk}")
 
           case AckHttp.parse_endpoint(originating_endpoint) do
             {:ok, api_url} ->
@@ -266,12 +266,12 @@ defmodule CorroPort.AckSender do
       "receipt_timestamp" => DateTime.to_iso8601(receipt_timestamp)
     }
 
-    Logger.info("AckSender: Sending POST to #{ack_url} with payload: #{inspect(payload)}")
+    Logger.debug("AckSender: Sending POST to #{ack_url} with payload: #{inspect(payload)}")
 
     case AckHttp.post_ack(api_url, path, payload, receive_timeout: @ack_timeout) do
       {:ok, %{status: 200, body: body}} ->
-        Logger.info("AckSender: ✅ Successfully sent acknowledgment to #{originating_endpoint}")
-        Logger.debug("AckSender: Response: #{inspect(body)}")
+        Logger.debug("AckSender: ✅ Successfully sent acknowledgment to ")
+        Logger.debug("AckSender: sent ack: #{inspect(body)} to #{originating_endpoint}")
 
       {:ok, %{status: 404}} ->
         # Target node isn't tracking this message - not an error

@@ -23,7 +23,7 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TickHelpers do
 
     # Handle edge case where range is 0
     if range <= 0 do
-      [{Float.round(min_value, 1), 0.5}]
+      [{Float.round(min_value / 1, 1), 0.5}]
     else
       # Calculate ideal tick interval
       ideal_interval = range / (num_ticks - 1)
@@ -46,7 +46,7 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TickHelpers do
           if nice_interval >= 1 do
             round(tick_value)
           else
-            Float.round(tick_value, 1)
+            Float.round(tick_value / 1, 1)
           end
 
         {formatted_value, position}

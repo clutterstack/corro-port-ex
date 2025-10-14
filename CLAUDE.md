@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+
+## Keeping track of work
+Use the `bd` tool instead of markdown for all new work
+
 ## Common Development Commands
 
 ### Setup and Dependencies

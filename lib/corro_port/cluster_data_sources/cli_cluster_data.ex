@@ -14,7 +14,7 @@ defmodule CorroPort.CLIClusterData do
   # alias CorroCLI
 
   # Default refresh interval: 5 minutes
-  @default_refresh_interval 300_000
+  @default_refresh_interval 450_000
   @cli_timeout 15_000
 
   # Client API
@@ -104,8 +104,6 @@ defmodule CorroPort.CLIClusterData do
 
   def init(opts) do
     refresh_interval = Keyword.get(opts, :refresh_interval, @default_refresh_interval)
-
-    Logger.info("CLIClusterData starting with #{refresh_interval}ms refresh interval")
 
     # Start with empty state
     state = %{
