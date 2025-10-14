@@ -2,23 +2,22 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeries do
   @moduledoc """
   SVG time series chart rendering for RTT over time.
 
-  Renders a line chart showing how round-trip times change over the course
-  of an experiment, with separate lines for each responding node.
+  Renders a line chart showing how round-trip acknowledgement times change
+  over the course of an experiment, with separate lines for each responding node.
   """
 
   use Phoenix.Component
   alias CorroPortWeb.AnalyticsLive.Charts.TickHelpers
 
   @doc """
-  Renders an SVG time series plot showing RTT and propagation delay over time for each node.
+  Renders an SVG time series plot showing RTT over time for each node.
 
   The chart includes:
-  - Solid line plots for RTT progression
-  - Dotted line plots for propagation delay (receipt time)
+  - Line plots for RTT progression
   - Data points as circles
   - X-axis with time offset labels
   - Y-axis with latency (ms) labels
-  - Legend identifying each node's line by colour and style
+  - Legend identifying each node's line by colour
 
   Returns a message if there is no data available.
 
@@ -27,9 +26,7 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeries do
     * `rtt_time_series` - List of series maps for RTT data, each containing:
       * `:node_id` - Identifier for the responding node
       * `:data_points` - List of point maps with `:send_time` and `:rtt_ms`
-    * `receipt_time_series` - List of series maps for propagation delay data, each containing:
-      * `:node_id` - Identifier for the receiving node
-      * `:data_points` - List of point maps with `:send_time` and `:propagation_delay_ms`
+    * `receipt_time_series` - Legacy parameter, no longer used (kept for API compatibility)
   """
   attr :rtt_time_series, :list, required: true
   attr :receipt_time_series, :list, default: []
@@ -202,32 +199,6 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeries do
           <% end %>
         <% end %>
 
-        <!-- Plot receipt time data (dotted lines) -->
-        <%= for {series, series_index} <- Enum.with_index(@receipt_time_series) do %>
-          <% colour = Enum.at(@node_colours, rem(series_index, length(@node_colours))) %>
-
-          <!-- Receipt time connecting lines (dotted) -->
-          <%= if length(series.data_points) > 1 do %>
-            <% path_data = build_receipt_line_path(
-              series.data_points,
-              @min_time,
-              @time_range_ms,
-              @plot_min_value,
-              @value_range,
-              @padding,
-              @plot_width,
-              @plot_height
-            ) %>
-            <path d={path_data} fill="none" stroke={colour} stroke-width="1.5" opacity="0.7" stroke-dasharray="5,3" />
-          <% end %>
-
-          <!-- Receipt time data points (smaller) -->
-          <%= for point <- series.data_points do %>
-            <% x = calculate_x_position(point.send_time, @min_time, @time_range_ms, @padding.left, @plot_width) %>
-            <% y = calculate_y_position(point.propagation_delay_ms, @plot_min_value, @value_range, @chart_height, @padding.bottom, @plot_height) %>
-            <circle cx={x} cy={y} r="2" fill={colour} opacity="0.6" />
-          <% end %>
-        <% end %>
 
         <!-- Legend -->
         <% all_nodes = (@rtt_time_series ++ @receipt_time_series) |> Enum.map(& &1.node_id) |> Enum.uniq() %>
@@ -241,11 +212,8 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeries do
         <% end %>
 
         <!-- Legend explanation at bottom -->
-        <text x={@padding.left} y={@chart_height - 45} class="text-xs fill-gray-600">
-          Solid line = RTT (round-trip time)
-        </text>
         <text x={@padding.left} y={@chart_height - 30} class="text-xs fill-gray-600">
-          Dotted line = Propagation delay (receipt time)
+          Showing RTT (round-trip time) for each node
         </text>
       </svg>
       """

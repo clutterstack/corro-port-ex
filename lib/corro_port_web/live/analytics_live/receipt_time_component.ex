@@ -14,7 +14,7 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
   """
 
   use Phoenix.Component
-  import CorroPortWeb.AnalyticsLive.Helpers
+  alias CorroPortWeb.AnalyticsLive.Charts.ReceiptStaircase
 
   @doc """
   Renders the complete receipt time distribution analysis.
@@ -46,9 +46,7 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
     """
   end
 
-  @doc """
-  Renders overall receipt time statistics.
-  """
+  # Renders overall receipt time statistics
   attr :stats, :map, required: true
 
   defp overall_receipt_stats(assigns) do
@@ -95,9 +93,7 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
     """
   end
 
-  @doc """
-  Renders per-node receipt statistics table.
-  """
+  # Renders per-node receipt statistics table
   attr :nodes, :list, required: true
 
   defp per_node_receipt_stats(assigns) do
@@ -170,10 +166,14 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
           </div>
 
           <div class="mt-6">
-            <h5 class="font-medium mb-2">Propagation Delay Distribution</h5>
+            <h5 class="font-medium mb-2">Message Receipt Timeline</h5>
+            <p class="text-xs text-base-content/70 mb-4">
+              Bar height shows when each message arrived (time since experiment start). Bars with similar heights reveal batching -
+              when Corrosion delivers multiple messages together via gossip, you'll see groups of bars at the same level.
+            </p>
             <%= for node <- @nodes do %>
               <%= if node.propagation_delay_stats && length(node.propagation_delay_stats.delays) > 0 do %>
-                <.delay_distribution_chart
+                <ReceiptStaircase.render_staircase
                   node_id={node.node_id}
                   delays={node.propagation_delay_stats.delays}
                   stats={node.propagation_delay_stats}
@@ -197,56 +197,6 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
         </div>
       </div>
     <% end %>
-    """
-  end
-
-  @doc """
-  Renders a horizontal bar chart showing delay distribution for a single node.
-  """
-  attr :node_id, :string, required: true
-  attr :delays, :list, required: true
-  attr :stats, :map, required: true
-
-  defp delay_distribution_chart(assigns) do
-    ~H"""
-    <div class="mb-4 p-4 bg-base-300 rounded-lg">
-      <div class="flex items-center justify-between mb-2">
-        <span class="font-mono font-medium text-sm">{@node_id}</span>
-        <span class="text-xs text-base-content/70">
-          {@stats.avg_delay_ms}ms avg, ±{calculate_jitter(@stats)}ms jitter
-        </span>
-      </div>
-
-      <!-- Histogram with indexed bars -->
-      <div class="flex items-center gap-1 h-8">
-        <%= for {delay, index} <- Enum.with_index(@delays) do %>
-          <div
-            class="flex-1 rounded-sm transition-all hover:opacity-80"
-            style={"background-color: #{delay_to_colour(delay, @stats.max_delay_ms)}; height: #{delay_to_height(delay, @stats.max_delay_ms)}%"}
-            title={"Message #{index + 1}: #{delay}ms"}
-          >
-          </div>
-        <% end %>
-      </div>
-
-      <!-- X-axis with message indices -->
-      <div class="flex justify-between mt-1 text-xs text-base-content/50">
-        <span>msg 1</span>
-        <%= if length(@delays) > 10 do %>
-          <span>msg {div(length(@delays), 4)}</span>
-          <span>msg {div(length(@delays), 2)}</span>
-          <span>msg {div(length(@delays) * 3, 4)}</span>
-        <% end %>
-        <span>msg {length(@delays)}</span>
-      </div>
-
-      <!-- Delay statistics below -->
-      <div class="flex justify-between mt-2 text-xs text-base-content/50 border-t border-base-content/10 pt-2">
-        <span>min: {@stats.min_delay_ms}ms</span>
-        <span>median: {@stats.median_delay_ms}ms</span>
-        <span>max: {@stats.max_delay_ms}ms</span>
-      </div>
-    </div>
     """
   end
 
@@ -274,30 +224,6 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
 
   defp spread_colour_class(_), do: ""
 
-  defp time_span_colour_class(seconds) when is_number(seconds) do
-    ms = seconds * 1000
-
-    cond do
-      ms < 1000 -> "text-success"
-      ms < 5000 -> "text-warning"
-      true -> "text-base-content"
-    end
-  end
-
-  defp time_span_colour_class(_), do: ""
-
-  defp format_time_span_ms(seconds) when is_number(seconds) do
-    ms = round(seconds * 1000)
-
-    cond do
-      ms < 1000 -> "#{ms}ms"
-      ms < 60_000 -> "#{Float.round(ms / 1000, 1)}s"
-      true -> "#{div(ms, 60_000)}m #{Float.round(rem(ms, 60_000) / 1000, 1)}s"
-    end
-  end
-
-  defp format_time_span_ms(_), do: "-"
-
   defp delay_colour_class(ms) when is_number(ms) do
     cond do
       ms < 50 -> "text-success"
@@ -318,27 +244,4 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeComponent do
   end
 
   defp jitter_colour_class(_), do: ""
-
-  defp delay_to_colour(delay, max_delay) when max_delay > 0 do
-    # Normalize delay to 0-1 range
-    normalized = delay / max_delay
-
-    # Green to yellow to red gradient
-    cond do
-      normalized < 0.33 -> "#10B981"
-      normalized < 0.67 -> "#F59E0B"
-      true -> "#EF4444"
-    end
-  end
-
-  defp delay_to_colour(_, _), do: "#9CA3AF"
-
-  defp delay_to_height(delay, max_delay) when max_delay > 0 do
-    # Normalize to percentage (50-100% range for visibility)
-    min_height = 50
-    normalized = delay / max_delay
-    min_height + normalized * 50
-  end
-
-  defp delay_to_height(_, _), do: 50
 end

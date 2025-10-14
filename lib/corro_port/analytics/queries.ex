@@ -170,24 +170,28 @@ defmodule CorroPort.Analytics.Queries do
   end
 
   @doc """
-  Analyzes message receipt time distribution across nodes with propagation delays.
+  Analyzes message receipt time distribution across nodes relative to experiment start.
 
-  Joins send events with receipt events to calculate per-message propagation delays
-  from the originating node's perspective (requires same node for clock accuracy).
+  Calculates receipt times relative to the first message send time to show the actual
+  temporal pattern of message arrivals. This reveals batching behaviour as messages
+  received together will have similar Y-axis values (time since experiment start).
 
   Returns a map containing:
-  - per_node: List of per-node statistics including propagation delay distribution
+  - per_node: List of per-node statistics including receipt time offsets from experiment start
   - overall_stats: Aggregated statistics across all nodes
+  - experiment_start_time: The baseline timestamp (first message send time)
   """
   def get_receipt_time_distribution(experiment_id) do
     # Get send events for this experiment
     send_events_query =
       from(e in MessageEvent,
         where: e.experiment_id == ^experiment_id and e.event_type == :sent,
-        select: {e.message_id, e.originating_node, e.event_timestamp}
+        select: {e.message_id, e.originating_node, e.event_timestamp},
+        order_by: [asc: e.event_timestamp]
       )
 
-    send_events = Repo.all(send_events_query) |> Map.new(fn {msg_id, node, ts} -> {msg_id, {node, ts}} end)
+    send_events_list = Repo.all(send_events_query)
+    send_events = Map.new(send_events_list, fn {msg_id, node, ts} -> {msg_id, {node, ts}} end)
 
     # Get all ack events with receipt timestamps
     ack_events_query =
@@ -202,21 +206,25 @@ defmodule CorroPort.Analytics.Queries do
 
     ack_events = Repo.all(ack_events_query)
 
-    if ack_events == [] do
+    if ack_events == [] or send_events_list == [] do
       %{
         per_node: [],
-        overall_stats: %{total_events: 0}
+        overall_stats: %{total_events: 0},
+        experiment_start_time: nil
       }
     else
-      # Calculate propagation delays by joining with send events
+      # Get the first message send time as the baseline
+      {_first_msg_id, _first_node, experiment_start_time} = List.first(send_events_list)
+
+      # Calculate receipt time offsets relative to experiment start
       enriched_events =
         ack_events
         |> Enum.map(fn {msg_id, origin_node, target_node, _ack_ts, receipt_ts, region} ->
           case Map.get(send_events, msg_id) do
-            {^origin_node, send_ts} ->
-              # Same originating node - can calculate propagation delay
-              delay_ms = DateTime.diff(receipt_ts, send_ts, :millisecond)
-              {msg_id, origin_node, target_node, receipt_ts, delay_ms, region}
+            {^origin_node, _send_ts} ->
+              # Calculate time offset from experiment start (using receipt timestamp)
+              time_offset_ms = DateTime.diff(receipt_ts, experiment_start_time, :millisecond)
+              {msg_id, origin_node, target_node, receipt_ts, time_offset_ms, region}
 
             _ ->
               # No matching send event or different node
@@ -224,12 +232,13 @@ defmodule CorroPort.Analytics.Queries do
           end
         end)
 
-      per_node_stats = calculate_per_node_propagation_stats(enriched_events)
-      overall_stats = calculate_overall_propagation_stats(enriched_events)
+      per_node_stats = calculate_per_node_receipt_time_stats(enriched_events, experiment_start_time)
+      overall_stats = calculate_overall_receipt_time_stats(enriched_events)
 
       %{
         per_node: per_node_stats,
-        overall_stats: overall_stats
+        overall_stats: overall_stats,
+        experiment_start_time: experiment_start_time
       }
     end
   end
@@ -338,7 +347,7 @@ defmodule CorroPort.Analytics.Queries do
 
   # Private helpers
 
-  defp calculate_per_node_propagation_stats(enriched_events) do
+  defp calculate_per_node_receipt_time_stats(enriched_events, _experiment_start_time) do
     enriched_events
     |> Enum.group_by(&elem(&1, 2))
     |> Enum.map(fn {node_id, node_events} ->
@@ -346,24 +355,24 @@ defmodule CorroPort.Analytics.Queries do
       first_receipt = Enum.min(receipt_times, DateTime)
       last_receipt = Enum.max(receipt_times, DateTime)
 
-      # Extract propagation delays (only non-nil values)
+      # Extract time offsets from experiment start (only non-nil values)
       # Preserve temporal order from the query (ordered by message_id, receipt_timestamp)
-      delays_temporal =
+      time_offsets_temporal =
         node_events
         |> Enum.map(&elem(&1, 4))
         |> Enum.reject(&is_nil/1)
 
-      delay_stats =
-        if delays_temporal != [] do
-          sorted_delays = Enum.sort(delays_temporal)
+      receipt_time_stats =
+        if time_offsets_temporal != [] do
+          sorted_offsets = Enum.sort(time_offsets_temporal)
 
           %{
-            min_delay_ms: Enum.min(sorted_delays),
-            max_delay_ms: Enum.max(sorted_delays),
-            avg_delay_ms: Float.round(Enum.sum(delays_temporal) / length(delays_temporal), 1),
-            median_delay_ms: calculate_percentile(sorted_delays, 50),
-            p95_delay_ms: calculate_percentile(sorted_delays, 95),
-            delays: delays_temporal  # Keep temporal order for visualization
+            min_delay_ms: Enum.min(sorted_offsets),
+            max_delay_ms: Enum.max(sorted_offsets),
+            avg_delay_ms: Float.round(Enum.sum(time_offsets_temporal) / length(time_offsets_temporal), 1),
+            median_delay_ms: calculate_percentile(sorted_offsets, 50),
+            p95_delay_ms: calculate_percentile(sorted_offsets, 95),
+            delays: time_offsets_temporal  # Keep temporal order for visualization (these are time offsets, not delays)
           }
         else
           nil
@@ -375,17 +384,24 @@ defmodule CorroPort.Analytics.Queries do
         first_receipt: first_receipt,
         last_receipt: last_receipt,
         time_span_seconds: DateTime.diff(last_receipt, first_receipt, :second),
-        propagation_delay_stats: delay_stats
+        propagation_delay_stats: receipt_time_stats  # Keep name for backward compatibility
       }
     end)
     |> Enum.sort_by(& &1.node_id)
   end
 
-  defp calculate_overall_propagation_stats(enriched_events) do
+  # Backward compatibility alias - this was the old function name
+  defp calculate_per_node_propagation_stats(enriched_events) do
+    # For old code that might still call this, just pass nil as experiment_start_time
+    # This won't be used since we're updating the caller
+    calculate_per_node_receipt_time_stats(enriched_events, nil)
+  end
+
+  defp calculate_overall_receipt_time_stats(enriched_events) do
     total_events = length(enriched_events)
 
-    # Extract all propagation delays (only non-nil)
-    all_delays =
+    # Extract all time offsets from experiment start (only non-nil)
+    all_time_offsets =
       enriched_events
       |> Enum.map(&elem(&1, 4))
       |> Enum.reject(&is_nil/1)
@@ -397,7 +413,7 @@ defmodule CorroPort.Analytics.Queries do
       |> Enum.uniq()
       |> length()
 
-    if all_delays == [] do
+    if all_time_offsets == [] do
       %{
         total_events: total_events,
         total_messages: unique_messages,
@@ -405,18 +421,23 @@ defmodule CorroPort.Analytics.Queries do
         p95_spread_ms: 0
       }
     else
-      sorted_delays = Enum.sort(all_delays)
+      sorted_offsets = Enum.sort(all_time_offsets)
 
       %{
         total_events: total_events,
         total_messages: unique_messages,
-        avg_spread_ms: Float.round(Enum.sum(sorted_delays) / length(sorted_delays), 1),
-        p50_spread_ms: calculate_percentile(sorted_delays, 50),
-        p95_spread_ms: calculate_percentile(sorted_delays, 95),
-        min_delay_ms: Enum.min(sorted_delays),
-        max_delay_ms: Enum.max(sorted_delays)
+        avg_spread_ms: Float.round(Enum.sum(sorted_offsets) / length(sorted_offsets), 1),
+        p50_spread_ms: calculate_percentile(sorted_offsets, 50),
+        p95_spread_ms: calculate_percentile(sorted_offsets, 95),
+        min_delay_ms: Enum.min(sorted_offsets),
+        max_delay_ms: Enum.max(sorted_offsets)
       }
     end
+  end
+
+  # Backward compatibility alias
+  defp calculate_overall_propagation_stats(enriched_events) do
+    calculate_overall_receipt_time_stats(enriched_events)
   end
 
   defp calculate_percentile(list, percentile) do

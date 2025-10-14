@@ -1,18 +1,16 @@
 defmodule CorroPortWeb.AnalyticsLive.RttTimeSeriesComponent do
   @moduledoc """
-  Phoenix Component for rendering combined RTT and propagation delay time series chart.
+  Phoenix Component for rendering RTT time series chart.
 
-  Shows both round-trip acknowledgment times (solid lines) and message propagation
-  delays (dotted lines) on the same chart for direct comparison. This helps identify
-  performance patterns and understand how much of the RTT is due to propagation vs
-  acknowledgment processing.
+  Shows round-trip acknowledgment times over time for each node. This helps identify
+  performance patterns and understand cluster latency characteristics.
   """
 
   use Phoenix.Component
   alias CorroPortWeb.AnalyticsLive.Charts.TimeSeries
 
   @doc """
-  Renders the combined latency time series chart showing RTT and propagation delays.
+  Renders the RTT time series chart showing round-trip times for each node.
   """
   attr :rtt_time_series, :list, required: true
   attr :receipt_time_series, :list, default: []
@@ -24,8 +22,7 @@ defmodule CorroPortWeb.AnalyticsLive.RttTimeSeriesComponent do
         <div class="card-body">
           <h3 class="card-title text-lg mb-2">Latency Over Time by Node</h3>
           <p class="text-sm text-base-content/70 mb-4">
-            Combined view showing RTT (solid lines) and propagation delays (dotted lines).
-            Compare to see how much of total latency is gossip propagation vs ack processing.
+            Round-trip times for acknowledgements from each node over the experiment duration.
           </p>
 
           <!-- SVG Time Series Plot -->
@@ -34,8 +31,7 @@ defmodule CorroPortWeb.AnalyticsLive.RttTimeSeriesComponent do
           </div>
 
           <div class="mt-4 text-sm text-base-content/70">
-            Each colour represents a different node. Solid lines show full round-trip time, dotted lines show
-            one-way propagation delay. Gap between them reveals ack processing and return path latency.
+            Each colour represents a different node. Lines connect data points to show timing trends.
           </div>
         </div>
       </div>
