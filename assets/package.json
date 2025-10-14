@@ -1,0 +1,11 @@
+{
+  "name": "corro_port_assets",
+  "private": true,
+  "version": "0.1.0",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "vega": "^5.30.0",
+    "vega-embed": "^6.29.0",
+    "vega-lite": "^5.23.0"
+  }
+}

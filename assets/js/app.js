@@ -24,8 +24,15 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import topbar from "../vendor/topbar"
 import { createRealTimeMapHook } from '../vendor/fly_map_ex/js/real_time_map_hook.js'
+import * as vega from "vega"
+import * as vegaLite from "vega-lite"
+import embed from "vega-embed"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
+
+window.vega = vega
+window.vegaLite = vegaLite
+window.vegaEmbed = embed
 
 // Create Phoenix Socket for real-time channels
 const channelSocket = new Socket("/socket", {params: {_csrf_token: csrfToken}})
