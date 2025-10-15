@@ -80,12 +80,16 @@ defmodule CorroPort.CorroSubscriber do
     {:ok, %__MODULE__{status: :initializing}, {:continue, :start_subscription}}
   end
 
+  # Limit initial message fetch to avoid full table scan on reconnection
+  # Real-time updates will still arrive for all new messages after subscription starts
+  @initial_fetch_limit 100
+
   @impl true
   def handle_continue(:start_subscription, state) do
     Logger.info("CorroSubscriber: Starting subscription")
 
     conn = ConnectionManager.get_subscription_connection()
-    query = "SELECT * FROM node_messages ORDER BY timestamp DESC"
+    query = "SELECT * FROM node_messages ORDER BY sequence DESC LIMIT #{@initial_fetch_limit}"
 
     case CorroClient.Subscriber.start_subscription(conn,
            query: query,

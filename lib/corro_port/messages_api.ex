@@ -127,10 +127,14 @@ defmodule CorroPort.MessagesAPI do
   end
 
   @doc """
-  Gets all messages from the node_messages table, ordered by timestamp.
+  Gets messages from the node_messages table, ordered by sequence (most recent first).
+
+  ## Options
+  - `limit` - Maximum number of messages to return (default: 100)
   """
-  def get_node_messages do
-    query = "SELECT * FROM node_messages ORDER BY timestamp DESC"
+  def get_node_messages(opts \\ []) do
+    limit = Keyword.get(opts, :limit, 100)
+    query = "SELECT * FROM node_messages ORDER BY sequence DESC LIMIT #{limit}"
     conn = ConnectionManager.get_connection()
 
     case CorroClient.query(conn, query) do
@@ -146,12 +150,12 @@ defmodule CorroPort.MessagesAPI do
     query = """
     SELECT message, node_id, timestamp, sequence, originating_endpoint, region
     FROM node_messages
-    WHERE (node_id, timestamp) IN (
-      SELECT node_id, MAX(timestamp)
+    WHERE (node_id, sequence) IN (
+      SELECT node_id, MAX(sequence)
       FROM node_messages
       GROUP BY node_id
     )
-    ORDER BY timestamp DESC
+    ORDER BY sequence DESC
     """
 
     conn = ConnectionManager.get_connection()
@@ -197,9 +201,13 @@ defmodule CorroPort.MessagesAPI do
 
   @doc """
   Gets messages from a specific region.
+
+  ## Options
+  - `limit` - Maximum number of messages to return (default: 100)
   """
-  def get_messages_by_region(region) do
-    query = "SELECT * FROM node_messages WHERE region = '#{region}' ORDER BY timestamp DESC"
+  def get_messages_by_region(region, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 100)
+    query = "SELECT * FROM node_messages WHERE region = '#{region}' ORDER BY sequence DESC LIMIT #{limit}"
     conn = ConnectionManager.get_connection()
 
     case CorroClient.query(conn, query) do
