@@ -120,9 +120,9 @@ defmodule CorroPortWeb.AnalyticsLive.ExperimentControlsComponent do
                 type="number"
                 name="message_interval_ms"
                 value={@message_interval_ms}
-                min="100"
+                min="50"
                 max="60000"
-                step="100"
+                step="50"
                 class="input input-bordered w-full"
                 disabled={@aggregation_status == :running}
                 phx-change="update_message_interval"

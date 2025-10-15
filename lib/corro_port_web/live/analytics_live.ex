@@ -216,7 +216,7 @@ defmodule CorroPortWeb.AnalyticsLive do
   @impl true
   def handle_event("update_message_interval", %{"message_interval_ms" => value}, socket) do
     case Integer.parse(value) do
-      {interval, _} when interval >= 100 ->
+      {interval, _} when interval >= 50 ->
         {:noreply, assign(socket, :message_interval_ms, interval)}
 
       _ ->
