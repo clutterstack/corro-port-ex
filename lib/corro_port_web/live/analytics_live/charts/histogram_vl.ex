@@ -17,11 +17,12 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.HistogramVl do
   Renders a VegaLite histogram showing latency distribution.
 
   The histogram includes:
-  - Vertical bars for each latency bucket
+  - Vertical bars positioned at bucket minimum with calculated pixel widths
+  - Bar width automatically scaled based on bucket size and chart dimensions
   - Automatic Y-axis scaling with count labels
-  - X-axis with latency range labels
-  - Colour-coded bars (green < 50ms, yellow < 200ms, orange < 500ms, red >= 500ms)
-  - Percentile markers (P50, P95, P99) as rule marks
+  - Quantitative X-axis with explicit domain matching data bounds
+  - Colour-coded bars (green < 300ms, yellow < 600ms, orange < 900ms, red >= 900ms)
+  - Percentile markers (P50, P95, P99) as vertical rule marks
   - Interactive tooltips showing bucket range and count
 
   ## Parameters
@@ -45,19 +46,33 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.HistogramVl do
       """
     else
       # Prepare bucket data for VegaLite
-      # Add index to preserve bucket order for ordinal x-axis
+      # All buckets now have explicit numeric boundaries (no :infinity)
       bucket_data =
         histogram.buckets
-        |> Enum.with_index()
-        |> Enum.map(fn {bucket, index} ->
+        |> Enum.map(fn bucket ->
+          width = bucket.max - bucket.min
+
           %{
             "label" => bucket.label,
             "min" => bucket.min,
-            "max" => if(bucket.max == :infinity, do: 10000, else: bucket.max),
+            "max" => bucket.max,
+            "width" => width,
             "count" => bucket.count,
-            "colour" => VegaLiteHelper.latency_colour(bucket.min),
-            "order" => index
+            "colour" => VegaLiteHelper.latency_colour(bucket.min)
           }
+        end)
+
+      # Calculate actual data domain for x-axis (avoid VegaLite auto-padding)
+      x_min = histogram.buckets |> Enum.map(& &1.min) |> Enum.min()
+      x_max = histogram.buckets |> Enum.map(& &1.max) |> Enum.max()
+
+      # Calculate typical bucket width for bar sizing
+      bucket_width =
+        bucket_data
+        |> Enum.map(& &1["width"])
+        |> Enum.filter(&(&1 > 0))
+        |> then(fn widths ->
+          if widths == [], do: 100, else: Enum.min(widths)
         end)
 
       # Prepare percentile data for rule marks
@@ -70,15 +85,21 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.HistogramVl do
         |> Enum.reject(fn p -> is_nil(p["value"]) end)
 
       # Build main histogram chart layer (without top-level config for layering)
+      # Position bars at bucket min with explicit width
+      # VegaLite's size encoding uses pixels, need to calculate scale factor
+      # For 800px width chart spanning (x_max - x_min), pixels per ms = 800 / (x_max - x_min)
+      px_per_ms = 800 / (x_max - x_min)
+      bar_width_px = bucket_width * px_per_ms * 0.95  # 95% to add small gaps
+
       histogram_layer =
         Vl.new()
         |> Vl.data_from_values(bucket_data)
-        |> Vl.mark(:bar, opacity: 0.8)
-        |> Vl.encode_field(:x, "label",
-          type: :ordinal,
+        |> Vl.mark(:bar, opacity: 0.8, size: bar_width_px)
+        |> Vl.encode_field(:x, "min",
+          type: :quantitative,
           title: "Latency (ms)",
-          axis: [label_angle: -45],
-          sort: [field: "order", order: :ascending]
+          scale: [domain: [x_min, x_max]],
+          axis: [label_flush: true, tick_count: 10]
         )
         |> Vl.encode_field(:y, "count",
           type: :quantitative,
@@ -90,7 +111,7 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.HistogramVl do
           legend: nil
         )
         |> Vl.encode(:tooltip, [
-          [field: "label", type: :ordinal, title: "Range"],
+          [field: "label", type: :nominal, title: "Range"],
           [field: "count", type: :quantitative, title: "Count"]
         ])
 
@@ -102,7 +123,8 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.HistogramVl do
           |> Vl.mark(:rule, stroke_width: 2, stroke_dash: [5, 5], opacity: 0.7)
           |> Vl.encode_field(:x, "value",
             type: :quantitative,
-            title: "Latency (ms)"
+            title: "Latency (ms)",
+            scale: [domain: [x_min, x_max]]
           )
           |> Vl.encode_field(:color, "colour",
             type: :nominal,

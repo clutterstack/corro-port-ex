@@ -119,13 +119,17 @@ defmodule CorroPort.Analytics.Queries do
   Generates a latency histogram for an experiment.
 
   Returns a map containing:
-  - buckets: List of histogram buckets with ranges and counts
+  - buckets: List of histogram buckets with ranges and counts (includes all buckets up to
+    the last non-empty bucket plus one additional empty bucket for visual context)
   - percentiles: P50, P95, P99 values
   - total_count: Total number of data points
   - max_count: Maximum count in any bucket (for scaling visualisation)
 
   Options:
   - :bucket_edges - Custom bucket edges in milliseconds (default: linear 50ms increments up to the nearest bucket covering the maximum latency)
+
+  Note: All bucket boundaries are explicit numeric values. No buckets with :infinity boundaries
+  are generated, making the histogram easier to render in VegaLite.
   """
   def get_latency_histogram(experiment_id, opts \\ []) do
     timing_stats = get_message_timing_stats(experiment_id)
@@ -437,29 +441,15 @@ defmodule CorroPort.Analytics.Queries do
   end
 
   defp create_histogram_buckets(values, edges) do
-    # Create bucket ranges
+    # Create bucket ranges from edges
     bucket_ranges =
       edges
       |> Enum.chunk_every(2, 1, :discard)
       |> Enum.map(fn [min_val, max_val] -> {min_val, max_val} end)
 
-    # Add final bucket for values >= last edge
-    last_edge = List.last(edges)
-    bucket_ranges = bucket_ranges ++ [{last_edge, :infinity}]
-
     # Count values in each bucket
-    Enum.map(bucket_ranges, fn
-      {min_val, :infinity} ->
-        count = Enum.count(values, &(&1 >= min_val))
-
-        %{
-          min: min_val,
-          max: :infinity,
-          label: "#{min_val}ms+",
-          count: count
-        }
-
-      {min_val, max_val} ->
+    buckets_with_counts =
+      Enum.map(bucket_ranges, fn {min_val, max_val} ->
         count = Enum.count(values, &(&1 >= min_val and &1 < max_val))
 
         %{
@@ -468,7 +458,25 @@ defmodule CorroPort.Analytics.Queries do
           label: "#{min_val}-#{max_val}ms",
           count: count
         }
-    end)
+      end)
+
+    # Find the last bucket with non-zero count
+    last_non_empty_index =
+      buckets_with_counts
+      |> Enum.with_index()
+      |> Enum.reverse()
+      |> Enum.find(fn {bucket, _idx} -> bucket.count > 0 end)
+      |> case do
+        {_bucket, idx} -> idx
+        nil -> -1
+      end
+
+    # Include all buckets up to and including the last non-empty one
+    # plus one more empty bucket for visual context
+    buckets_to_include = last_non_empty_index + 2
+
+    buckets_with_counts
+    |> Enum.take(min(buckets_to_include, length(buckets_with_counts)))
   end
 
   defp default_latency_bucket_edges(max_latency) do

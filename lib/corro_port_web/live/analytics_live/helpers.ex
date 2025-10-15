@@ -91,24 +91,24 @@ defmodule CorroPortWeb.AnalyticsLive.Helpers do
   @doc """
   Returns a Tailwind CSS class for colour-coding latency values.
 
-  - < 50ms: green (excellent)
-  - 50-200ms: yellow (good)
-  - 200-500ms: orange (fair)
-  - > 500ms: red (slow)
+  - < 300ms: green (excellent)
+  - 300-600ms: yellow (good)
+  - 600-900ms: orange (fair)
+  - >= 900ms: red (slow)
 
   ## Examples
 
-      iex> latency_colour_class(30)
+      iex> latency_colour_class(150)
       "text-green-600 font-medium"
 
-      iex> latency_colour_class(150)
+      iex> latency_colour_class(450)
       "text-yellow-600 font-medium"
   """
   def latency_colour_class(latency_ms) when is_number(latency_ms) do
     cond do
-      latency_ms < 50 -> "text-green-600 font-medium"
-      latency_ms < 200 -> "text-yellow-600 font-medium"
-      latency_ms < 500 -> "text-orange-600 font-medium"
+      latency_ms < 300 -> "text-green-600 font-medium"
+      latency_ms < 600 -> "text-yellow-600 font-medium"
+      latency_ms < 900 -> "text-orange-600 font-medium"
       true -> "text-red-600 font-medium"
     end
   end

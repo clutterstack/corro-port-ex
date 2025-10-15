@@ -74,19 +74,19 @@ defmodule CorroPortWeb.AnalyticsLive.NodePerformanceComponent do
           <div class="mt-4 flex items-center gap-4 text-xs text-base-content/70">
             <div class="flex items-center gap-2">
               <span class="inline-block w-3 h-3 rounded-full bg-success"></span>
-              <span>&lt; 50ms (Excellent)</span>
+              <span>&lt; 300ms (Excellent)</span>
             </div>
             <div class="flex items-center gap-2">
               <span class="inline-block w-3 h-3 rounded-full bg-warning"></span>
-              <span>50-200ms (Good)</span>
+              <span>300-600ms (Good)</span>
             </div>
             <div class="flex items-center gap-2">
               <span class="inline-block w-3 h-3 rounded-full bg-[#F97316]"></span>
-              <span>200-500ms (Fair)</span>
+              <span>600-900ms (Fair)</span>
             </div>
             <div class="flex items-center gap-2">
               <span class="inline-block w-3 h-3 rounded-full bg-error"></span>
-              <span>&gt; 500ms (Slow)</span>
+              <span>&gt;= 900ms (Slow)</span>
             </div>
           </div>
         </div>

@@ -53,14 +53,14 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.VegaLiteHelper do
   Time offset colour scheme for receipt patterns.
 
   Earlier arrivals are better (green), later are worse (red).
-  Thresholds based on typical experiment duration.
+  Thresholds align with the 300/600/900ms batching cut-offs used elsewhere.
   """
   def time_offset_colour(avg_offset_ms) when is_number(avg_offset_ms) do
     cond do
-      avg_offset_ms < 100 -> "#10B981"   # Very early - green
-      avg_offset_ms < 500 -> "#F59E0B"   # Medium time - yellow
-      avg_offset_ms < 2000 -> "#F97316"  # Later - orange
-      true -> "#EF4444"                   # Very late - red
+      avg_offset_ms < 300 -> "#10B981"   # Very early - green
+      avg_offset_ms < 600 -> "#F59E0B"   # Moderate offset - yellow
+      avg_offset_ms < 900 -> "#F97316"   # Longer offset - orange
+      true -> "#EF4444"                  # Very late - red
     end
   end
 
