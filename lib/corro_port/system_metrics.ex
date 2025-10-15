@@ -18,8 +18,6 @@ defmodule CorroPort.SystemMetrics do
 
   # Collect metrics every 5 seconds
   @default_interval_ms 5_000
-  # CPU sampling interval
-  @cpu_sample_interval_ms 1_000
 
   # Client API
 

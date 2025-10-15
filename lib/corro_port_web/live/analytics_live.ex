@@ -37,7 +37,6 @@ defmodule CorroPortWeb.AnalyticsLive do
   import CorroPortWeb.AnalyticsLive.LatencyHistogramComponent
   import CorroPortWeb.AnalyticsLive.RttTimeSeriesComponent
   import CorroPortWeb.AnalyticsLive.ReceiptTimeComponent
-  import CorroPortWeb.AnalyticsLive.ActiveNodesComponent
   import CorroPortWeb.AnalyticsLive.TimingStatsComponent
   import CorroPortWeb.AnalyticsLive.SystemMetricsComponent
 
@@ -78,7 +77,16 @@ defmodule CorroPortWeb.AnalyticsLive do
       |> assign(:latency_histogram, nil)
       |> assign(:rtt_time_series, [])
       |> assign(:receipt_time_series, [])
-      |> assign(:receipt_time_dist, %{per_node: [], overall_stats: %{total_events: 0}, temporal_distribution: []})
+      |> assign(:receipt_time_dist, %{
+        per_node: [],
+        overall_stats: %{
+          total_events: 0,
+          total_messages: 0,
+          receiving_nodes: 0,
+          avg_receipts_per_message: 0.0
+        },
+        temporal_distribution: []
+      })
       |> assign(:last_update, nil)
       |> assign(:refresh_interval, 5000)
       |> assign(:local_node_id, LocalNode.get_node_id())
@@ -542,9 +550,6 @@ defmodule CorroPortWeb.AnalyticsLive do
 
           <!-- Combined Latency Time Series (RTT + Propagation Delays) -->
           <.rtt_time_series_chart rtt_time_series={@rtt_time_series} receipt_time_series={@receipt_time_series} />
-
-          <!-- Active Nodes -->
-          <.active_nodes_grid active_nodes={@active_nodes} />
 
           <!-- Timing Statistics -->
           <.timing_stats_table timing_stats={@timing_stats} />

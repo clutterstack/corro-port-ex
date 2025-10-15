@@ -180,7 +180,7 @@ defmodule CorroPort.Analytics.Queries do
 
   Returns a map containing:
   - per_node: List of per-node statistics including receipt time offsets from experiment start
-  - overall_stats: Aggregated statistics across all nodes
+  - overall_stats: Aggregated counts across all nodes
   - experiment_start_time: The baseline timestamp (first message send time)
   """
   def get_receipt_time_distribution(experiment_id) do
@@ -211,7 +211,12 @@ defmodule CorroPort.Analytics.Queries do
     if ack_events == [] or send_events_list == [] do
       %{
         per_node: [],
-        overall_stats: %{total_events: 0},
+        overall_stats: %{
+          total_events: 0,
+          total_messages: 0,
+          receiving_nodes: 0,
+          avg_receipts_per_message: 0.0
+        },
         experiment_start_time: nil
       }
     else
@@ -393,12 +398,6 @@ defmodule CorroPort.Analytics.Queries do
   defp calculate_overall_receipt_time_stats(enriched_events) do
     total_events = length(enriched_events)
 
-    # Extract all time offsets from experiment start (only non-nil)
-    all_time_offsets =
-      enriched_events
-      |> Enum.map(&elem(&1, 4))
-      |> Enum.reject(&is_nil/1)
-
     # Count unique messages
     unique_messages =
       enriched_events
@@ -406,26 +405,25 @@ defmodule CorroPort.Analytics.Queries do
       |> Enum.uniq()
       |> length()
 
-    if all_time_offsets == [] do
-      %{
-        total_events: total_events,
-        total_messages: unique_messages,
-        avg_spread_ms: 0,
-        p95_spread_ms: 0
-      }
-    else
-      sorted_offsets = Enum.sort(all_time_offsets)
+    receiving_nodes =
+      enriched_events
+      |> Enum.map(&elem(&1, 2))
+      |> Enum.uniq()
+      |> length()
 
-      %{
-        total_events: total_events,
-        total_messages: unique_messages,
-        avg_spread_ms: Float.round(Enum.sum(sorted_offsets) / length(sorted_offsets), 1),
-        p50_spread_ms: calculate_percentile(sorted_offsets, 50),
-        p95_spread_ms: calculate_percentile(sorted_offsets, 95),
-        min_delay_ms: Enum.min(sorted_offsets),
-        max_delay_ms: Enum.max(sorted_offsets)
-      }
-    end
+    avg_receipts_per_message =
+      if unique_messages > 0 do
+        Float.round(total_events / unique_messages, 1)
+      else
+        0.0
+      end
+
+    %{
+      total_events: total_events,
+      total_messages: unique_messages,
+      receiving_nodes: receiving_nodes,
+      avg_receipts_per_message: avg_receipts_per_message
+    }
   end
 
   # Backward compatibility alias

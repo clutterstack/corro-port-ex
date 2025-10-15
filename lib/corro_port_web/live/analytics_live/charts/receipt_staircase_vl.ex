@@ -73,7 +73,7 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.ReceiptStaircaseVl do
         #|> Vl.mark(:bar, opacity: 0.8, color: "black", width: %{band: 0.9})
         |> Vl.mark(:tick,
           color: bar_colour,
-          width: %{band: 0.8},
+          width: %{band: 0.95},
           thickness: 4
         )
         |> Vl.encode_field(:x, "message_index",

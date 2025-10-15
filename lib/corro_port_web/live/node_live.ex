@@ -688,6 +688,12 @@ defmodule CorroPortWeb.NodeLive do
     Calendar.strftime(timestamp, "%H:%M:%S UTC")
   end
 
+  defp cluster_readiness_icon(%{ready: true}), do: "hero-check-circle"
+  defp cluster_readiness_icon(_), do: "hero-arrow-path"
+
+  defp cluster_readiness_icon_class(%{ready: true}), do: "w-5 h-5"
+  defp cluster_readiness_icon_class(_), do: "w-5 h-5 animate-spin"
+
   def render(assigns) do
     ~H"""
     <div class="space-y-6">
@@ -938,24 +944,14 @@ defmodule CorroPortWeb.NodeLive do
     <!-- Cluster Readiness Status -->
           <div
             :if={@cluster_readiness_status}
-            class="alert mt-4"
             class={[
-              "alert",
+              "alert mt-4",
               if(@cluster_readiness_status.ready, do: "alert-success", else: "alert-info")
             ]}
           >
             <.icon
-              name={
-                if @cluster_readiness_status.ready do
-                  "hero-check-circle"
-                else
-                  "hero-arrow-path"
-                end
-              }
-              class={
-                "w-5 h-5" <>
-                if(!@cluster_readiness_status.ready, do: "animate-spin")
-              }
+              name={cluster_readiness_icon(@cluster_readiness_status)}
+              class={cluster_readiness_icon_class(@cluster_readiness_status)}
             />
             <div>
               <div class="font-semibold">
