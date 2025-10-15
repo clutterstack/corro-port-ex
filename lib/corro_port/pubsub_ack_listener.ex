@@ -46,13 +46,21 @@ defmodule CorroPort.PubSubAckListener do
     originating_node_id = fetch(request_data, :originating_node_id)
 
     if originating_node_id && originating_node_id != local_node_id do
+      receipt_timestamp =
+        DateTime.utc_now()
+        |> DateTime.truncate(:microsecond)
+
+      enriched_request =
+        request_data
+        |> Map.put_new(:receipt_timestamp, receipt_timestamp)
+
       Logger.info(
         "PubSubAckListener: received test request #{fetch(request_data, :request_id)} from #{originating_node_id}"
       )
 
       Task.Supervisor.start_child(
         CorroPort.PubSubAckTaskSupervisor,
-        fn -> send_acknowledgment(request_data) end
+        fn -> send_acknowledgment(enriched_request) end
       )
     else
       Logger.debug("PubSubAckListener: ignoring test request from self or missing originator")
@@ -68,11 +76,21 @@ defmodule CorroPort.PubSubAckListener do
 
     with {:endpoint, true} <- {:endpoint, is_binary(originating_endpoint)},
          {:ok, base_url} <- AckHttp.parse_endpoint(originating_endpoint) do
+      receipt_timestamp =
+        request_data
+        |> fetch(:receipt_timestamp)
+        |> normalize_receipt_timestamp()
+
       payload = %{
         "request_id" => fetch(request_data, :request_id),
         "ack_node_id" => LocalNode.get_node_id(),
         "timestamp" =>
-          DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601()
+          DateTime.utc_now() |> DateTime.truncate(:millisecond) |> DateTime.to_iso8601(),
+        "receipt_timestamp" =>
+          case receipt_timestamp do
+            %DateTime{} = dt -> DateTime.to_iso8601(dt)
+            _ -> nil
+          end
       }
 
       case AckHttp.post_ack(base_url, "/api/acknowledge_pubsub", payload) do
@@ -112,4 +130,15 @@ defmodule CorroPort.PubSubAckListener do
   defp fetch(map, key) do
     Map.get(map, key) || Map.get(map, to_string(key))
   end
+
+  defp normalize_receipt_timestamp(%DateTime{} = dt), do: DateTime.truncate(dt, :microsecond)
+
+  defp normalize_receipt_timestamp(timestamp) when is_binary(timestamp) do
+    case DateTime.from_iso8601(timestamp) do
+      {:ok, parsed, _offset} -> DateTime.truncate(parsed, :microsecond)
+      _ -> nil
+    end
+  end
+
+  defp normalize_receipt_timestamp(_), do: nil
 end

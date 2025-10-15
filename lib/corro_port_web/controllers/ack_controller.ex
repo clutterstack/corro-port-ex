@@ -73,7 +73,8 @@ defmodule CorroPortWeb.AcknowledgmentController do
          %{
            request_id: params["request_id"],
            ack_node_id: params["ack_node_id"],
-           timestamp: params["timestamp"]
+           timestamp: params["timestamp"],
+           receipt_timestamp: params["receipt_timestamp"]
          }}
 
       {:error, missing_fields} ->
@@ -149,7 +150,11 @@ defmodule CorroPortWeb.AcknowledgmentController do
       "AcknowledgmentController: Received PubSub acknowledgment from #{ack_data.ack_node_id}"
     )
 
-    case CorroPort.AckTracker.add_acknowledgment(ack_data.request_id, ack_data.ack_node_id) do
+    case CorroPort.AckTracker.add_acknowledgment(
+           ack_data.request_id,
+           ack_data.ack_node_id,
+           ack_data.receipt_timestamp
+         ) do
       :ok ->
         conn
         |> put_status(:ok)
@@ -157,7 +162,8 @@ defmodule CorroPortWeb.AcknowledgmentController do
           status: "acknowledged",
           message: "PubSub acknowledgment recorded",
           ack_node_id: ack_data.ack_node_id,
-          request_id: ack_data.request_id
+          request_id: ack_data.request_id,
+          receipt_timestamp: ack_data.receipt_timestamp
         })
 
       {:error, :unknown_message} ->
