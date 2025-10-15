@@ -47,16 +47,22 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeriesVl do
       </div>
       """
     else
-      # Prepare data for VegaLite - flatten series into single list with node_id field
+      # Find experiment start time (earliest send_time across all data)
+      experiment_start =
+        all_rtt_points
+        |> Enum.map(& &1.send_time)
+        |> Enum.min(DateTime)
+
+      # Prepare data for VegaLite - convert times to milliseconds elapsed from start
       chart_data =
         rtt_time_series
         |> Enum.flat_map(fn series ->
           Enum.map(series.data_points, fn point ->
+            elapsed_ms = DateTime.diff(point.send_time, experiment_start, :millisecond)
             %{
               "node_id" => series.node_id,
-              "send_time" => DateTime.to_iso8601(point.send_time),
-              "rtt_ms" => point.rtt_ms,
-              "time_label" => format_time_for_tooltip(point.send_time)
+              "elapsed_ms" => elapsed_ms,
+              "rtt_ms" => point.rtt_ms
             }
           end)
         end)
@@ -66,10 +72,9 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeriesVl do
         VegaLiteHelper.base_config(width: 800, height: 400)
         |> Vl.data_from_values(chart_data)
         |> Vl.mark(:line, point: true, stroke_width: 2, opacity: 0.8)
-        |> Vl.encode_field(:x, "send_time",
-          type: :temporal,
-          title: "Time",
-          axis: [format: "%H:%M:%S"]
+        |> Vl.encode_field(:x, "elapsed_ms",
+          type: :quantitative,
+          title: "Time (ms)"
         )
         |> Vl.encode_field(:y, "rtt_ms",
           type: :quantitative,
@@ -83,7 +88,7 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeriesVl do
         )
         |> Vl.encode(:tooltip, [
           [field: "node_id", type: :nominal, title: "Node"],
-          [field: "time_label", type: :temporal, time_unit: "milliseconds", title: "Time"],
+          [field: "elapsed_ms", type: :quantitative, title: "Time (ms)", format: ".0f"],
           [field: "rtt_ms", type: :quantitative, title: "Latency (ms)", format: ".1f"]
         ])
 
@@ -96,16 +101,5 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeriesVl do
       />
       """
     end
-  end
-
-  @doc """
-  Formats a DateTime for tooltip display as HH:MM:SS.
-  """
-  def format_time_for_tooltip(%DateTime{} = dt) do
-    dt
-    |> DateTime.truncate(:second)
-    |> DateTime.to_time()
-    |> Time.to_string()
-    |> String.slice(0..7)
   end
 end
