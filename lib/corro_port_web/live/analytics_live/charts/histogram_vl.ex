@@ -121,23 +121,8 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.HistogramVl do
       layers = if percentile_layer, do: [histogram_layer, percentile_layer], else: [histogram_layer]
 
       spec =
-        Vl.new(width: 800, height: 250, background: "transparent", padding: 20)
+        VegaLiteHelper.base_config(width: 800, height: 250)
         |> Vl.layers(layers)
-        |> Vl.config(
-          axis: [
-            grid_color: "#374151",
-            grid_opacity: 0.3,
-            tick_color: "#9CA3AF",
-            label_color: "#9CA3AF",
-            title_color: "#9CA3AF",
-            domain_color: "#9CA3AF"
-          ],
-          legend: [
-            label_color: "#9CA3AF",
-            title_color: "#9CA3AF"
-          ],
-          view: [stroke: "#374151"]
-        )
 
       assigns = assign(assigns, :spec, spec)
 

@@ -145,33 +145,6 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.VegaLiteHelper do
     """
   end
 
-  @doc """
-  Generates a colour scale for categorical node data.
-
-  Returns a VegaLite colour scale configuration using the node colour palette.
-  """
-  def node_colour_scale do
-    %{
-      "scale" => %{
-        "domain" => ["node1", "node2", "node3", "node4", "node5", "node6", "node7", "node8"],
-        "range" => node_colours()
-      }
-    }
-  end
-
-  @doc """
-  Adds axis titles to a VegaLite spec.
-
-  ## Options
-
-    * `:x` - X-axis title
-    * `:y` - Y-axis title
-  """
-  def add_axis_titles(vl, opts) do
-    vl = if x_title = opts[:x], do: Vl.encode_field(vl, :x, title: x_title), else: vl
-    vl = if y_title = opts[:y], do: Vl.encode_field(vl, :y, title: y_title), else: vl
-    vl
-  end
 
   @doc """
   Formats a DateTime as HH:MM:SS for display.
@@ -204,81 +177,4 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.VegaLiteHelper do
     end)
   end
 
-  @doc """
-  Creates a line chart layer for time series data.
-
-  Returns a VegaLite layer with both line and point marks.
-
-  ## Options
-
-    * `:x_field` - Field name for X-axis (required)
-    * `:y_field` - Field name for Y-axis (required)
-    * `:colour_field` - Field name for colour encoding (optional)
-    * `:stroke_width` - Line width (default: 2)
-    * `:point_size` - Point size (default: 50)
-  """
-  def line_layer(vl, opts) do
-    x_field = Keyword.fetch!(opts, :x_field)
-    y_field = Keyword.fetch!(opts, :y_field)
-    colour_field = Keyword.get(opts, :colour_field)
-    stroke_width = Keyword.get(opts, :stroke_width, 2)
-    point_size = Keyword.get(opts, :point_size, 50)
-
-    base_encoding =
-      if colour_field do
-        Vl.encode_field(vl, :color, colour_field, type: :nominal)
-      else
-        vl
-      end
-
-    # Line mark
-    line =
-      base_encoding
-      |> Vl.mark(:line, stroke_width: stroke_width, opacity: 0.7)
-      |> Vl.encode_field(:x, x_field, type: :temporal)
-      |> Vl.encode_field(:y, y_field, type: :quantitative)
-
-    # Point mark
-    point =
-      base_encoding
-      |> Vl.mark(:point, size: point_size, opacity: 0.8)
-      |> Vl.encode_field(:x, x_field, type: :temporal)
-      |> Vl.encode_field(:y, y_field, type: :quantitative)
-
-    Vl.new()
-    |> Vl.layers([line, point])
-  end
-
-  @doc """
-  Creates a bar chart for histogram data.
-
-  ## Options
-
-    * `:x_field` - Field name for X-axis categories (required)
-    * `:y_field` - Field name for Y-axis values (required)
-    * `:colour_field` - Field name for colour encoding (optional)
-    * `:colour_scale` - Custom colour scale (optional)
-  """
-  def bar_chart(vl, opts) do
-    x_field = Keyword.fetch!(opts, :x_field)
-    y_field = Keyword.fetch!(opts, :y_field)
-    colour_field = Keyword.get(opts, :colour_field)
-    colour_scale = Keyword.get(opts, :colour_scale)
-
-    vl
-    |> Vl.mark(:bar, opacity: 0.8)
-    |> Vl.encode_field(:x, x_field, type: :ordinal)
-    |> Vl.encode_field(:y, y_field, type: :quantitative)
-    |> maybe_add_colour(colour_field, colour_scale)
-  end
-
-  defp maybe_add_colour(vl, nil, _), do: vl
-
-  defp maybe_add_colour(vl, colour_field, nil) do
-    Vl.encode_field(vl, :color, colour_field, type: :nominal)
-  end
-
-  defp maybe_add_colour(vl, colour_field, colour_scale) do
-    Vl.encode_field(vl, :color, colour_field, type: :nominal, scale: colour_scale)
-  end
 end

@@ -63,10 +63,9 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.ReceiptStaircaseVl do
 
       # Build VegaLite spec - compact layout
       spec =
-        Vl.new(
+        VegaLiteHelper.base_config(
           width: 800,
           height: 70,
-          background: "transparent",
           padding: %{top: 5, right: 10, bottom: 25, left: 50}
         )
         |> Vl.data_from_values(chart_data)
@@ -97,11 +96,10 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.ReceiptStaircaseVl do
             tick_color: "#9CA3AF",
             label_color: "#9CA3AF",
             title_color: "#9CA3AF",
+            domain_color: "#9CA3AF",
             title_font_size: 11,
-            label_font_size: 10,
-            domain_color: "#9CA3AF"
-          ],
-          view: [stroke: "#374151"]
+            label_font_size: 10
+          ]
         )
 
       assigns = assign(assigns, :spec, spec)
