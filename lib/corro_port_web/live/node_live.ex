@@ -710,22 +710,22 @@ defmodule CorroPortWeb.NodeLive do
       </.header>
 
       <.connection_indicator api_cx_test={@api_cx_test} />
-      
+
     <!-- Loading State -->
       <div :if={@loading} class="flex items-center justify-center py-8">
         <div class="loading loading-spinner loading-lg"></div>
         <span class="ml-4">Loading node information...</span>
       </div>
-      
+
     <!-- Error State -->
       <div :if={@error} class="alert alert-error">
         <.icon name="hero-exclamation-circle" class="w-5 h-5" />
         <span>{@error}</span>
       </div>
-      
+
     <!-- Node Information Cards -->
       <div :if={!@loading} class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
+
     <!-- The Elixir Application -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -756,7 +756,7 @@ defmodule CorroPortWeb.NodeLive do
             </div>
           </div>
         </div>
-        
+
     <!-- Config from Application Environment -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -768,7 +768,7 @@ defmodule CorroPortWeb.NodeLive do
             </div>
           </div>
         </div>
-        
+
     <!-- Process Information -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -781,7 +781,7 @@ defmodule CorroPortWeb.NodeLive do
                 <div><strong>Memory Usage by :erlang.memory():</strong></div>
                 <div>{format_memory(@process_info.memory_usage[:total])}</div>
               </div>
-              
+
     <!-- Supervisor Children -->
               <div :if={@process_info.supervisors != []} class="mt-4">
                 <h4 class="font-semibold text-sm mb-2">Supervisor Children:</h4>
@@ -804,7 +804,7 @@ defmodule CorroPortWeb.NodeLive do
             </div>
           </div>
         </div>
-        
+
     <!-- Corrosion Config File -->
         <div class="card bg-base-100">
           <div class="card-body">
@@ -828,7 +828,7 @@ defmodule CorroPortWeb.NodeLive do
         overmind_available={@overmind_available}
         is_production={@is_production}
       />
-      
+
     <!-- Cluster-wide Configuration Management -->
       <div class="card bg-base-100">
         <div class="card-body">
@@ -856,7 +856,7 @@ defmodule CorroPortWeb.NodeLive do
               </p>
             </div>
           </div>
-          
+
     <!-- Mode Selection -->
           <div class="flex gap-2 mb-4">
             <button
@@ -880,7 +880,7 @@ defmodule CorroPortWeb.NodeLive do
               Update Single Node
             </button>
           </div>
-          
+
     <!-- Configuration Form -->
           <form phx-submit="update_cluster_config">
             <!-- Single Node Mode: Node Selector -->
@@ -901,7 +901,7 @@ defmodule CorroPortWeb.NodeLive do
                 </option>
               </select>
             </div>
-            
+
     <!-- Bootstrap Hosts Input -->
             <div class="form-control mb-4">
               <label class="label">
@@ -921,7 +921,7 @@ defmodule CorroPortWeb.NodeLive do
                 phx-change="update_cluster_config_input"
               />
             </div>
-            
+
     <!-- Update Button -->
             <button
               type="submit"
@@ -934,7 +934,7 @@ defmodule CorroPortWeb.NodeLive do
                 else: "Update Selected Node"}
             </button>
           </form>
-          
+
     <!-- Cluster Readiness Status -->
           <div
             :if={@cluster_readiness_status}
@@ -952,10 +952,10 @@ defmodule CorroPortWeb.NodeLive do
                   "hero-arrow-path"
                 end
               }
-              class={[
-                "w-5 h-5",
+              class={
+                "w-5 h-5" <>
                 if(!@cluster_readiness_status.ready, do: "animate-spin")
-              ]}
+              }
             />
             <div>
               <div class="font-semibold">
@@ -983,7 +983,7 @@ defmodule CorroPortWeb.NodeLive do
               </div>
             </div>
           </div>
-          
+
     <!-- Current Cluster Configs Table -->
           <div :if={length(@cluster_configs) > 0} class="mt-6">
             <h4 class="font-semibold mb-2">Current Node Configurations</h4>
@@ -1017,7 +1017,7 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- Database Information -->
       <div :if={@db_info} class="card bg-base-100">
         <div class="card-body">
@@ -1087,7 +1087,7 @@ defmodule CorroPortWeb.NodeLive do
           </div>
         </div>
       </div>
-      
+
     <!-- Last Updated -->
       <div :if={@last_updated} class="text-xs text-base-content/70 text-center">
         Last updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}

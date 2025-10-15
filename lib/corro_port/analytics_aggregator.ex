@@ -23,7 +23,7 @@ defmodule CorroPort.AnalyticsAggregator do
   use GenServer
   require Logger
 
-  alias CorroPort.{ClusterMembership, LocalNode, Analytics}
+  alias CorroPort.{LocalNode, Analytics}
   alias CorroPort.Analytics.Queries
   alias CorroPort.{MessagesAPI, PubSubMessageSender}
 
@@ -371,15 +371,10 @@ defmodule CorroPort.AnalyticsAggregator do
 
       _ ->
         # Collect fresh data
-        case collect_specific_data(data_type, experiment_id, state) do
-          {:ok, data} ->
-            new_cache = Map.put(state.cache, cache_key, {data, now})
-            new_state = %{state | cache: new_cache}
-            {:ok, data, new_state}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
+        {:ok, data} = collect_specific_data(data_type, experiment_id, state)
+        new_cache = Map.put(state.cache, cache_key, {data, now})
+        new_state = %{state | cache: new_cache}
+        {:ok, data, new_state}
     end
   end
 
@@ -504,93 +499,6 @@ defmodule CorroPort.AnalyticsAggregator do
       phoenix_port: local_phoenix_port,
       is_local: true
     }
-  end
-
-  # Legacy function for when we want to collect from all nodes again
-  defp collect_specific_data_from_all_nodes(:summary, experiment_id, state) do
-    collect_from_all_nodes(experiment_id, state.active_nodes, fn node_info ->
-      get_node_experiment_summary(node_info, experiment_id)
-    end)
-    |> case do
-      {:ok, summaries} -> {:ok, aggregate_experiment_summaries(summaries)}
-      error -> error
-    end
-  end
-
-  defp collect_specific_data_from_all_nodes(:timing, experiment_id, state) do
-    collect_from_all_nodes(experiment_id, state.active_nodes, fn node_info ->
-      get_node_timing_stats(node_info, experiment_id)
-    end)
-    |> case do
-      {:ok, timing_stats} -> {:ok, aggregate_timing_stats(timing_stats)}
-      error -> error
-    end
-  end
-
-  defp collect_specific_data_from_all_nodes(:metrics, experiment_id, state) do
-    collect_from_all_nodes(experiment_id, state.active_nodes, fn node_info ->
-      get_node_system_metrics(node_info, experiment_id)
-    end)
-    |> case do
-      {:ok, metrics} -> {:ok, List.flatten(metrics)}
-      error -> error
-    end
-  end
-
-  defp collect_from_all_nodes(experiment_id, nodes, collector_fn) do
-    local_node_id = LocalNode.get_node_id()
-
-    # Collect from local node first (fast)
-    local_result =
-      if Enum.any?(nodes, &(&1.node_id == local_node_id)) do
-        try do
-          {:ok, collector_fn.(%{node_id: local_node_id, is_local: true})}
-        catch
-          _type, error ->
-            Logger.warning("Failed to collect local data: #{inspect(error)}")
-            {:error, "Local collection failed"}
-        end
-      else
-        {:ok, []}
-      end
-
-    # Collect from remote nodes in parallel
-    remote_nodes = Enum.reject(nodes, &(&1.node_id == local_node_id))
-
-    remote_tasks =
-      Enum.map(remote_nodes, fn node_info ->
-        Task.async(fn ->
-          try do
-            collector_fn.(node_info)
-          catch
-            _type, error ->
-              Logger.warning(
-                "Failed to collect from node #{node_info.node_id}: #{inspect(error)}"
-              )
-
-              []
-          end
-        end)
-      end)
-
-    # Wait for remote results
-    remote_results =
-      Task.yield_many(remote_tasks, 8_000)
-      |> Enum.map(fn {_task, result} ->
-        case result do
-          {:ok, data} -> data
-          _ -> []
-        end
-      end)
-
-    case local_result do
-      {:ok, local_data} ->
-        all_data = [local_data | remote_results]
-        {:ok, all_data}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
   end
 
   defp discover_cluster_nodes do
@@ -747,79 +655,6 @@ defmodule CorroPort.AnalyticsAggregator do
       _ ->
         []
     end
-  end
-
-  defp aggregate_experiment_summaries(summaries) do
-    # Combine summaries from all nodes
-    summaries
-    |> List.flatten()
-    |> Enum.reject(&is_nil/1)
-    |> case do
-      [] ->
-        %{
-          experiment_id: nil,
-          topology_snapshots_count: 0,
-          message_count: 0,
-          send_count: 0,
-          ack_count: 0,
-          system_metrics_count: 0,
-          node_count: 0
-        }
-
-      [first | rest] ->
-        Enum.reduce(rest, first, fn summary, acc ->
-          %{
-            acc
-            | topology_snapshots_count:
-                acc.topology_snapshots_count + summary.topology_snapshots_count,
-              message_count: acc.message_count + summary.message_count,
-              send_count: acc.send_count + summary.send_count,
-              ack_count: acc.ack_count + summary.ack_count,
-              system_metrics_count: acc.system_metrics_count + summary.system_metrics_count
-          }
-        end)
-        |> Map.put(:node_count, length(summaries))
-    end
-  end
-
-  defp aggregate_timing_stats(timing_stats_lists) do
-    # Combine timing stats from all nodes, grouping by message_id
-    timing_stats_lists
-    |> List.flatten()
-    |> Enum.group_by(& &1.message_id)
-    |> Enum.map(fn {message_id, stats} ->
-      # Aggregate stats for the same message across nodes
-      aggregate_message_timing(message_id, stats)
-    end)
-  end
-
-  defp aggregate_message_timing(message_id, stats) do
-    # Find the earliest send time and calculate aggregate ack info
-    send_times = for entry <- stats, entry.send_time, do: entry.send_time
-    ack_counts = Enum.map(stats, & &1.ack_count)
-    latencies = for entry <- stats, entry.min_latency_ms, do: entry.min_latency_ms
-
-    %{
-      message_id: message_id,
-      send_time: Enum.min(send_times, fn -> nil end),
-      ack_count: Enum.sum(ack_counts),
-      min_latency_ms:
-        case latencies do
-          [] -> nil
-          list -> Enum.min(list)
-        end,
-      max_latency_ms:
-        case latencies do
-          [] -> nil
-          list -> Enum.max(list)
-        end,
-      avg_latency_ms:
-        case latencies do
-          [] -> nil
-          list -> Float.round(Enum.sum(list) / length(list), 2)
-        end,
-      node_count: length(stats)
-    }
   end
 
   defp broadcast_cluster_update(experiment_id, active_nodes) do

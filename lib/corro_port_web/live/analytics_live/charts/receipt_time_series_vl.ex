@@ -1,12 +1,12 @@
-defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeriesVl do
+defmodule CorroPortWeb.AnalyticsLive.Charts.ReceiptTimeSeriesVl do
   @moduledoc """
-  VegaLite time series chart rendering for RTT over time.
+  VegaLite time series chart rendering for propagation delay over time.
 
-  Renders an interactive line chart showing how round-trip acknowledgement times change
-  over the course of an experiment, with separate lines for each responding node.
+  Renders an interactive line chart showing how message propagation delays (gossip latency)
+  change over the course of an experiment, with separate lines for each receiving node.
 
-  This replaces the SVG-based implementation with VegaLite for better interactivity,
-  tooltips, zoom/pan capabilities, and automatic axis formatting.
+  This shows when messages arrived at remote nodes via gossip, revealing propagation
+  patterns and topology effects.
   """
 
   use Phoenix.Component
@@ -14,13 +14,13 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeriesVl do
   alias CorroPortWeb.AnalyticsLive.Charts.VegaLiteHelper
 
   @doc """
-  Renders a VegaLite time series plot showing RTT over time for each node.
+  Renders a VegaLite time series plot showing propagation delays over time for each node.
 
   The chart includes:
-  - Interactive line plots for RTT progression
+  - Interactive line plots for propagation delay progression
   - Data points as circles
   - Automatic axis scaling and formatting
-  - Tooltips showing node, time, and latency
+  - Tooltips showing node, time, and delay
   - Legend identifying each node's line by colour
   - Pan and zoom capabilities
 
@@ -28,34 +28,32 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeriesVl do
 
   ## Parameters
 
-    * `rtt_time_series` - List of series maps for RTT data, each containing:
-      * `:node_id` - Identifier for the responding node
-      * `:data_points` - List of point maps with `:send_time` (DateTime) and `:rtt_ms` (number)
-    * `receipt_time_series` - Legacy parameter, no longer used (kept for API compatibility)
+    * `receipt_time_series` - List of series maps for propagation delay data, each containing:
+      * `:node_id` - Identifier for the receiving node
+      * `:data_points` - List of point maps with `:send_time` (DateTime), `:receipt_time` (DateTime), and `:propagation_delay_ms` (number)
   """
-  attr :rtt_time_series, :list, required: true
-  attr :receipt_time_series, :list, default: []
+  attr :receipt_time_series, :list, required: true
 
-  def render_rtt_time_series(assigns) do
-    rtt_time_series = assigns.rtt_time_series
-    all_rtt_points = Enum.flat_map(rtt_time_series, & &1.data_points)
+  def render_receipt_time_series(assigns) do
+    receipt_time_series = assigns.receipt_time_series
+    all_receipt_points = Enum.flat_map(receipt_time_series, & &1.data_points)
 
-    if all_rtt_points == [] do
+    if all_receipt_points == [] do
       ~H"""
       <div class="text-base-content/50 text-center py-8">
-        No timing data available
+        No propagation data available
       </div>
       """
     else
       # Prepare data for VegaLite - flatten series into single list with node_id field
       chart_data =
-        rtt_time_series
+        receipt_time_series
         |> Enum.flat_map(fn series ->
           Enum.map(series.data_points, fn point ->
             %{
               "node_id" => series.node_id,
               "send_time" => DateTime.to_iso8601(point.send_time),
-              "rtt_ms" => point.rtt_ms,
+              "propagation_delay_ms" => point.propagation_delay_ms,
               "time_label" => format_time_for_tooltip(point.send_time)
             }
           end)
@@ -71,9 +69,9 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeriesVl do
           title: "Time",
           axis: [format: "%H:%M:%S"]
         )
-        |> Vl.encode_field(:y, "rtt_ms",
+        |> Vl.encode_field(:y, "propagation_delay_ms",
           type: :quantitative,
-          title: "RTT (ms)",
+          title: "Propagation Delay (ms)",
           scale: [zero: false]
         )
         |> Vl.encode_field(:color, "node_id",
@@ -83,8 +81,8 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeriesVl do
         )
         |> Vl.encode(:tooltip, [
           [field: "node_id", type: :nominal, title: "Node"],
-          [field: "time_label", type: :temporal, time_unit: "milliseconds", title: "Time"],
-          [field: "rtt_ms", type: :quantitative, title: "Latency (ms)", format: ".1f"]
+          [field: "time_label", type: :nominal, title: "Time"],
+          [field: "propagation_delay_ms", type: :quantitative, title: "Delay (ms)", format: ".1f"]
         ])
 
       assigns = assign(assigns, :spec, spec)

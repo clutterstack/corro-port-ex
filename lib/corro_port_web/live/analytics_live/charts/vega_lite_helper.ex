@@ -35,16 +35,16 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.VegaLiteHelper do
   Latency-based colour scheme for histogram buckets.
 
   Returns colour based on latency threshold:
-  - Green: < 50ms (excellent)
-  - Yellow: 50-200ms (good)
-  - Orange: 200-500ms (fair)
-  - Red: >= 500ms (slow)
+  - Green: < 300ms (excellent)
+  - Yellow: 300-600ms (good)
+  - Orange: 600-900ms (fair)
+  - Red: >= 900ms (slow)
   """
   def latency_colour(min_latency) when is_number(min_latency) do
     cond do
-      min_latency < 50 -> "#10B981"
-      min_latency < 200 -> "#F59E0B"
-      min_latency < 500 -> "#F97316"
+      min_latency < 300 -> "#10B981"
+      min_latency < 600 -> "#F59E0B"
+      min_latency < 900 -> "#F97316"
       true -> "#EF4444"
     end
   end
@@ -245,7 +245,8 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.VegaLiteHelper do
       |> Vl.encode_field(:x, x_field, type: :temporal)
       |> Vl.encode_field(:y, y_field, type: :quantitative)
 
-    Vl.layers([line, point])
+    Vl.new()
+    |> Vl.layers([line, point])
   end
 
   @doc """

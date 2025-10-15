@@ -8,7 +8,7 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeSeriesComponent do
   """
 
   use Phoenix.Component
-  alias CorroPortWeb.AnalyticsLive.Charts.ReceiptTimeSeries
+  alias CorroPortWeb.AnalyticsLive.Charts.ReceiptTimeSeriesVl
 
   @doc """
   Renders the receipt time series chart showing propagation delays over time.
@@ -26,9 +26,9 @@ defmodule CorroPortWeb.AnalyticsLive.ReceiptTimeSeriesComponent do
             X-axis matches RTT chart for direct comparison.
           </p>
 
-          <!-- SVG Time Series Plot -->
+          <!-- VegaLite Time Series Plot -->
           <div class="w-full" style="height: 400px;">
-            <ReceiptTimeSeries.render_receipt_time_series receipt_time_series={@receipt_time_series} />
+            <ReceiptTimeSeriesVl.render_receipt_time_series receipt_time_series={@receipt_time_series} />
           </div>
 
           <div class="mt-4 text-sm text-base-content/70">

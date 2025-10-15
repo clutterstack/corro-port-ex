@@ -228,7 +228,7 @@ defmodule CorroPortWeb.DisplayHelpers do
   @doc """
   Builds display configuration for cluster summary stats.
   """
-  def cluster_summary_stats(dns_data, cli_data, api_data, dns_regions, cli_regions) do
+  def cluster_summary_stats(dns_data, cli_data, dns_regions, cli_regions) do
     dns_display = count_display(dns_data, :nodes)
     cli_display = count_display(cli_data, :members)
 

@@ -70,11 +70,16 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.ReceiptStaircaseVl do
           padding: %{top: 5, right: 10, bottom: 25, left: 50}
         )
         |> Vl.data_from_values(chart_data)
-        |> Vl.mark(:bar, opacity: 0.8, color: bar_colour, width: %{band: 1})
+        #|> Vl.mark(:bar, opacity: 0.8, color: "black", width: %{band: 0.9})
+        |> Vl.mark(:tick,
+          color: bar_colour,
+          width: %{band: 0.8},
+          thickness: 4
+        )
         |> Vl.encode_field(:x, "message_index",
           type: :ordinal,
-          title: "Message Index",
-          axis: [grid: false],
+          title: "Message",
+          axis: [grid: true],
           scale: [padding_inner: 0, padding_outer: 0]
         )
         |> Vl.encode_field(:y, "time_offset_ms",

@@ -3,7 +3,6 @@ defmodule CorroPortWeb.ClusterLive do
   require Logger
 
   alias CorroPortWeb.Components.ClusterLive.{
-    DebugSection,
     CLIMembersTable,
     DNSNodesTable,
     MembersTable,
@@ -171,10 +170,6 @@ defmodule CorroPortWeb.ClusterLive do
     |> maybe_flash_cluster_error(cluster_error)
   end
 
-  defp exclude_our_region(regions, our_region) do
-    Enum.reject(regions, &(&1 == our_region))
-  end
-
   defp maybe_flash_cluster_error(socket, nil) do
     Phoenix.LiveView.clear_flash(socket, :error)
   end
@@ -226,7 +221,6 @@ defmodule CorroPortWeb.ClusterLive do
       DisplayHelpers.cluster_summary_stats(
         assigns.dns_data,
         assigns.cli_data,
-        assigns.api_data,
         assigns.dns_data.regions,
         assigns.cli_data.regions
       )
@@ -252,44 +246,44 @@ defmodule CorroPortWeb.ClusterLive do
     <div class="space-y-6">
       <!-- Navigation Tabs -->
       <NavTabs.nav_tabs active={:cluster} />
-      
+
     <!-- Header with refresh all button -->
       <ClusterHeader.cluster_header />
-      
+
     <!-- Error alerts using pre-computed configurations -->
       <.error_alert :if={@dns_alert} config={@dns_alert} />
       <.error_alert :if={@cli_alert} config={@cli_alert} />
       <.error_alert :if={@api_alert} config={@api_alert} />
-      
+
     <!-- Enhanced World Map with Regions -->
       <FlyMapEx.render marker_groups={@marker_groups} theme={:monitoring} />
-      
+
     <!-- Enhanced Cluster Summary using pre-computed stats -->
       <ClusterSummaryCard.cluster_summary_card summary_stats={@summary_stats} />
-      
+
     <!-- DNS-Discovered Nodes Table -->
       <DNSNodesTable.display dns_data={@dns_data} />
-      
+
     <!-- CLI Members Display with clean data structure -->
       <CLIMembersTable.display
         cli_data={@cli_data}
         cli_member_data={@cli_member_data}
         cli_error={@cli_error}
       />
-      
+
     <!-- Corrosion API (__corro_members) table entries -->
       <MembersTable.cluster_members_table
         :if={@cluster_info}
         cluster_info={@cluster_info}
         api_data={@api_data}
       />
-      
+
     <!-- About Data Sources (collapsible) -->
       <DataSourcesInfo.data_sources_info />
-      
+
     <!-- Cache status indicators using pre-computed status -->
       <CacheStatusCard.cache_status_card cache_status={@cache_status} />
-      
+
     <!-- Last Updated -->
       <div class="text-xs text-base-content/70 text-center">
         Page updated: {Calendar.strftime(@last_updated, "%Y-%m-%d %H:%M:%S UTC")}

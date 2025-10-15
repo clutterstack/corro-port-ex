@@ -9,7 +9,7 @@ defmodule CorroPortWeb.AnalyticsLive.DataLoader do
   - Determining node counts for ack rate calculations
   """
 
-  alias CorroPort.{AnalyticsAggregator, Analytics, LocalNode}
+  alias CorroPort.{AnalyticsAggregator, Analytics}
   alias CorroPort.Analytics.Queries
   alias CorroPortWeb.AnalyticsLive.Helpers
 

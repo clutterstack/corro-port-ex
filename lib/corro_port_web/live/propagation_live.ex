@@ -5,8 +5,7 @@ defmodule CorroPortWeb.PropagationLive do
   alias CorroPortWeb.{
     NavTabs,
     PropagationHeader,
-    DisplayHelpers,
-    CacheStatus
+    DisplayHelpers
   }
 
   def mount(_params, _session, socket) do
@@ -183,16 +182,6 @@ defmodule CorroPortWeb.PropagationLive do
 
     # Return groups in reverse order (since we prepended)
     Enum.reverse(groups)
-  end
-
-  defp format_regions_display(regions, empty_message) do
-    filtered_regions = Enum.reject(regions, &(&1 == "" or &1 == "unknown"))
-
-    if filtered_regions != [] do
-      " (#{Enum.join(filtered_regions, ", ")})"
-    else
-      " #{empty_message}"
-    end
   end
 
   def render(assigns) do

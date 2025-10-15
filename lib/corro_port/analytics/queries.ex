@@ -125,7 +125,7 @@ defmodule CorroPort.Analytics.Queries do
   - max_count: Maximum count in any bucket (for scaling visualisation)
 
   Options:
-  - :bucket_edges - Custom bucket edges in milliseconds (default: [0, 10, 20, 50, 100, 200, 500, 1000, 5000])
+  - :bucket_edges - Custom bucket edges in milliseconds (default: linear 50ms increments up to the nearest bucket covering the maximum latency)
   """
   def get_latency_histogram(experiment_id, opts \\ []) do
     timing_stats = get_message_timing_stats(experiment_id)
@@ -146,7 +146,9 @@ defmodule CorroPort.Analytics.Queries do
       }
     else
       # Define bucket edges (in milliseconds)
-      bucket_edges = Keyword.get(opts, :bucket_edges, [0, 10, 20, 50, 100, 200, 500, 1000, 5000])
+      max_latency = Enum.max(all_latencies)
+      bucket_edges =
+        Keyword.get(opts, :bucket_edges, default_latency_bucket_edges(max_latency))
 
       # Create buckets
       buckets = create_histogram_buckets(all_latencies, bucket_edges)
@@ -388,13 +390,6 @@ defmodule CorroPort.Analytics.Queries do
     |> Enum.sort_by(& &1.node_id)
   end
 
-  # Backward compatibility alias - this was the old function name
-  defp calculate_per_node_propagation_stats(enriched_events) do
-    # For old code that might still call this, just pass nil as experiment_start_time
-    # This won't be used since we're updating the caller
-    calculate_per_node_receipt_time_stats(enriched_events, nil)
-  end
-
   defp calculate_overall_receipt_time_stats(enriched_events) do
     total_events = length(enriched_events)
 
@@ -434,9 +429,6 @@ defmodule CorroPort.Analytics.Queries do
   end
 
   # Backward compatibility alias
-  defp calculate_overall_propagation_stats(enriched_events) do
-    calculate_overall_receipt_time_stats(enriched_events)
-  end
 
   defp calculate_percentile(list, percentile) do
     sorted = Enum.sort(list)
@@ -479,5 +471,20 @@ defmodule CorroPort.Analytics.Queries do
           count: count
         }
     end)
+  end
+
+  defp default_latency_bucket_edges(max_latency) do
+    bucket_size = 50
+
+    highest_edge =
+      cond do
+        max_latency <= 0 -> bucket_size
+        rem(max_latency, bucket_size) == 0 -> max_latency
+        true -> max_latency + (bucket_size - rem(max_latency, bucket_size))
+      end
+
+    0
+    |> Stream.iterate(&(&1 + bucket_size))
+    |> Enum.take_while(&(&1 <= highest_edge))
   end
 end
