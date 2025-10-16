@@ -71,7 +71,8 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeriesVl do
       spec =
         VegaLiteHelper.base_config(width: 800, height: 400)
         |> Vl.data_from_values(chart_data)
-        |> Vl.mark(:line, point: true, stroke_width: 2, opacity: 0.8)
+        |> Vl.param("node_focus", select: [type: :point, fields: ["node_id"], bind: "legend"])
+        |> Vl.mark(:line, point: true, stroke_width: 2)
         |> Vl.encode_field(:x, "elapsed_ms",
           type: :quantitative,
           title: "Time (ms)"
@@ -85,6 +86,10 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.TimeSeriesVl do
           type: :nominal,
           title: "Node",
           scale: [range: VegaLiteHelper.node_colours()]
+        )
+        |> Vl.encode(:opacity,
+          condition: [param: "node_focus", value: 0.9],
+          value: 0.15
         )
         |> Vl.encode(:tooltip, [
           [field: "node_id", type: :nominal, title: "Node"],

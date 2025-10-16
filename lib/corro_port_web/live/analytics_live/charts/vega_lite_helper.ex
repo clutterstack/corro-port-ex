@@ -117,6 +117,7 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.VegaLiteHelper do
 
     * `spec` - VegaLite specification (required)
     * `class` - Additional CSS classes (optional)
+    * `dom_id` - Optional DOM id to stabilise client-side hooks
 
   ## Example
 
@@ -127,19 +128,27 @@ defmodule CorroPortWeb.AnalyticsLive.Charts.VegaLiteHelper do
   """
   attr :spec, :map, required: true
   attr :class, :string, default: ""
+  attr :dom_id, :string, default: nil
 
   def vega_chart(assigns) do
     # Convert VegaLite spec to JSON string
     spec_json = Jason.encode!(VegaLite.to_spec(assigns.spec))
 
-    assigns = assign(assigns, :spec_json, spec_json)
+    chart_dom_id =
+      assigns.dom_id ||
+        "vega-chart-#{System.unique_integer([:positive])}"
+
+    assigns =
+      assigns
+      |> assign(:spec_json, spec_json)
+      |> assign(:chart_dom_id, chart_dom_id)
 
     ~H"""
     <div
       phx-hook="VegaLiteChart"
       data-spec={@spec_json}
       class={@class}
-      id={"vega-chart-#{:erlang.phash2(@spec)}"}
+      id={@chart_dom_id}
     >
     </div>
     """
